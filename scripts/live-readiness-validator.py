@@ -17,7 +17,8 @@ WORKSPACE = Path.home() / ".openclaw" / "workspace"
 READINESS_STATE = WORKSPACE / "logs" / "live-readiness-state.json"
 VALIDATION_HISTORY = WORKSPACE / "logs" / "validation-history.jsonl"
 READINESS_REPORT = WORKSPACE / "LIVE_READINESS_REPORT.md"
-PAPER_TRADES = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
+PAPER_TRADES_HL = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
+PAPER_TRADES_PM = WORKSPACE / "logs" / "polymarket-trades.jsonl"
 INCIDENT_LOG = WORKSPACE / "logs" / "incident-log.jsonl"
 ALPHA_STATE = WORKSPACE / "logs" / "alpha-intelligence-state.json"
 
@@ -101,15 +102,26 @@ class LiveReadinessValidator:
             json.dump(self.state, f, indent=2)
     
     def load_trades(self) -> List[Dict]:
-        """Load all paper trades"""
-        if not PAPER_TRADES.exists():
-            return []
-        
+        """Load all paper trades from both exchanges"""
         trades = []
-        with open(PAPER_TRADES) as f:
-            for line in f:
-                if line.strip():
-                    trades.append(json.loads(line))
+        
+        # Load Hyperliquid trades
+        if PAPER_TRADES_HL.exists():
+            with open(PAPER_TRADES_HL) as f:
+                for line in f:
+                    if line.strip():
+                        trade = json.loads(line)
+                        trade['exchange'] = 'Hyperliquid'
+                        trades.append(trade)
+        
+        # Load Polymarket trades
+        if PAPER_TRADES_PM.exists():
+            with open(PAPER_TRADES_PM) as f:
+                for line in f:
+                    if line.strip():
+                        trade = json.loads(line)
+                        trade['exchange'] = 'Polymarket'
+                        trades.append(trade)
         
         return trades
     
