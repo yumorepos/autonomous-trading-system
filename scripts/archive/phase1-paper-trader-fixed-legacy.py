@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+ARCHIVED LEGACY FILE -- retained for historical comparison only. Not the canonical paper trader.
+
 Phase 1 Paper Trading Engine - FIXED VERSION
 Simulates trades based on signals, tracks performance, ranks strategies
 FIXES: SHORT PnL, position IDs, multi-strategy, performance persistence

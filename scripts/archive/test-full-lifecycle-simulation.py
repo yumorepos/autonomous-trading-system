@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+ARCHIVED SIMULATION -- mock lifecycle demo, not canonical-path evidence.
+
 Full Trade Lifecycle Test
 Simulates 10 complete trades: entry -> tracking -> exit -> PnL -> logging
 """

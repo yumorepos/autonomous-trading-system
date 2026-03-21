@@ -98,12 +98,14 @@ Notes:
 - Network access is required for live market data reads from Hyperliquid.
 - Paper-trading behavior depends on current market conditions and the existing files in `workspace/logs/`.
 - Historical “FINAL” or “VERIFIED” artifacts that overstated capability were moved to `docs/archive/`.
+- Legacy alternate implementations and simulation-only scripts were moved to `scripts/archive/` so they are not confused with the active trading path.
 
 ## Documentation Map
 
 - `docs/SYSTEM_ARCHITECTURE.md` — current operator-facing system summary.
 - `SYSTEM_STATUS.md` — current scoped status summary.
-- `docs/archive/` — historical documents retained for audit history but not authoritative status, including archived Polymarket integration claims.
+- `docs/REPO_TRUTHFULNESS_AUDIT.md` — cleanup audit showing what was kept active vs archived.
+- `docs/archive/` — historical documents retained for audit history but not authoritative status, including archived Polymarket integration claims and stale root-level reports.
 
 ## Disclaimer
 

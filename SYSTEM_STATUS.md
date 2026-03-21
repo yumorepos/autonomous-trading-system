@@ -1,89 +1,57 @@
 # System Status
 
-**Last Updated:** 2026-03-21 03:57 EDT  
-**Verdict:** VERIFIED PARTIAL (Hyperliquid paper trading only)
+**Last Updated:** 2026-03-21 UTC  
+**Verdict:** Hyperliquid paper-trading path only; repository cleaned for truthful review
 
 ---
 
-## What Is Verified
+## Canonical Active Path
 
-**Hyperliquid Strategy (funding_arbitrage):**
-- ✅ LONG entry
-- ✅ LONG take-profit exit
-- ✅ LONG stop-loss exit
-- ✅ LONG timeout exit
-- ✅ SHORT entry
-- ✅ SHORT take-profit exit
-- ✅ SHORT stop-loss exit
-- ⏸️ SHORT timeout exit (not tested, but same code path as LONG)
+The active path in this repository is limited to the following scripts:
 
-**System Components:**
-- ✅ Signal replay prevention
-- ✅ Position state management (authoritative)
-- ✅ Performance tracking
-- ✅ Validator consumption
-- ✅ Exit monitor consistency
-- ✅ Timeout monitor consistency
-- ✅ Malformed record handling
+1. `scripts/trading-agency-phase1.py`
+2. `scripts/data-integrity-layer.py`
+3. `scripts/phase1-signal-scanner.py` in default `hyperliquid_only` mode
+4. `scripts/execution-safety-layer.py`
+5. `scripts/phase1-paper-trader.py`
+6. `scripts/timeout-monitor.py`
 
-**Evidence Type:** VERIFIED IN PAPER-TRADING FLOW (real application code paths)
+This is a **paper-trading-only** path. It is the only path that should be described as canonical.
 
 ---
 
-## What Is Disabled
+## Explicitly Non-Canonical or Inactive
 
-- ❌ Polymarket (scanner schema incomplete - missing market_id, side fields)
-
----
-
-## What Is Not Verified
-
-- ⏸️ Real capital deployment (paper trading only)
-- ⏸️ Multi-day stability (< 24h data)
-- ⏸️ High-frequency execution (4h cron only)
+- **Polymarket execution:** present only as exploratory/incomplete code and research; not active in the canonical flow.
+- **`scripts/exit-monitor.py`:** useful as a standalone audit artifact generator, but not safe to describe as part of authoritative close-state persistence.
+- **Archived reports:** historical only; retained for review context, not current operational truth.
+- **Simulation-only lifecycle artifacts:** archived so they cannot be mistaken for current integration evidence.
 
 ---
 
-## Test Coverage
+## What Reviewers Should Trust
 
-**Integration Tests (8 total):**
-1. ✅ Signal replay prevention
-2. ✅ LONG stop-loss exit
-3. ✅ LONG timeout exit
-4. ✅ SHORT take-profit exit
-5. ✅ SHORT stop-loss exit
-6. ✅ Validator consumption
-7. ✅ Exit monitor consistency
-8. ✅ Timeout monitor consistency
-9. ✅ Malformed record handling
+Use these files for the current repository description:
 
-All tests use real trader execution paths (no simulations).
+- `README.md`
+- `docs/SYSTEM_ARCHITECTURE.md`
+- `SYSTEM_STATUS.md`
+- `docs/REPO_TRUTHFULNESS_AUDIT.md`
+
+Use `docs/archive/` only for historical context.
 
 ---
 
-## Current Scope
+## Scope Limits
 
-**Exchanges:** Hyperliquid only  
-**Strategies:** Funding arbitrage only  
-**Directions:** LONG + SHORT  
-**Exit Triggers:** Take-profit, stop-loss, timeout  
-**Mode:** Paper trading (no real capital)
-
----
-
-## Honest Assessment
-
-The system is **VERIFIED PARTIAL** within its current scope:
-- All critical paths proven through real code execution
-- Downstream consumers aligned
-- Malformed data handled safely
-- Polymarket explicitly disabled (not half-implemented)
-
-The system is **NOT** verified for:
-- Real capital deployment
-- Polymarket trading
-- Multi-day continuous operation
+- **Execution mode:** paper trading only
+- **Canonical exchange:** Hyperliquid only
+- **Canonical strategy path:** funding-arbitrage signals accepted by `phase1-paper-trader.py`
+- **Polymarket:** disabled/non-canonical
+- **Live deployment claim:** not supported
 
 ---
 
-*Status reflects verified evidence only. No overstatements.*
+## Cleanup Outcome
+
+The repository presentation no longer treats stale repair attempts, speculative rebuild plans, or simulation-only test artifacts as active implementation evidence.
