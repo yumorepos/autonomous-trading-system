@@ -33,6 +33,14 @@ REJECTED_SIGNALS = LOGS_DIR / "rejected-signals.jsonl"
 SOURCE_METRICS = LOGS_DIR / "source-reliability-metrics.json"
 DATA_HEALTH_REPORT = WORKSPACE / "DATA_HEALTH_REPORT.md"
 
+
+def trading_mode_requires_hyperliquid(trading_mode: str = TRADING_MODE) -> bool:
+    return mode_includes_hyperliquid(trading_mode)
+
+
+def trading_mode_requires_polymarket(trading_mode: str = TRADING_MODE) -> bool:
+    return mode_includes_polymarket(trading_mode)
+
 # Data Quality Thresholds
 DATA_QUALITY = {
     'max_data_age_seconds': 60,              # 1 minute max data age
@@ -524,8 +532,8 @@ class DataIntegrityLayer:
             elif state['health'] == 'DEGRADED':
                 sources_degraded += 1
         
-        # If primary source (Hyperliquid) is down, HALT
-        if self.state['sources']['hyperliquid']['health'] == 'DOWN':
+        # HALT only when the selected mode still depends on Hyperliquid.
+        if trading_mode_requires_hyperliquid() and self.state['sources']['hyperliquid']['health'] == 'DOWN':
             return DataHealth.HALT
         
         # If any source is degraded, DEGRADED
@@ -550,79 +558,83 @@ class DataIntegrityLayer:
         reasons: List[str] = []
         now = datetime.now(timezone.utc).isoformat()
 
-        hyperliquid_ok, latency_ms, error = self.check_source_health(
-            'hyperliquid',
-            'https://api.hyperliquid.xyz/info',
-        )
-        checks.append(ValidationResult(
-            passed=hyperliquid_ok,
-            check_name='api_availability',
-            reason=(
-                f"Hyperliquid reachable in {latency_ms:.0f}ms"
-                if hyperliquid_ok else f"Hyperliquid unavailable: {error}"
-            ),
-            severity='CRITICAL' if not hyperliquid_ok else 'INFO',
-            data={'source': 'hyperliquid', 'latency_ms': latency_ms, 'error': error}
-        ))
+        include_hyperliquid = trading_mode_requires_hyperliquid()
+        include_polymarket = include_polymarket or trading_mode_requires_polymarket()
 
-        if hyperliquid_ok:
-            try:
-                response = requests.post(
-                    'https://api.hyperliquid.xyz/info',
-                    json={'type': 'metaAndAssetCtxs'},
-                    timeout=5
-                )
-                response.raise_for_status()
-                data = response.json()
-                universe = data[0].get('universe', []) if isinstance(data, list) and len(data) > 1 else []
-                contexts = data[1] if isinstance(data, list) and len(data) > 1 else []
+        if include_hyperliquid:
+            hyperliquid_ok, latency_ms, error = self.check_source_health(
+                'hyperliquid',
+                'https://api.hyperliquid.xyz/info',
+            )
+            checks.append(ValidationResult(
+                passed=hyperliquid_ok,
+                check_name='api_availability',
+                reason=(
+                    f"Hyperliquid reachable in {latency_ms:.0f}ms"
+                    if hyperliquid_ok else f"Hyperliquid unavailable: {error}"
+                ),
+                severity='CRITICAL' if not hyperliquid_ok else 'INFO',
+                data={'source': 'hyperliquid', 'latency_ms': latency_ms, 'error': error}
+            ))
 
-                self.state['sources']['hyperliquid']['last_data_timestamp'] = now
-                checks.append(self.validate_timestamp_freshness(now))
+            if hyperliquid_ok:
+                try:
+                    response = requests.post(
+                        'https://api.hyperliquid.xyz/info',
+                        json={'type': 'metaAndAssetCtxs'},
+                        timeout=5
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    universe = data[0].get('universe', []) if isinstance(data, list) and len(data) > 1 else []
+                    contexts = data[1] if isinstance(data, list) and len(data) > 1 else []
 
-                asset_count = min(len(universe), len(contexts))
-                asset_count_passed = asset_count >= DATA_QUALITY['min_asset_count']
-                checks.append(ValidationResult(
-                    passed=asset_count_passed,
-                    check_name='data_completeness',
-                    reason=(
-                        f"Hyperliquid assets: {asset_count} (min: {DATA_QUALITY['min_asset_count']})"
-                    ),
-                    severity='CRITICAL' if not asset_count_passed else 'INFO',
-                    data={'source': 'hyperliquid', 'asset_count': asset_count}
-                ))
+                    self.state['sources']['hyperliquid']['last_data_timestamp'] = now
+                    checks.append(self.validate_timestamp_freshness(now))
 
-                sample_failures = 0
-                for asset, ctx in zip(universe[:10], contexts[:10]):
-                    raw_data = {
-                        'coin': asset.get('name'),
-                        'funding': ctx.get('funding'),
-                        'prevDayNtlVlm': ctx.get('dayNtlVlm', ctx.get('prevDayNtlVlm')),
-                        'openInterest': ctx.get('openInterest'),
-                    }
-                    valid, _ = self.validate_hyperliquid_data(raw_data)
-                    if not valid:
-                        sample_failures += 1
+                    asset_count = min(len(universe), len(contexts))
+                    asset_count_passed = asset_count >= DATA_QUALITY['min_asset_count']
+                    checks.append(ValidationResult(
+                        passed=asset_count_passed,
+                        check_name='data_completeness',
+                        reason=(
+                            f"Hyperliquid assets: {asset_count} (min: {DATA_QUALITY['min_asset_count']})"
+                        ),
+                        severity='CRITICAL' if not asset_count_passed else 'INFO',
+                        data={'source': 'hyperliquid', 'asset_count': asset_count}
+                    ))
 
-                sample_passed = sample_failures == 0
-                checks.append(ValidationResult(
-                    passed=sample_passed,
-                    check_name='required_fields',
-                    reason=(
-                        "Hyperliquid sample data complete"
-                        if sample_passed else f"Hyperliquid sample validation failed for {sample_failures} assets"
-                    ),
-                    severity='CRITICAL' if not sample_passed else 'INFO',
-                    data={'source': 'hyperliquid', 'sample_failures': sample_failures}
-                ))
-            except Exception as exc:
-                checks.append(ValidationResult(
-                    passed=False,
-                    check_name='data_completeness',
-                    reason=f"Hyperliquid data validation failed: {exc}",
-                    severity='CRITICAL',
-                    data={'source': 'hyperliquid', 'error': str(exc)}
-                ))
+                    sample_failures = 0
+                    for asset, ctx in zip(universe[:10], contexts[:10]):
+                        raw_data = {
+                            'coin': asset.get('name'),
+                            'funding': ctx.get('funding'),
+                            'prevDayNtlVlm': ctx.get('dayNtlVlm', ctx.get('prevDayNtlVlm')),
+                            'openInterest': ctx.get('openInterest'),
+                        }
+                        valid, _ = self.validate_hyperliquid_data(raw_data)
+                        if not valid:
+                            sample_failures += 1
+
+                    sample_passed = sample_failures == 0
+                    checks.append(ValidationResult(
+                        passed=sample_passed,
+                        check_name='required_fields',
+                        reason=(
+                            "Hyperliquid sample data complete"
+                            if sample_passed else f"Hyperliquid sample validation failed for {sample_failures} assets"
+                        ),
+                        severity='CRITICAL' if not sample_passed else 'INFO',
+                        data={'source': 'hyperliquid', 'sample_failures': sample_failures}
+                    ))
+                except Exception as exc:
+                    checks.append(ValidationResult(
+                        passed=False,
+                        check_name='data_completeness',
+                        reason=f"Hyperliquid data validation failed: {exc}",
+                        severity='CRITICAL',
+                        data={'source': 'hyperliquid', 'error': str(exc)}
+                    ))
 
         if include_polymarket:
             polymarket_ok, pm_latency_ms, pm_error = self.check_source_health(
