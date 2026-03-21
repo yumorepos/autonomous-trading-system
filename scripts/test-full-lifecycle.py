@@ -317,7 +317,8 @@ All {total_trades} trades logged to: `logs/test-lifecycle-trades.jsonl`
         print(f"Total Trades: {total_trades}")
         print(f"Win Rate: {win_rate:.1f}%")
         print(f"Total P&L: ${total_pnl:+.2f}")
-        print(f"Lifecycle Status: {"[OK] COMPLETE" if all_passed else "[FAIL] INCOMPLETE"}")
+        lifecycle_status = "[OK] COMPLETE" if all_passed else "[FAIL] INCOMPLETE"
+        print(f"Lifecycle Status: {lifecycle_status}")
         print()
         print(f"[STATS] Full Report: {TEST_REPORT}")
         print(f"[NOTE] Trade Log: {TEST_TRADES}")
