@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+run_step() {
+  local title="$1"
+  shift
+  printf '\n[%s]\n' "$title"
+  "$@"
+}
+
+echo '================================================================================'
+echo 'OPENCLAW SAFE VERIFICATION SUITE'
+echo 'Paper trading only | CI-safe | No blocking network dependency checks'
+echo '================================================================================'
+
+run_step '1/4 bootstrap runtime check' python3 scripts/bootstrap-runtime-check.py
+run_step '2/4 compile validation' python3 -m compileall config models scripts tests utils
+run_step '3/4 script regression tests' bash -lc '
+  set -euo pipefail
+  for test_file in \
+    tests/bootstrap-runtime-check-test.py \
+    tests/data-integrity-mode-gate-test.py \
+    tests/paper-mode-schema-test.py \
+    tests/performance-dashboard-canonical-test.py \
+    tests/timeout-monitor-polymarket-threshold-test.py
+  do
+    echo "[TEST] $test_file"
+    python3 "$test_file"
+  done
+'
+run_step '4/4 isolated lifecycle tests' bash -lc '
+  set -euo pipefail
+  for test_file in \
+    tests/destructive/full-lifecycle-integration-test.py \
+    tests/destructive/real-exit-integration-test.py \
+    tests/destructive/polymarket-paper-flow-test.py \
+    tests/destructive/mixed-mode-integration-test.py
+  do
+    echo "[TEST] $test_file"
+    python3 "$test_file"
+  done
+'
+
+echo
+echo '[PASS] Safe verification suite completed successfully'

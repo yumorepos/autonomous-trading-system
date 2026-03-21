@@ -1,91 +1,156 @@
 # Autonomous Trading System
 
-Version: 5.0  
-Status: Research repository for orchestrated paper trading only
+Version: 5.1  
+Status: CI-backed research repository for orchestrated **paper trading only**
 
-This repository runs a **paper-trading-only** research system with one canonical architecture and three truthful runtime modes:
+## Portfolio Summary
 
-- `hyperliquid_only` — default canonical mode
-- `polymarket_only` — optional experimental paper mode
-- `mixed` — optional side-by-side paper evaluation mode
+This project is a **multi-exchange paper-trading orchestration system** built for truthful research and portfolio review.
 
-**Hyperliquid remains the default path. Polymarket is now wired into the same canonical paper-trading flow, but it is still optional, paper-only, and experimental. No live trading path is supported.**
+It demonstrates:
+- canonical paper-trade orchestration across **Hyperliquid** and optional **Polymarket** modes
+- **canonical state persistence** with append-only trade history plus authoritative open-position state
+- **mode-aware validation** so each runtime path checks only the exchanges it actually uses
+- **truthful failure handling** that blocks or downgrades runs when required data is unhealthy
+- **observability and monitoring** through runtime events, status files, dashboards, and monitors
+- a **test-backed architecture** with CI running safe verification on every push and pull request
 
-## Current Truthful Status
+**No live trading is implemented. No real order execution path is supported.**
 
-- **Execution mode:** paper trading only
-- **Default exchange path:** Hyperliquid
-- **Optional exchange path:** Polymarket paper trading
-- **Live trading:** unsupported
-- **Audience:** research, audit, portfolio review
+## What the System Does
+
+The repository runs a canonical Phase 1 paper-trading loop:
+
+1. bootstrap/runtime dependency verification
+2. mode-aware data-integrity validation
+3. signal scanning for the enabled exchange set
+4. execution-safety validation
+5. paper-trade planning and persistence
+6. canonical state update in `workspace/logs/`
+7. timeout monitoring and supporting operator visibility
+
+## Supported Modes
+
+| Mode | Purpose | Truthful status |
+|---|---|---|
+| `hyperliquid_only` | Default baseline paper-trading path | best-supported and canonical |
+| `polymarket_only` | Optional Polymarket-only paper evaluation | experimental |
+| `mixed` | Side-by-side paper evaluation across both exchanges | experimental evaluation mode |
 
 ## Canonical Architecture
 
-The active orchestrator runs a fixed Phase 1 loop:
+The active canonical path is:
 
-1. Bootstrap/runtime dependency check
-2. Data integrity gate validates enabled sources
-3. Scanner generates canonical paper-trading signals for the selected mode
-4. Execution safety validates the next candidate entry
-5. Paper trader plans and persists entry/exit records
-6. Authoritative state is updated in `workspace/logs/`
-7. Timeout monitor reads canonical open positions and writes monitoring artifacts
-8. Supervisor/analytics scripts remain optional support tools, not the authoritative execution path
+- `scripts/bootstrap-runtime-check.py`
+- `scripts/trading-agency-phase1.py`
+- `scripts/data-integrity-layer.py`
+- `scripts/phase1-signal-scanner.py`
+- `scripts/execution-safety-layer.py`
+- `scripts/phase1-paper-trader.py`
+- `scripts/timeout-monitor.py`
 
-## Canonical Entry Point
+Canonical state files:
 
-Run the orchestrator with the desired paper-trading mode:
+- `workspace/logs/phase1-signals.jsonl` — append-only paper signals
+- `workspace/logs/phase1-paper-trades.jsonl` — append-only canonical paper trade history
+- `workspace/logs/position-state.json` — authoritative open-position state only
+- `workspace/logs/phase1-performance.json` — normalized closed-trade performance summary
+
+Non-canonical but retained artifacts:
+
+- `scripts/polymarket-executor.py` — helper/scaffold only
+- `scripts/exit-monitor.py` — proof/audit generator only
+- `docs/archive/` and `scripts/archive/` — historical context only
+
+## Why This Repo Is Trustworthy
+
+This project is designed to be convincing **without pretending to do more than it does**:
+
+- paper-only scope is explicit throughout the codebase and docs
+- CI runs a **safe verification suite** on every push and pull request
+- regression tests use isolated temp workspaces and mocked network calls where appropriate
+- canonical persistence is shared across supported modes instead of branching into separate state models
+- status docs explicitly separate **proven**, **unproven**, **canonical**, and **future work**
+
+## What Is Proven by Tests
+
+The current safe verification suite proves:
+
+- bootstrap dependency checks behave correctly
+- compile/syntax validation succeeds for active Python code
+- mode-aware data-integrity gating respects the selected runtime mode
+- Hyperliquid and Polymarket paper signal schemas normalize into the expected structure
+- canonical mixed-mode trade history can be read by the performance dashboard
+- timeout monitoring exposes Polymarket-specific paper thresholds
+- isolated end-to-end paper-trading lifecycle flows persist and clear canonical state correctly
+
+Run the same suite locally with:
 
 ```bash
-python3 scripts/bootstrap-runtime-check.py
-OPENCLAW_TRADING_MODE=hyperliquid_only python3 scripts/trading-agency-phase1.py
-OPENCLAW_TRADING_MODE=polymarket_only python3 scripts/trading-agency-phase1.py
-OPENCLAW_TRADING_MODE=mixed python3 scripts/trading-agency-phase1.py
+./scripts/ci-safe-verification.sh
 ```
 
-Useful supporting commands:
+## What Is Not Yet Proven
 
-```bash
-python3 scripts/timeout-monitor.py
-python3 scripts/execution-safety-layer.py
-python3 scripts/performance-dashboard.py
-python3 scripts/supervisor-governance.py
-```
+- no live trading support exists
+- no real-money execution path exists
+- runtime connectivity to external APIs is **not** a blocking CI guarantee
+- Polymarket remains optional and experimental until more runtime evidence exists
+- archived reports may discuss future/live concepts, but they are not the current repository truth
 
-Notes:
-- `timeout-monitor.py` is the only monitor script run by the orchestrator.
-- `exit-monitor.py` is a standalone proof/audit script and is not part of authoritative close-state persistence.
-- `polymarket-executor.py` remains a standalone helper/non-canonical scaffold; the canonical Polymarket paper path runs through the same orchestrator + trader + canonical persistence flow as Hyperliquid.
+## Operator Quickstart
 
-## Environment Setup
-
-Create a virtual environment and install dependencies:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Before running the orchestrator, verify runtime dependencies:
-
-```bash
-python3 scripts/bootstrap-runtime-check.py
-python3 scripts/runtime-connectivity-check.py
-```
-
-If you want a fully isolated environment and your machine has internet access to PyPI:
+### 1) Setup
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-python scripts/bootstrap-runtime-check.py
-python scripts/runtime-connectivity-check.py
 ```
 
-`runtime-connectivity-check.py` performs **read-only** API validation for the Hyperliquid `metaAndAssetCtxs` endpoint and the Polymarket Gamma `markets` endpoint, with explicit timeout handling and schema checks. It never places trades and only verifies paper-trading data reachability.
+### 2) Bootstrap check
+
+```bash
+python3 scripts/bootstrap-runtime-check.py
+```
+
+### 3) Optional read-only connectivity check
+
+```bash
+python3 scripts/runtime-connectivity-check.py
+```
+
+This performs read-only API validation only. It never places trades and is **not** part of blocking CI.
+
+### 4) Run each paper-trading mode
+
+```bash
+OPENCLAW_TRADING_MODE=hyperliquid_only python3 scripts/trading-agency-phase1.py
+OPENCLAW_TRADING_MODE=polymarket_only python3 scripts/trading-agency-phase1.py
+OPENCLAW_TRADING_MODE=mixed python3 scripts/trading-agency-phase1.py
+```
+
+### 5) Inspect outputs
+
+```bash
+find workspace -maxdepth 2 -type f | sort
+```
+
+Key output locations:
+- `workspace/logs/` — runtime JSON/JSONL logs and reports
+- `workspace/operator_control.json` — operator overrides
+- `workspace/system_status.json` — latest computed health/recovery status
+
+For a copy-paste operator guide, see `docs/OPERATOR_QUICKSTART.md`.
+
+## Local Verification
+
+```bash
+./scripts/ci-safe-verification.sh
+```
+
+The workflow used in GitHub Actions intentionally excludes flaky network-dependent checks from required CI.
 
 ## Repository Layout
 
@@ -94,59 +159,19 @@ config/      Runtime path configuration and mode selection helpers.
 docs/        Active documentation plus historical/audit materials.
 models/      Canonical trade and position-state schemas.
 scripts/     Operational scripts for paper-trading workflow and support tools.
-tests/       Temp-workspace and schema/bootstrap verification scripts.
+tests/       Safe regression and isolated lifecycle verification scripts.
 utils/       JSON helpers and system health management.
 workspace/   Runtime state, operator controls, logs, and generated artifacts.
 ```
 
-## `workspace/` Structure
+## Current Truthful Status
 
-`workspace/` is created and maintained by `config/runtime.py`. By default it is local to this repository, but it can be relocated with `OPENCLAW_WORKSPACE`.
-
-Typical contents:
-
-```text
-workspace/
-├── data/                  Generated datasets and intermediate files
-├── logs/                  JSON/JSONL state, reports, and audit outputs
-├── operator_control.json  Human override switches
-└── system_status.json     Latest computed health/recovery status
-```
-
-Canonical state files:
-
-- `workspace/logs/phase1-signals.jsonl` — append-only scanner output
-- `workspace/logs/phase1-paper-trades.jsonl` — append-only canonical paper trade log for all exchanges
-- `workspace/logs/position-state.json` — authoritative open-position state only
-- `workspace/logs/phase1-performance.json` — normalized closed-trade performance summary
-
-## Runtime Modes
-
-### `hyperliquid_only`
-- default mode
-- scans Hyperliquid only
-- validates Hyperliquid only in data-integrity scope
-- canonical baseline mode for reviewers
-
-### `polymarket_only`
-- optional mode
-- scans Polymarket only
-- paper-trading only
-- experimental until more runtime evidence exists
-
-### `mixed`
-- optional evaluation mode
-- scans both exchanges
-- still paper-trading only
-- intended for side-by-side research, not live capital allocation
-
-## Truthfulness Boundaries
-
-- Hyperliquid and Polymarket are supported for **paper trading only**.
-- Polymarket support is **optional and experimental**.
-- Real exchange execution is **not implemented**.
-- Supporting reports/dashboards should not be read as proof of live readiness.
-- Historical reports under `docs/archive/` remain for provenance, not current operational truth.
+- **Execution mode:** paper trading only
+- **Default exchange path:** Hyperliquid
+- **Optional exchange path:** Polymarket paper trading
+- **Live trading:** not implemented
+- **Production deployment claim:** unsupported
+- **Audience:** research, audit, portfolio review
 
 ## Disclaimer
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Portfolio Capital Allocator
-Dynamically assigns position sizing and portfolio weight to PROMOTED/LIVE strategies
+Dynamically assigns paper-trading position sizing and portfolio weight to eligible research strategies
 based on risk-adjusted performance, correlation, and portfolio-level constraints
 """
 
@@ -276,7 +276,7 @@ class PortfolioAllocator:
         print(f"[MONEY] Total Capital: ${self.total_capital:.2f}")
         print()
         
-        # Get PROMOTED and LIVE strategies
+        # Get eligible research-stage strategies
         eligible_strategies = {}
         
         for name, strategy in self.registry['strategies'].items():

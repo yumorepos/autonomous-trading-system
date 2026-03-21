@@ -1,14 +1,17 @@
-name: basic
+name: safe-verification
 
 on:
   push:
   pull_request:
 
 jobs:
-  basic-checks:
+  verify:
+    name: Safe paper-trading verification
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -21,32 +24,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Python compile check
-        run: python -m compileall config docs models scripts tests utils
-
-      - name: Basic import test
+      - name: Show verification scope
         run: |
-          python - <<'PY'
-          import importlib.util
-          from pathlib import Path
+          echo 'Running CI-safe verification for the paper-trading repository.'
+          echo 'This workflow intentionally excludes blocking network-dependent checks.'
+          echo 'Live trading is not implemented and is not part of verification.'
 
-          import config.runtime
-          import models.position_state
-          import models.trade_schema
-          import utils.json_utils
-          import utils.system_health
-
-          repo_root = Path.cwd()
-          for script_name, module_name in [
-              ("scripts/trading-agency-phase1.py", "trading_agency_phase1"),
-              ("scripts/phase1-paper-trader.py", "phase1_paper_trader"),
-              ("scripts/phase1-signal-scanner.py", "phase1_signal_scanner"),
-              ("scripts/execution-safety-layer.py", "execution_safety_layer"),
-          ]:
-              spec = importlib.util.spec_from_file_location(module_name, repo_root / script_name)
-              module = importlib.util.module_from_spec(spec)
-              assert spec.loader is not None
-              spec.loader.exec_module(module)
-
-          print("basic imports ok")
-          PY
+      - name: Run safe verification suite
+        run: ./scripts/ci-safe-verification.sh
