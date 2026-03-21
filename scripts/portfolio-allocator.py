@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.trade_schema import normalize_trade_record, validate_trade_record
 STRATEGY_REGISTRY = LOGS_DIR / "strategy-registry.json"
 PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 ALLOCATION_CONFIG = LOGS_DIR / "portfolio-allocation.json"
@@ -68,9 +69,12 @@ class PortfolioAllocator:
         with open(PAPER_TRADES) as f:
             for line in f:
                 if line.strip():
-                    trade = json.loads(line)
+                    trade = normalize_trade_record(json.loads(line))
+                    if not validate_trade_record(trade, context='portfolio-allocator.load_trades'):
+                        continue
                     if trade['status'] == 'CLOSED':
-                        strategy = trade['signal'].get('signal_type', 'unknown')
+                        raw = trade.get('raw', {})
+                        strategy = raw.get('signal', {}).get('signal_type', raw.get('strategy', 'unknown'))
                         trades[strategy].append(trade)
         
         return dict(trades)
@@ -104,7 +108,7 @@ class PortfolioAllocator:
         if not trades:
             return None
         
-        returns = [t['pnl'] for t in trades]
+        returns = [(t.get('realized_pnl_usd') or 0) for t in trades]
         wins = [r for r in returns if r > 0]
         losses = [abs(r) for r in returns if r < 0]
         
@@ -191,8 +195,8 @@ class PortfolioAllocator:
                     continue
                 
                 # Simple correlation based on trade timing and P&L
-                returns1 = [t['pnl'] for t in trades1]
-                returns2 = [t['pnl'] for t in trades2]
+                returns1 = [(t.get('realized_pnl_usd') or 0) for t in trades1]
+                returns2 = [(t.get('realized_pnl_usd') or 0) for t in trades2]
                 
                 # Pad shorter series
                 max_len = max(len(returns1), len(returns2))

@@ -16,6 +16,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.position_state import get_open_positions
+from models.trade_schema import validate_trade_record
 PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 EXIT_TRACKER_LOG = LOGS_DIR / "exit-tracker.jsonl"
 EXIT_TRACKER_REPORT = WORKSPACE / "EXIT_TRACKER_REPORT.md"
@@ -33,18 +35,12 @@ class ExitTracker:
         self.tracking_data = []
         
     def load_positions(self) -> List[Dict]:
-        """Load open positions"""
-        if not PAPER_TRADES.exists():
-            return []
-        
+        """Load open positions from authoritative position-state.json only."""
         positions = []
-        with open(PAPER_TRADES) as f:
-            for line in f:
-                if line.strip():
-                    trade = json.loads(line)
-                    if trade.get('status') == 'OPEN':
-                        positions.append(trade)
-        
+        for trade in get_open_positions(LOGS_DIR / 'position-state.json'):
+            if not validate_trade_record(trade, context=f"position-exit-tracker[{trade.get('trade_id', 'unknown')}]"):
+                continue
+            positions.append(trade)
         return positions
     
     def get_current_price(self, asset: str) -> float:
@@ -69,9 +65,9 @@ class ExitTracker:
     
     def track_position(self, position: Dict) -> Dict:
         """Compute all exit distances for a position"""
-        asset = position['signal']['asset']
+        asset = position['symbol']
         entry_price = position['entry_price']
-        entry_time = datetime.fromisoformat(position['entry_time'])
+        entry_time = datetime.fromisoformat(position['entry_timestamp'])
         age_hours = (datetime.now(timezone.utc) - entry_time).total_seconds() / 3600
         
         # Get current price
@@ -81,7 +77,8 @@ class ExitTracker:
             return None
         
         # Current P&L
-        pnl_pct = ((current_price - entry_price) / entry_price) * 100
+        side = position.get('side', position.get('direction', 'LONG'))
+        pnl_pct = ((entry_price - current_price) / entry_price) * 100 if side == 'SHORT' else ((current_price - entry_price) / entry_price) * 100
         
         # Distance to take profit
         distance_to_tp_pct = TAKE_PROFIT_PCT - pnl_pct

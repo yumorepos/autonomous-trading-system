@@ -16,6 +16,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.position_state import get_open_positions
+from models.trade_schema import validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl
 PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 TIMEOUT_HISTORY = LOGS_DIR / "timeout-history.jsonl"
@@ -57,24 +59,12 @@ class TimeoutMonitor:
         return None
     
     def load_positions(self) -> List[Dict]:
-        """Load open positions from authoritative state"""
+        """Load open positions from authoritative position-state.json only."""
         positions = []
-        
-        # Load state file
-        state = safe_read_json(LOGS_DIR / "position-state.json") or {}
-        
-        # Load trades - get latest version of each position
-        all_trades = {}
-        for trade in safe_read_jsonl(PAPER_TRADES):
-            pid = trade.get('position_id')
-            if pid:
-                all_trades[pid] = trade
-        
-        # Filter to OPEN only via state file
-        for pid, trade in all_trades.items():
-            if state.get(pid) == 'OPEN':
-                positions.append(trade)
-        
+        for position in get_open_positions(LOGS_DIR / "position-state.json"):
+            if not validate_trade_record(position, context=f"timeout-monitor[{position.get('trade_id', 'unknown')}]"):
+                continue
+            positions.append(position)
         return positions
     
     def calculate_pnl_trend(self, asset: str, entry_time: str) -> Dict:
@@ -126,9 +116,12 @@ class TimeoutMonitor:
             'recent_pnl': pnl_values
         }
     
-    def calculate_convergence(self, entry_price: float, current_price: float, pnl_trend: Dict) -> str:
+    def calculate_convergence(self, entry_price: float, current_price: float, pnl_trend: Dict, side: str = 'LONG') -> str:
         """Determine if position is converging or diverging from entry"""
-        pnl_pct = ((current_price - entry_price) / entry_price) * 100
+        if side == 'SHORT':
+            pnl_pct = ((entry_price - current_price) / entry_price) * 100
+        else:
+            pnl_pct = ((current_price - entry_price) / entry_price) * 100
         
         # Check if price is moving back toward entry
         if pnl_trend['trend'] == 'insufficient_data':
@@ -208,8 +201,8 @@ class TimeoutMonitor:
     
     def monitor_position(self, position: Dict) -> Dict:
         """Monitor single position with timeout focus"""
-        asset = position['signal']['asset']
-        entry_time = position['entry_time']
+        asset = position['symbol']
+        entry_time = position['entry_timestamp']
         entry_price = position['entry_price']
         
         # Get current state
@@ -224,13 +217,17 @@ class TimeoutMonitor:
         time_to_timeout_minutes = (TIMEOUT_HOURS - age_hours) * 60
         
         # Calculate P&L
-        pnl_pct = ((current_price - entry_price) / entry_price) * 100
+        side = position.get('side', position.get('direction', 'LONG'))
+        if side == 'SHORT':
+            pnl_pct = ((entry_price - current_price) / entry_price) * 100
+        else:
+            pnl_pct = ((current_price - entry_price) / entry_price) * 100
         
         # Get P&L trend
         pnl_trend = self.calculate_pnl_trend(asset, entry_time)
         
         # Calculate convergence
-        convergence = self.calculate_convergence(entry_price, current_price, pnl_trend)
+        convergence = self.calculate_convergence(entry_price, current_price, pnl_trend, side=side)
         
         # Calculate exit probabilities
         exit_probs = self.calculate_exit_probabilities(pnl_pct, age_hours, pnl_trend)

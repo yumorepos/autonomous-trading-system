@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.position_state import get_open_positions
 from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
 AGENCY_REPORT = LOGS_DIR / "agency-phase1-report.json"
 
@@ -83,8 +84,7 @@ def load_performance_data():
 
 def load_open_positions():
     """Load current open positions from authoritative state only."""
-    state = safe_read_json(LOGS_DIR / "position-state.json") or {}
-    return [position_id for position_id, status in state.items() if status == 'OPEN']
+    return get_open_positions(LOGS_DIR / 'position-state.json')
 
 
 def load_latest_signals():

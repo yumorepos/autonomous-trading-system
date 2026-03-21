@@ -18,6 +18,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.position_state import apply_trade_to_position_state, get_open_positions, load_position_state, save_position_state
+from models.trade_schema import normalize_trade_record, validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
 PAPER_TRADES_FILE = LOGS_DIR / "phase1-paper-trades.jsonl"
 PERFORMANCE_FILE = LOGS_DIR / "phase1-performance.json"
@@ -62,17 +64,23 @@ class PaperTrader:
         position_size_usd = PAPER_BALANCE * 0.02
         position_size = position_size_usd / entry_price
         
+        entry_timestamp = datetime.now(timezone.utc).isoformat()
         trade = {
+            'trade_id': self.position_id,
             'position_id': self.position_id,
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': entry_timestamp,
+            'entry_timestamp': entry_timestamp,
+            'entry_time': entry_timestamp,
             'signal': self.signal,
             'exchange': 'Hyperliquid',
             'strategy': 'funding_arbitrage',
+            'symbol': asset,
+            'asset': asset,
+            'side': direction,
+            'direction': direction,
             'entry_price': entry_price,
             'position_size': position_size,
             'position_size_usd': position_size_usd,
-            'direction': direction,
-            'entry_time': datetime.now(timezone.utc).isoformat(),
             'status': 'OPEN',
             'stop_loss_pct': STOP_LOSS_PCT,
             'take_profit_pct': TAKE_PROFIT_PCT,
@@ -120,14 +128,12 @@ def check_exit(position: dict) -> tuple[bool, str]:
     Returns: (should_exit, reason)
     """
     # Validate required fields
-    if not position.get('signal') or 'asset' not in position.get('signal', {}):
+    if 'symbol' not in position or 'entry_price' not in position or 'entry_timestamp' not in position:
         return False, None
-    if 'entry_price' not in position or 'entry_time' not in position:
-        return False, None
-    
-    asset = position['signal']['asset']
+
+    asset = position['symbol']
     entry_price = position['entry_price']
-    direction = position.get('direction', 'LONG')
+    direction = position.get('side', position.get('direction', 'LONG'))
     
     current_price = get_current_price(asset)
     if not current_price:
@@ -145,7 +151,7 @@ def check_exit(position: dict) -> tuple[bool, str]:
         return True, 'stop_loss'
     
     # Check time limit
-    entry_time = datetime.fromisoformat(position['entry_time'])
+    entry_time = datetime.fromisoformat(position['entry_timestamp'])
     now = datetime.now(timezone.utc)
     age_hours = (now - entry_time).total_seconds() / 3600
     
@@ -155,54 +161,9 @@ def check_exit(position: dict) -> tuple[bool, str]:
     return False, None
 
 
-def load_position_state() -> dict:
-    """
-    Load position state from dedicated state file
-    
-    FIXED: Replaces fragile JSONL append-only reconstruction
-    State file tracks: position_id -> status mapping
-    """
-    return safe_read_json(POSITION_STATE_FILE) or {}
-
-
-def save_position_state(state: dict):
-    """Save position state to file"""
-    write_json_atomic(POSITION_STATE_FILE, state)
-
-
 def load_open_positions() -> list:
-    """
-    Load open positions with ghost prevention
-    
-    FIXED: Uses position_id and state file to prevent ghost positions
-    """
-    # Load position state
-    state = load_position_state()
-    
-    # Load all positions from log
-    all_positions = safe_read_jsonl(PAPER_TRADES_FILE)
-    
-    # Filter to truly open positions using state file
-    open_positions = []
-    for pos in all_positions:
-        # Skip malformed records
-        if not pos.get('signal') or 'asset' not in pos.get('signal', {}):
-            continue
-        if 'entry_price' not in pos or 'entry_time' not in pos:
-            continue
-        
-        position_id = pos.get('position_id')
-        
-        if not position_id:
-            # Legacy position without ID - check status field
-            if pos.get('status') == 'OPEN':
-                open_positions.append(pos)
-        else:
-            # New position with ID - check state file
-            if state.get(position_id) == 'OPEN':
-                open_positions.append(pos)
-    
-    return open_positions
+    """Load open positions from authoritative position-state.json only."""
+    return get_open_positions(POSITION_STATE_FILE)
 
 
 def load_latest_signals(limit: int = 10) -> list:
@@ -237,17 +198,20 @@ def calculate_performance() -> dict:
     # Load all closed trades
     closed_trades = []
     for trade in safe_read_jsonl(PAPER_TRADES_FILE):
-        if trade.get('status') == 'CLOSED':
-            closed_trades.append(trade)
+        normalized = normalize_trade_record(trade)
+        if not validate_trade_record(normalized, context='phase1-paper-trader.calculate_performance'):
+            continue
+        if normalized.get('status') == 'CLOSED':
+            closed_trades.append(normalized)
     
     if not closed_trades:
         return {'total_trades': 0}
     
     # Calculate metrics
-    winners = [t for t in closed_trades if t.get('realized_pnl_usd', 0) > 0]
-    losers = [t for t in closed_trades if t.get('realized_pnl_usd', 0) <= 0]
+    winners = [t for t in closed_trades if (t.get('realized_pnl_usd') or 0) > 0]
+    losers = [t for t in closed_trades if (t.get('realized_pnl_usd') or 0) <= 0]
     
-    total_pnl = sum(t.get('realized_pnl_usd', 0) for t in closed_trades)
+    total_pnl = sum((t.get('realized_pnl_usd') or 0) for t in closed_trades)
     win_rate = len(winners) / len(closed_trades) * 100 if closed_trades else 0
     
     performance = {
@@ -266,32 +230,35 @@ def calculate_performance() -> dict:
 
 
 def log_trade(trade: dict):
-    """Append trade to log"""
+    """Append trade to log and update authoritative position state."""
     PAPER_TRADES_FILE.parent.mkdir(exist_ok=True)
     with open(PAPER_TRADES_FILE, 'a') as f:
         f.write(json.dumps(trade) + '\n')
-    
-    # Update position state
-    position_id = trade.get('position_id')
-    if position_id:
-        state = load_position_state()
-        state[position_id] = trade['status']
-        save_position_state(state)
+
+    apply_trade_to_position_state(POSITION_STATE_FILE, trade)
 
 
 def close_position(position: dict, exit_price: float, exit_reason: str):
     """Close an open position"""
-    asset = position['signal']['asset']
+    asset = position['symbol']
     entry_price = position['entry_price']
-    direction = position.get('direction', 'LONG')
+    direction = position.get('side', position.get('direction', 'LONG'))
     
     # Calculate final P&L with correct formula
     pnl_usd, pnl_pct = calculate_pnl(entry_price, exit_price, position['position_size'], direction)
     
+    exit_timestamp = datetime.now(timezone.utc).isoformat()
     closed_trade = {
         **position,
+        'trade_id': position.get('trade_id'),
+        'position_id': position.get('trade_id', position.get('position_id')),
+        'symbol': position.get('symbol', asset),
+        'asset': asset,
+        'side': position.get('side', direction),
+        'direction': direction,
         'status': 'CLOSED',
-        'exit_time': datetime.now(timezone.utc).isoformat(),
+        'exit_timestamp': exit_timestamp,
+        'exit_time': exit_timestamp,
         'exit_price': exit_price,
         'exit_reason': exit_reason,
         'realized_pnl_usd': pnl_usd,
@@ -323,7 +290,7 @@ def main():
     if open_positions:
         print("🔍 Checking exits...")
         for position in open_positions:
-            asset = position['signal']['asset']
+            asset = position['symbol']
             should_exit, reason = check_exit(position)
             
             if should_exit:
@@ -353,7 +320,7 @@ def main():
             best_signal = max(good_signals, key=lambda x: x.get('ev_score', 0))
             
             # Check if we already have a position in this asset
-            open_assets = [p['signal']['asset'] for p in open_positions if 'asset' in p['signal']]
+            open_assets = [p['symbol'] for p in open_positions if p.get('symbol')]
             signal_asset = best_signal.get('asset')
             
             if signal_asset and signal_asset in open_assets:
