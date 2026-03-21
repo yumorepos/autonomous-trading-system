@@ -160,10 +160,10 @@ def generate_agency_report(scanner_result, social_result, trader_result):
                 })
         
         # Check if overall performance is poor
-        if performance['total_trades'] >= 20 and performance['win_rate_pct'] < 40:
+        if performance['total_trades'] >= 20 and performance['win_rate'] < 40:
             report['supervisor_action_required'].append({
                 'type': 'performance_alert',
-                'reason': f"Low win rate: {performance['win_rate_pct']}% over {performance['total_trades']} trades",
+                'reason': f"Low win rate: {performance['win_rate']}% over {performance['total_trades']} trades",
                 'recommendation': 'Review signal quality, adjust filters'
             })
     
@@ -213,7 +213,7 @@ def main():
     
     if report['performance_summary'].get('total_trades', 0) > 0:
         perf = report['performance_summary']
-        print(f"💰 Performance: {perf['total_trades']} trades, {perf['win_rate_pct']}% WR, ${perf['total_pnl']:+.2f} PnL")
+        print(f"💰 Performance: {perf['total_trades']} trades, {perf['win_rate']}% WR, ${perf['total_pnl']:+.2f} PnL")
     else:
         print(f"⏳ Performance: No closed trades yet")
     
