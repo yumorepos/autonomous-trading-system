@@ -256,7 +256,7 @@ def load_latest_signals():
     return safe_read_jsonl(LOGS_DIR / "phase1-signals.jsonl")[-10:]
 
 
-def generate_agency_report(stage_results: list[StageResult], optional_components: dict):
+def generate_agency_report(stage_results: list[StageResult], optional_components: dict, status_snapshot: dict | None = None):
     """Generate comprehensive report for supervisor"""
     
     performance = load_performance_data()
@@ -265,6 +265,7 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
     health_manager = SystemHealthManager()
     health_state = health_manager.refresh_state()
     trading_response = health_manager.trading_response()
+    status_snapshot = status_snapshot or health_manager.write_system_status()
     
     # Sort signals by EV
     latest_signals.sort(key=lambda x: x.get('ev_score', 0), reverse=True)
@@ -291,6 +292,7 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
                 'recovery_state': health_state.get('recovery_state', 'NORMAL'),
             },
             'action_taken': trading_response,
+            'operator_status': status_snapshot,
         },
         
         'performance_summary': performance or {
@@ -355,9 +357,16 @@ def main():
 
     stage_results: list[StageResult] = []
     opening_health = health_manager.trading_response()
+    health_manager.write_system_status()
     print(
         f"System health: {opening_health['overall_status']} | "
+        f"Recovery: {opening_health.get('recovery_state', 'NORMAL')} | "
+        f"Cooldown: {opening_health.get('cooldown_remaining', 0)}s | "
+        f"Operator mode: {opening_health.get('operator_control', {}).get('manual_mode', 'OFF')} | "
+        f"Override: {opening_health.get('operator_control', {}).get('trading_override', 'ALLOW')}/"
+        f"{opening_health.get('operator_control', {}).get('recovery_override', 'AUTO')} | "
         f"Action: {opening_health['action']} | "
+        f"Alert: {opening_health.get('alert_level', 'INFO')} | "
         f"Reason: {opening_health['reason']}"
     )
     print()
@@ -395,6 +404,7 @@ def main():
 
     final_response = health_manager.trading_response()
     final_health_state = health_manager.refresh_state()
+    final_status_snapshot = health_manager.write_system_status()
     monitors_stage = stage_result(
         "monitors",
         StageStatus.SUCCESS,
@@ -404,11 +414,16 @@ def main():
             f"resolved_recent={len(final_health_state.get('resolved_incidents', []))} | "
             f"cooldown_remaining={final_health_state.get('cooldown_remaining', 0)}s | "
             f"recovery_state={final_health_state.get('recovery_state', 'NORMAL')} | "
-            f"action={final_response['action']}"
+            f"operator_mode={final_response.get('operator_control', {}).get('manual_mode', 'OFF')} | "
+            f"active_override={final_response.get('operator_control', {}).get('trading_override', 'ALLOW')}/"
+            f"{final_response.get('operator_control', {}).get('recovery_override', 'AUTO')} | "
+            f"action={final_response['action']} | "
+            f"alert={final_response.get('alert_level', 'INFO')}"
         ),
         {
             'system_health': final_health_state,
             'action_taken': final_response,
+            'system_status': final_status_snapshot,
         },
     )
     stage_results.append(monitors_stage)
@@ -419,7 +434,7 @@ def main():
     print("=" * 80)
     
     # Generate report
-    report = generate_agency_report(stage_results, optional_components)
+    report = generate_agency_report(stage_results, optional_components, final_status_snapshot)
     
     print()
     print(f"📊 Cycle #{report['cycle_number']} Complete")
@@ -432,8 +447,12 @@ def main():
         f"Active: {len(report['current_state']['system_health']['active_incidents'])} | "
         f"Resolved recent: {len(report['current_state']['system_health'].get('resolved_incidents', []))} | "
         f"Cooldown: {report['current_state']['system_health'].get('cooldown_remaining', 0)}s | "
-        f"Recovery: {report['current_state']['system_health'].get('recovery_state', 'NORMAL')} | "
-        f"Action: {report['current_state']['action_taken']['action']}"
+        f"Recovery: {report['current_state']['action_taken'].get('recovery_state', report['current_state']['system_health'].get('recovery_state', 'NORMAL'))} | "
+        f"Operator: {report['current_state']['action_taken'].get('operator_control', {}).get('manual_mode', 'OFF')} | "
+        f"Override: {report['current_state']['action_taken'].get('operator_control', {}).get('trading_override', 'ALLOW')}/"
+        f"{report['current_state']['action_taken'].get('operator_control', {}).get('recovery_override', 'AUTO')} | "
+        f"Action: {report['current_state']['action_taken']['action']} | "
+        f"Alert: {report['current_state']['action_taken'].get('alert_level', 'INFO')}"
     )
     
     if report['performance_summary'].get('total_trades', 0) > 0:
