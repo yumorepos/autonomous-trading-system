@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
 Trading Agency: Phase 1 Executor
-Runs all Phase 1 operations (scan, signal, paper trade) as a single agency worker
-Reports results back to supervisor system
+Runs the enforced Phase 1 execution path as a single agency worker:
+orchestrator -> data integrity -> signal scanner -> safety validation ->
+trader -> authoritative state update -> monitors.
 """
 
 import json
 import sys
 import os
 import subprocess
+import importlib.util
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -22,8 +26,70 @@ from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
 AGENCY_REPORT = LOGS_DIR / "agency-phase1-report.json"
 
 
+class StageStatus(str, Enum):
+    SUCCESS = "SUCCESS"
+    FAIL = "FAIL"
+    SKIPPED = "SKIPPED"
+
+
+@dataclass
+class StageResult:
+    stage: str
+    status: str
+    reason: str
+    data: dict | None = None
+
+
+def load_script_module(script_name: str, module_name: str):
+    """Load a local script with a hyphenated filename as a Python module."""
+    script_path = REPO_ROOT / "scripts" / script_name
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load module from {script_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def stage_result(stage: str, status: StageStatus, reason: str, data: dict | None = None) -> StageResult:
+    result = StageResult(stage=stage, status=status.value, reason=reason, data=data)
+    print(f"[{result.stage}] {result.status} - {result.reason}")
+    return result
+
+
+def detect_optional_components() -> dict:
+    """Detect optional modules explicitly so missing components are visible."""
+    social_scanner = REPO_ROOT / "scripts" / "phase1-social-scanner.py"
+    polymarket_executor = REPO_ROOT / "scripts" / "polymarket-executor.py"
+    return {
+        'social_scanner': {
+            'status': 'ENABLED' if social_scanner.exists() else 'MISSING',
+            'reason': 'Script detected' if social_scanner.exists() else 'phase1-social-scanner.py not present',
+        },
+        'polymarket_execution': {
+            'status': 'DISABLED' if polymarket_executor.exists() else 'MISSING',
+            'reason': (
+                'Polymarket executor exists but is not active in Phase 1 paper trading'
+                if polymarket_executor.exists()
+                else 'polymarket-executor.py not present'
+            ),
+        },
+    }
+
+
+def run_data_integrity_gate(optional_components: dict) -> StageResult:
+    """Run the enforced pre-scan data integrity gate."""
+    integrity_module = load_script_module("data-integrity-layer.py", "phase1_data_integrity")
+    integrity = integrity_module.DataIntegrityLayer()
+    gate = integrity.run_pre_scan_gate(
+        include_polymarket=optional_components['polymarket_execution']['status'] == 'ENABLED'
+    )
+    status = StageStatus.SUCCESS if gate['passed'] else StageStatus.FAIL
+    return stage_result("data_integrity", status, gate['reason'], gate)
+
+
 def run_signal_scanner():
-    """Execute signal scanner, return results"""
+    """Execute signal scanner as the only scanner in the canonical path."""
     print("🔍 Agency: Running signal scanner...")
     
     result = subprocess.run(
@@ -32,49 +98,117 @@ def run_signal_scanner():
     )
     
     if result.returncode == 0:
-        print("  ✅ Scanner complete")
-        return {'status': 'success', 'output': result.stdout}
-    else:
-        print(f"  ❌ Scanner failed: {result.stderr}")
-        return {'status': 'error', 'error': result.stderr}
+        signals = load_latest_signals()
+        return stage_result(
+            "signal_scanner",
+            StageStatus.SUCCESS,
+            f"Scanner completed with {len(signals)} recent signals available",
+            {'stdout': result.stdout, 'signals_count': len(signals)},
+        )
+
+    error = result.stderr.strip() or result.stdout.strip() or "Signal scanner exited non-zero"
+    return stage_result("signal_scanner", StageStatus.FAIL, error, {'stderr': result.stderr, 'stdout': result.stdout})
 
 
-def run_social_scanner():
-    """Execute social media scanner"""
-    print("🐦 Agency: Running social scanner...")
-    social_scanner = REPO_ROOT / "scripts" / "phase1-social-scanner.py"
-    if not social_scanner.exists():
-        print("  ⚠️ Social scanner skipped: script not found")
-        return {'status': 'skipped', 'note': 'phase1-social-scanner.py not present'}
+def run_safety_validation() -> StageResult:
+    """Validate the next candidate entry before the trader can place it."""
+    trader_module = load_script_module("phase1-paper-trader.py", "phase1_paper_trader")
+    safety_module = load_script_module("execution-safety-layer.py", "phase1_execution_safety")
 
-    result = subprocess.run(
-        ["python3", str(social_scanner)],
-        capture_output=True, text=True, timeout=60
+    open_positions = trader_module.load_open_positions()
+    signals = trader_module.load_latest_signals()
+    candidate_signal, selection_reason = trader_module.select_trade_candidate(signals, open_positions)
+
+    if candidate_signal is None:
+        return stage_result(
+            "safety_validation",
+            StageStatus.SKIPPED,
+            selection_reason,
+            {'candidate_signal': None},
+        )
+
+    proposal = safety_module.TradeProposal(
+        strategy='funding_arbitrage',
+        asset=candidate_signal['asset'],
+        direction=candidate_signal['direction'],
+        entry_price=float(candidate_signal['entry_price']),
+        position_size_usd=trader_module.PAPER_BALANCE * 0.02,
+        signal_timestamp=candidate_signal['timestamp'],
+        allocation_weight=0.02,
     )
-    
-    if result.returncode == 0:
-        print("  ✅ Social scanner complete")
-        return {'status': 'success', 'output': result.stdout}
-    else:
-        print(f"  ⚠️ Social scanner incomplete (may be expected): {result.stderr[:200]}")
-        return {'status': 'partial', 'note': 'agent-reach may not be installed'}
+    safety = safety_module.ExecutionSafetyLayer()
+    passed, validations = safety.validate_trade(proposal)
+    summary = safety.summarize_validation_results(validations)
 
+    if passed:
+        return stage_result(
+            "safety_validation",
+            StageStatus.SUCCESS,
+            f"{selection_reason}; {summary['reason']}",
+            {
+                'candidate_signal': candidate_signal,
+                'proposal': proposal.to_dict(),
+                'validations': [asdict(result) for result in validations],
+            },
+        )
 
-def run_paper_trader():
-    """Execute paper trader"""
-    print("💼 Agency: Running paper trader...")
-    
-    result = subprocess.run(
-        ["python3", str(REPO_ROOT / "scripts" / "phase1-paper-trader.py")],
-        capture_output=True, text=True, timeout=60
+    safety.log_blocked_action(proposal, summary['reason'], validations)
+    return stage_result(
+        "safety_validation",
+        StageStatus.FAIL,
+        summary['reason'],
+        {
+            'candidate_signal': candidate_signal,
+            'proposal': proposal.to_dict(),
+            'validations': [asdict(result) for result in validations],
+        },
     )
-    
-    if result.returncode == 0:
-        print("  ✅ Paper trader complete")
-        return {'status': 'success', 'output': result.stdout}
-    else:
-        print(f"  ❌ Paper trader failed: {result.stderr}")
-        return {'status': 'error', 'error': result.stderr}
+
+
+def run_trader(safety_stage: StageResult) -> StageResult:
+    """Build the trader execution plan without updating authoritative state yet."""
+    trader_module = load_script_module("phase1-paper-trader.py", "phase1_paper_trader")
+    try:
+        candidate_signal = (safety_stage.data or {}).get('candidate_signal')
+        allow_new_entries = safety_stage.status == StageStatus.SUCCESS.value and candidate_signal is not None
+        allowed_signal_timestamp = candidate_signal.get('timestamp') if allow_new_entries else None
+        plan = trader_module.build_execution_plan(
+            allowed_signal_timestamp=allowed_signal_timestamp,
+            allow_new_entries=allow_new_entries,
+        )
+    except Exception as exc:
+        return stage_result("trader", StageStatus.FAIL, f"Trader planning failed: {exc}")
+
+    planned_trades = plan.get('planned_trades', [])
+    if not planned_trades:
+        return stage_result("trader", StageStatus.SKIPPED, plan.get('entry_reason', 'No trade records generated'), plan)
+
+    return stage_result(
+        "trader",
+        StageStatus.SUCCESS,
+        f"Prepared {len(planned_trades)} trade record(s) for authoritative state update",
+        plan,
+    )
+
+
+def run_state_update(trader_stage: StageResult) -> StageResult:
+    """Persist trader output and update authoritative position state only after trader success."""
+    if trader_stage.status != StageStatus.SUCCESS.value:
+        return stage_result("authoritative_state_update", StageStatus.SKIPPED, "Trader did not succeed; state update blocked")
+
+    trader_module = load_script_module("phase1-paper-trader.py", "phase1_paper_trader")
+    planned_trades = (trader_stage.data or {}).get('planned_trades', [])
+    if not planned_trades:
+        return stage_result("authoritative_state_update", StageStatus.SKIPPED, "No trade records to persist")
+
+    persisted = trader_module.persist_trade_records(planned_trades)
+    performance = trader_module.calculate_performance()
+    return stage_result(
+        "authoritative_state_update",
+        StageStatus.SUCCESS,
+        f"Persisted {persisted} trade record(s) and refreshed performance state",
+        {'persisted_records': persisted, 'performance': performance},
+    )
 
 
 def load_performance_data():
@@ -92,7 +226,7 @@ def load_latest_signals():
     return safe_read_jsonl(LOGS_DIR / "phase1-signals.jsonl")[-10:]
 
 
-def generate_agency_report(scanner_result, social_result, trader_result):
+def generate_agency_report(stage_results: list[StageResult], optional_components: dict):
     """Generate comprehensive report for supervisor"""
     
     performance = load_performance_data()
@@ -107,11 +241,10 @@ def generate_agency_report(scanner_result, social_result, trader_result):
         'agency': 'trading-phase1',
         'cycle_number': len(open_positions) + (performance.get('total_trades', 0) if performance else 0),
         
-        'execution_results': {
-            'signal_scanner': scanner_result['status'],
-            'social_scanner': social_result['status'],
-            'paper_trader': trader_result['status']
-        },
+        'execution_results': {result.stage: result.status for result in stage_results},
+        'execution_reasons': {result.stage: result.reason for result in stage_results},
+        'stage_results': [asdict(result) for result in stage_results],
+        'optional_components': optional_components,
         
         'current_state': {
             'open_positions': len(open_positions),
@@ -171,11 +304,45 @@ def main():
     print("Agency Role: Execute all Phase 1 operations")
     print("Supervisor Role: Review results, make strategic decisions")
     print()
-    
-    # Execute all Phase 1 operations
-    scanner_result = run_signal_scanner()
-    social_result = run_social_scanner()
-    trader_result = run_paper_trader()
+
+    optional_components = detect_optional_components()
+    print("Optional components:")
+    for component_name, component_state in optional_components.items():
+        print(f"  - {component_name}: {component_state['status']} ({component_state['reason']})")
+    print()
+
+    stage_results: list[StageResult] = []
+
+    data_stage = run_data_integrity_gate(optional_components)
+    stage_results.append(data_stage)
+
+    if data_stage.status == StageStatus.FAIL.value:
+        stage_results.extend([
+            stage_result("signal_scanner", StageStatus.SKIPPED, "Blocked by data integrity failure"),
+            stage_result("safety_validation", StageStatus.SKIPPED, "Scanner did not run"),
+            stage_result("trader", StageStatus.SKIPPED, "Trading blocked by upstream failure"),
+            stage_result("authoritative_state_update", StageStatus.SKIPPED, "Trader did not run"),
+        ])
+    else:
+        scanner_stage = run_signal_scanner()
+        stage_results.append(scanner_stage)
+
+        if scanner_stage.status == StageStatus.FAIL.value:
+            stage_results.extend([
+                stage_result("safety_validation", StageStatus.SKIPPED, "Signal scanner failed"),
+                stage_result("trader", StageStatus.SKIPPED, "Signal scanner failed"),
+                stage_result("authoritative_state_update", StageStatus.SKIPPED, "Trader did not run"),
+            ])
+        else:
+            safety_stage = run_safety_validation()
+            stage_results.append(safety_stage)
+            trader_stage = run_trader(safety_stage)
+            stage_results.append(trader_stage)
+            state_stage = run_state_update(trader_stage)
+            stage_results.append(state_stage)
+
+    monitors_stage = stage_result("monitors", StageStatus.SUCCESS, "Supervisor report refreshed")
+    stage_results.append(monitors_stage)
     
     print()
     print("=" * 80)
@@ -183,11 +350,13 @@ def main():
     print("=" * 80)
     
     # Generate report
-    report = generate_agency_report(scanner_result, social_result, trader_result)
+    report = generate_agency_report(stage_results, optional_components)
     
     print()
     print(f"📊 Cycle #{report['cycle_number']} Complete")
-    print(f"✅ Execution: Scanner={scanner_result['status']}, Social={social_result['status']}, Trader={trader_result['status']}")
+    print("✅ Stage status summary:")
+    for result in stage_results:
+        print(f"   - {result.stage}: {result.status} ({result.reason})")
     print(f"📈 State: {report['current_state']['open_positions']} open positions, {report['current_state']['latest_signals_count']} signals")
     
     if report['performance_summary'].get('total_trades', 0) > 0:
