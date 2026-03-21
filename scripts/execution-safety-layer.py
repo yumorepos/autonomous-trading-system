@@ -111,7 +111,18 @@ class ExecutionSafetyLayer:
             'exchange_health': {},
             'last_incident': None,
             'kill_switch_active': False,
-            'manual_override': False
+            'manual_override': False,
+            'runtime_enforcement': {
+                'last_transition': None,
+                'last_transition_at': None,
+                'last_persist_reason': None,
+                'last_proposal': None,
+                'last_validation_summary': None,
+                'last_validation_result': None,
+                'last_planned_trade_count': 0,
+                'last_persisted_trade_count': 0,
+                'blocked_actions_count': 0,
+            },
         }
     
     def save_state(self):
@@ -119,6 +130,69 @@ class ExecutionSafetyLayer:
         self.state['last_update'] = datetime.now(timezone.utc).isoformat()
         with open(SAFETY_STATE, 'w') as f:
             json.dump(self.state, f, indent=2)
+
+    def _count_jsonl_records(self, path: Path) -> int:
+        if not path.exists():
+            return 0
+
+        count = 0
+        with open(path) as handle:
+            for line in handle:
+                if line.strip():
+                    count += 1
+        return count
+
+    def snapshot_state(self) -> Dict:
+        runtime = self.state.get('runtime_enforcement', {})
+        breakers = self.state.get('circuit_breakers', {})
+        return {
+            'status': self.state.get('status'),
+            'kill_switch_active': self.state.get('kill_switch_active', False),
+            'manual_override': self.state.get('manual_override', False),
+            'exchange_health': self.state.get('exchange_health', {}),
+            'circuit_breakers': {
+                'consecutive_losses': breakers.get('consecutive_losses', 0),
+                'daily_loss_usd': breakers.get('daily_loss_usd', 0),
+                'hourly_loss_usd': breakers.get('hourly_loss_usd', 0),
+                'peak_balance': breakers.get('peak_balance', 97.80),
+                'last_trade_timestamp': breakers.get('last_trade_timestamp'),
+            },
+            'runtime_enforcement': {
+                'last_transition': runtime.get('last_transition'),
+                'last_transition_at': runtime.get('last_transition_at'),
+                'last_persist_reason': runtime.get('last_persist_reason'),
+                'last_validation_result': runtime.get('last_validation_result'),
+                'last_planned_trade_count': runtime.get('last_planned_trade_count', 0),
+                'last_persisted_trade_count': runtime.get('last_persisted_trade_count', 0),
+                'blocked_actions_count': runtime.get('blocked_actions_count', 0),
+            },
+        }
+
+    def persist_runtime_state(
+        self,
+        transition: str,
+        *,
+        proposal: Optional[TradeProposal] = None,
+        summary: Optional[Dict] = None,
+        extra: Optional[Dict] = None,
+        persist_reason: str,
+    ) -> Dict:
+        runtime = self.state.setdefault('runtime_enforcement', {})
+        runtime['last_transition'] = transition
+        runtime['last_transition_at'] = datetime.now(timezone.utc).isoformat()
+        runtime['last_persist_reason'] = persist_reason
+        runtime['last_proposal'] = proposal.to_dict() if proposal else runtime.get('last_proposal')
+        runtime['last_validation_summary'] = summary or runtime.get('last_validation_summary')
+        if summary is not None:
+            failed = summary.get('failed_critical_checks', [])
+            runtime['last_validation_result'] = 'BLOCKED' if failed else 'PASSED'
+        if extra:
+            runtime.update(extra)
+
+        runtime['blocked_actions_count'] = self._count_jsonl_records(BLOCKED_ACTIONS)
+        self.state['status'] = self.determine_system_status().value
+        self.save_state()
+        return self.snapshot_state()
     
     def load_recent_trades(self) -> List[Dict]:
         """Load recent trades for deduplication and circuit breakers"""
