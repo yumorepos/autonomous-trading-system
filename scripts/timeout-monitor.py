@@ -19,6 +19,7 @@ from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
 from models.position_state import get_open_positions
 from models.trade_schema import validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl
+from utils.system_health import SystemHealthManager
 PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 TIMEOUT_HISTORY = LOGS_DIR / "timeout-history.jsonl"
 TIMEOUT_REPORT = WORKSPACE / "TIMEOUT_MONITOR_REPORT.md"
@@ -33,6 +34,7 @@ class TimeoutMonitor:
     
     def __init__(self):
         self.positions = []
+        self.health_manager = SystemHealthManager()
         
     def load_history(self) -> Dict:
         """Load historical tracking data"""
@@ -54,8 +56,27 @@ class TimeoutMonitor:
             if r.status_code == 200:
                 prices = r.json()
                 return float(prices.get(asset, 0))
+            self.health_manager.record_incident(
+                incident_type='timeout_monitor_api_instability',
+                severity='MEDIUM',
+                source='timeout-monitor',
+                message=f"Timeout monitor price lookup failed for {asset}: HTTP {r.status_code}",
+                affected_trade=asset,
+                affected_system='timeout-monitoring',
+                affected_components=['timeout_monitor', 'hyperliquid_api'],
+                metadata={'asset': asset, 'status_code': r.status_code},
+            )
         except:
-            pass
+            self.health_manager.record_incident(
+                incident_type='timeout_monitor_failure',
+                severity='MEDIUM',
+                source='timeout-monitor',
+                message=f"Timeout monitor price lookup raised for {asset}",
+                affected_trade=asset,
+                affected_system='timeout-monitoring',
+                affected_components=['timeout_monitor', 'hyperliquid_api'],
+                metadata={'asset': asset},
+            )
         return None
     
     def load_positions(self) -> List[Dict]:
@@ -208,6 +229,16 @@ class TimeoutMonitor:
         # Get current state
         current_price = self.get_current_price(asset)
         if not current_price:
+            self.health_manager.record_incident(
+                incident_type='timeout_monitor_missing_price',
+                severity='LOW',
+                source='timeout-monitor',
+                message=f"Timeout monitor skipped {asset}: current price unavailable",
+                affected_trade=asset,
+                affected_system='timeout-monitoring',
+                affected_components=['timeout_monitor'],
+                metadata={'asset': asset, 'entry_time': entry_time},
+            )
             return None
         
         entry_dt = datetime.fromisoformat(entry_time)
