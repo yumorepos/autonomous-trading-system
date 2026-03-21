@@ -29,7 +29,7 @@ DATA_HEALTH_REPORT = WORKSPACE / "DATA_HEALTH_REPORT.md"
 # Data Quality Thresholds
 DATA_QUALITY = {
     'max_data_age_seconds': 60,              # 1 minute max data age
-    'max_fetch_failures': 3,                 # 3 consecutive failures → DEGRADED
+    'max_fetch_failures': 3,                 # 3 consecutive failures -> DEGRADED
     'min_asset_count': 100,                  # Min 100 assets from Hyperliquid
     'min_market_count': 3,                   # Min 3 markets from Polymarket
     'max_price_change_pct': 50,              # 50% max price change (outlier detection)
@@ -485,7 +485,7 @@ class DataIntegrityLayer:
             validations.append(ValidationResult(
                 passed=True,
                 check_name="signal_decay",
-                reason=f"Score decayed: {signal.get('ev_score', 0):.1f} → {decayed_score:.1f}",
+                reason=f"Score decayed: {signal.get('ev_score', 0):.1f} -> {decayed_score:.1f}",
                 severity="INFO",
                 data={'original': signal.get('ev_score', 0), 'decayed': decayed_score}
             ))
@@ -693,11 +693,11 @@ class DataIntegrityLayer:
         
         # Status indicator
         if health == DataHealth.HEALTHY:
-            lines.append("🟢 **HEALTHY** — All data sources operational, data quality verified")
+            lines.append("[GREEN] **HEALTHY** -- All data sources operational, data quality verified")
         elif health == DataHealth.DEGRADED:
-            lines.append("🟡 **DEGRADED** — Data quality issues detected, fallback active")
+            lines.append("[YELLOW] **DEGRADED** -- Data quality issues detected, fallback active")
         else:
-            lines.append("🔴 **HALT** — Critical data issues, signal generation halted")
+            lines.append("[RED] **HALT** -- Critical data issues, signal generation halted")
         
         lines.append("")
         lines.append("---")
@@ -711,13 +711,13 @@ class DataIntegrityLayer:
             metrics = self.metrics.get(source_name, {})
             
             if source_state['health'] == 'UP':
-                icon = "🟢"
+                icon = "[GREEN]"
             elif source_state['health'] == 'DEGRADED':
-                icon = "🟡"
+                icon = "[YELLOW]"
             elif source_state['health'] == 'DOWN':
-                icon = "🔴"
+                icon = "[RED]"
             else:
-                icon = "⚪"
+                icon = "[WHITE]"
             
             lines.append(f"### {icon} {source_name.title()}")
             lines.append(f"**Status:** {source_state['health']}")
@@ -777,9 +777,9 @@ def main():
     )
     
     if hl_ok:
-        print(f"  Hyperliquid: ✅ UP ({hl_latency:.0f}ms)")
+        print(f"  Hyperliquid: [OK] UP ({hl_latency:.0f}ms)")
     else:
-        print(f"  Hyperliquid: ❌ {hl_error}")
+        print(f"  Hyperliquid: [FAIL] {hl_error}")
     
     pm_ok, pm_latency, pm_error = integrity.check_source_health(
         'polymarket',
@@ -787,9 +787,9 @@ def main():
     )
     
     if pm_ok:
-        print(f"  Polymarket: ✅ UP ({pm_latency:.0f}ms)")
+        print(f"  Polymarket: [OK] UP ({pm_latency:.0f}ms)")
     else:
-        print(f"  Polymarket: ❌ {pm_error}")
+        print(f"  Polymarket: [FAIL] {pm_error}")
     
     print()
     
@@ -810,10 +810,10 @@ def main():
         f.write(report)
     
     print("=" * 80)
-    print(f"✅ Data integrity check complete")
-    print(f"📄 Report: {DATA_HEALTH_REPORT}")
-    print(f"📊 State: {DATA_STATE}")
-    print(f"📈 Metrics: {SOURCE_METRICS}")
+    print(f"[OK] Data integrity check complete")
+    print(f"[REPORT] Report: {DATA_HEALTH_REPORT}")
+    print(f"[STATS] State: {DATA_STATE}")
+    print(f"[TREND] Metrics: {SOURCE_METRICS}")
     print("=" * 80)
 
 

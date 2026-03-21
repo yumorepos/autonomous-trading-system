@@ -2,7 +2,7 @@
 """
 Unified Paper Trading Engine
 Handles both Hyperliquid and Polymarket signals
-Architecture: signal → validation → execution → tracking
+Architecture: signal -> validation -> execution -> tracking
 """
 
 import json
@@ -147,7 +147,7 @@ class UnifiedPaperTrader:
         """Run one paper trading cycle"""
         
         print("=" * 80)
-        print("UNIFIED PAPER TRADER — Hyperliquid + Polymarket")
+        print("UNIFIED PAPER TRADER -- Hyperliquid + Polymarket")
         print(f"Cycle Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}")
         print("=" * 80)
         print()
@@ -174,9 +174,9 @@ class UnifiedPaperTrader:
             
             if result['status'] == 'SUCCESS':
                 executed += 1
-                print(f"   ✅ OPENED: {signal.get('market_question', 'Unknown market')}")
+                print(f"   [OK] OPENED: {signal.get('market_question', 'Unknown market')}")
             elif result['status'] == 'REJECTED':
-                print(f"   ⚠️  REJECTED: {result['reason']}")
+                print(f"   [WARN]  REJECTED: {result['reason']}")
         
         print(f"   Executed: {executed} new positions")
         print()

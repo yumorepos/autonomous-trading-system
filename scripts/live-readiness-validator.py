@@ -627,8 +627,8 @@ class LiveReadinessValidator:
             f.write(report)
         
         print("=" * 80)
-        print(f"✅ Validation complete")
-        print(f"📄 Report: {READINESS_REPORT}")
+        print(f"[OK] Validation complete")
+        print(f"[REPORT] Report: {READINESS_REPORT}")
         print("=" * 80)
     
     def generate_report(self, verdict: DeploymentVerdict, metrics: Dict, 
@@ -643,21 +643,21 @@ class LiveReadinessValidator:
         
         # Verdict
         if verdict == DeploymentVerdict.LIVE_READY:
-            lines.append(f"## 🟢 VERDICT: {verdict.value}")
+            lines.append(f"## [GREEN] VERDICT: {verdict.value}")
             lines.append("")
             lines.append("**System is READY for live capital deployment.**")
             lines.append("")
             lines.append("All critical criteria met:")
-            lines.append("- ✅ Minimum data requirements satisfied")
-            lines.append("- ✅ Performance exceeds thresholds")
-            lines.append("- ✅ Beats all baseline strategies")
-            lines.append("- ✅ Tested across multiple market regimes")
-            lines.append("- ✅ Operational robustness confirmed")
+            lines.append("- [OK] Minimum data requirements satisfied")
+            lines.append("- [OK] Performance exceeds thresholds")
+            lines.append("- [OK] Beats all baseline strategies")
+            lines.append("- [OK] Tested across multiple market regimes")
+            lines.append("- [OK] Operational robustness confirmed")
             lines.append("")
             lines.append("**Recommendation:** Proceed with Phase 3 micro-execution ($5 max per trade)")
         
         elif verdict == DeploymentVerdict.LIMITED_LIVE_READY:
-            lines.append(f"## 🟡 VERDICT: {verdict.value}")
+            lines.append(f"## [YELLOW] VERDICT: {verdict.value}")
             lines.append("")
             lines.append("**System passes critical checks but has warnings.**")
             lines.append("")
@@ -667,7 +667,7 @@ class LiveReadinessValidator:
             lines.append("- Address warnings before scaling")
         
         else:
-            lines.append(f"## 🔴 VERDICT: {verdict.value}")
+            lines.append(f"## [RED] VERDICT: {verdict.value}")
             lines.append("")
             lines.append("**System is NOT READY for live capital deployment.**")
             lines.append("")
@@ -705,7 +705,7 @@ class LiveReadinessValidator:
             lines.append("### Critical Checks")
             lines.append("")
             for r in critical_results:
-                icon = "✅" if r.passed else "❌"
+                icon = "[OK]" if r.passed else "[FAIL]"
                 lines.append(f"{icon} **{r.criterion}:** {r.value:.2f} (threshold: {r.threshold:.2f})")
             lines.append("")
         
@@ -713,7 +713,7 @@ class LiveReadinessValidator:
             lines.append("### Warning Checks")
             lines.append("")
             for r in warning_results:
-                icon = "✅" if r.passed else "⚠️"
+                icon = "[OK]" if r.passed else "[WARN]"
                 lines.append(f"{icon} **{r.criterion}:** {r.value:.2f} (threshold: {r.threshold:.2f})")
             lines.append("")
         
