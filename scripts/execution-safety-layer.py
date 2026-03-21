@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Execution Safety & Reliability Layer
-Pre-trade validation, circuit breakers, kill switches, and operational risk monitoring
-Sits between portfolio allocator and live execution
+Pre-trade validation, circuit breakers, kill switches, and operational risk
+monitoring. Critical checks can actively block trade entry proposals.
 """
 
 import json
@@ -333,7 +333,7 @@ class ExecutionSafetyLayer:
             )
     
     def check_spread(self, proposal: TradeProposal) -> ValidationResult:
-        """Check bid-ask spread"""
+        """Check bid-ask spread as an advisory sanity signal (not a blocking gate)."""
         try:
             # Get L2 book from Hyperliquid
             resp = requests.post(
@@ -369,9 +369,9 @@ class ExecutionSafetyLayer:
         
         except Exception as e:
             return ValidationResult(
-                passed=True,  # Don't block on spread check failure (degrade gracefully)
+                passed=True,
                 check_name="spread",
-                reason=f"Spread check failed (allowing): {e}",
+                reason=f"Spread check unavailable (advisory only): {e}",
                 severity="WARNING",
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 data={'error': str(e)}
@@ -472,7 +472,7 @@ class ExecutionSafetyLayer:
     # === VALIDATION ORCHESTRATION ===
     
     def validate_trade(self, proposal: TradeProposal) -> Tuple[bool, List[ValidationResult]]:
-        """Run all validation checks"""
+        """Run enforced pre-trade checks plus advisory sanity checks."""
         results = []
         
         # Critical checks (any failure = block)
@@ -495,8 +495,21 @@ class ExecutionSafetyLayer:
         failed_critical = [r for r in critical_checks if not r.passed]
         
         passed = len(failed_critical) == 0
-        
+
         return passed, results
+
+    def summarize_validation_results(self, results: List[ValidationResult]) -> Dict:
+        """Summarize enforced failures and advisory warnings for orchestrator logging."""
+        failed_critical = [r for r in results if r.severity == "CRITICAL" and not r.passed]
+        warnings = [r for r in results if r.severity == "WARNING" and not r.passed]
+        return {
+            'failed_critical_checks': [asdict(result) for result in failed_critical],
+            'warning_checks': [asdict(result) for result in warnings],
+            'reason': (
+                " | ".join(result.reason for result in failed_critical)
+                if failed_critical else "All enforced safety checks passed"
+            ),
+        }
     
     def determine_system_status(self) -> SystemStatus:
         """Determine overall system status"""
