@@ -17,7 +17,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from config.runtime import (
+    WORKSPACE_ROOT as WORKSPACE,
+    LOGS_DIR,
+    DATA_DIR,
+    TRADING_MODE,
+    mode_includes_hyperliquid,
+    mode_includes_polymarket,
+)
 STABILITY_LOG = LOGS_DIR / "stability-monitor.jsonl"
 STABILITY_STATE = LOGS_DIR / "stability-state.json"
 STABILITY_REPORT = WORKSPACE / "STABILITY_REPORT.md"
@@ -130,10 +137,11 @@ class StabilityMonitor:
         """Check API connectivity"""
         import requests
         
-        apis = {
-            'Hyperliquid': 'https://api.hyperliquid.xyz/info',
-            'Polymarket': 'https://gamma-api.polymarket.com/markets'
-        }
+        apis = {}
+        if mode_includes_hyperliquid(TRADING_MODE):
+            apis['Hyperliquid'] = 'https://api.hyperliquid.xyz/info'
+        if mode_includes_polymarket(TRADING_MODE):
+            apis['Polymarket'] = 'https://gamma-api.polymarket.com/markets'
         
         for name, url in apis.items():
             try:
@@ -170,8 +178,9 @@ class StabilityMonitor:
             'alpha-intelligence-state.json',
             'portfolio-allocation.json',
             'strategy-registry.json',
-            'polymarket-state.json'
         ]
+        if mode_includes_polymarket(TRADING_MODE):
+            state_files.append('polymarket-state.json')
         
         for file_name in state_files:
             file_path = LOGS_DIR / file_name
@@ -267,6 +276,7 @@ class StabilityMonitor:
 **Started:** {self.state['start_time']}
 **Elapsed:** {elapsed_hours:.1f} hours
 **Status:** {"[OK] STABLE" if self.state['errors'] < 5 else "[WARN] UNSTABLE" if self.state['errors'] < 10 else "[FAIL] CRITICAL"}
+**Trading Mode Scope:** {TRADING_MODE}
 
 ---
 
@@ -312,7 +322,7 @@ Every 15 minutes. Target: 96 checks over 24 hours.
 
 ---
 
-*Stability monitoring active. Check back for updates.*
+*Stability monitoring reflects the currently selected paper-trading mode. Polymarket checks are included only when the selected mode enables them.*
 """
         
         with open(STABILITY_REPORT, 'w') as f:

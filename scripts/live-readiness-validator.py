@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Live-Readiness Validation Framework
-Determines if trading system is genuinely eligible for real-capital deployment
-Produces deployment verdict: NOT_READY, LIMITED_LIVE_READY, or LIVE_READY
+Live-readiness validation research framework.
+This script models future deployment criteria for research purposes only.
+It does not imply that the repository currently supports live trading.
 """
 
 import json
@@ -77,7 +77,7 @@ class BaselineComparison:
 
 
 class LiveReadinessValidator:
-    """Validates system readiness for live capital deployment"""
+    """Research-only validator for hypothetical future live-capital criteria."""
     
     def __init__(self):
         self.state = self.load_state()
@@ -636,16 +636,17 @@ class LiveReadinessValidator:
         """Generate readiness report"""
         
         lines = []
-        lines.append("# LIVE-READINESS VALIDATION REPORT")
+        lines.append("# LIVE-READINESS VALIDATION RESEARCH REPORT")
         lines.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M EDT')}")
         lines.append(f"**Validation #:** {self.state['validation_count']}")
+        lines.append("**Truthfulness note:** this repository currently supports paper trading only.")
         lines.append("")
         
         # Verdict
         if verdict == DeploymentVerdict.LIVE_READY:
             lines.append(f"## [GREEN] VERDICT: {verdict.value}")
             lines.append("")
-            lines.append("**System is READY for live capital deployment.**")
+            lines.append("**Research model outcome: criteria for future live-capital consideration are satisfied.**")
             lines.append("")
             lines.append("All critical criteria met:")
             lines.append("- [OK] Minimum data requirements satisfied")
@@ -654,14 +655,14 @@ class LiveReadinessValidator:
             lines.append("- [OK] Tested across multiple market regimes")
             lines.append("- [OK] Operational robustness confirmed")
             lines.append("")
-            lines.append("**Recommendation:** Proceed with Phase 3 micro-execution ($5 max per trade)")
+            lines.append("**Recommendation:** research-only milestone reached; do not treat this as implemented live support")
         
         elif verdict == DeploymentVerdict.LIMITED_LIVE_READY:
             lines.append(f"## [YELLOW] VERDICT: {verdict.value}")
             lines.append("")
-            lines.append("**System passes critical checks but has warnings.**")
+            lines.append("**Research model outcome: critical criteria pass but warnings remain.**")
             lines.append("")
-            lines.append("**Recommendation:** Proceed with EXTREME CAUTION")
+            lines.append("**Recommendation:** remain in paper trading until warnings are resolved")
             lines.append("- Max $2 per trade (reduced from $5)")
             lines.append("- Daily review required")
             lines.append("- Address warnings before scaling")
@@ -669,9 +670,9 @@ class LiveReadinessValidator:
         else:
             lines.append(f"## [RED] VERDICT: {verdict.value}")
             lines.append("")
-            lines.append("**System is NOT READY for live capital deployment.**")
+            lines.append("**Research model outcome: criteria for future live-capital consideration are not met.**")
             lines.append("")
-            lines.append("**Critical failures detected. Do NOT proceed with live trading.**")
+            lines.append("**Critical failures detected. Remain in paper trading.**")
         
         lines.append("")
         lines.append("---")
