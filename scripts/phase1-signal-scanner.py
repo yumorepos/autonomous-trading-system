@@ -13,8 +13,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -26,7 +24,9 @@ from config.runtime import (
     mode_includes_hyperliquid,
     mode_includes_polymarket,
 )
+from utils.api_connectivity import fetch_hyperliquid_meta, fetch_polymarket_markets
 from utils.json_utils import safe_read_jsonl
+from utils.runtime_logging import append_runtime_event
 
 SIGNALS_FILE = LOGS_DIR / "phase1-signals.jsonl"
 REPORT_FILE = WORKSPACE / "PHASE1_SIGNAL_REPORT.md"
@@ -53,57 +53,69 @@ def scan_hyperliquid_funding() -> list[dict]:
     """Scan Hyperliquid for funding rate arbitrage signals."""
     print("[SCAN] Scanning Hyperliquid...")
 
-    try:
-        r = requests.post("https://api.hyperliquid.xyz/info", json={"type": "metaAndAssetCtxs"}, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        universe = data[0]['universe']
-        contexts = data[1]
-
-        opportunities = []
-        for asset, ctx in zip(universe, contexts):
-            name = asset['name']
-            funding = float(ctx.get('funding', 0))
-            mark = float(ctx.get('markPx', 0))
-            volume = float(ctx.get('dayNtlVlm', 0))
-            oi = float(ctx.get('openInterest', 0)) * mark
-
-            if volume <= 500000 or oi <= 200000 or mark <= 0:
-                continue
-
-            ann_funding = funding * 3 * 365 * 100
-            if abs(ann_funding) <= 10:
-                continue
-
-            ev_score = abs(ann_funding) * (volume / 1_000_000)
-            conviction = 'HIGH' if ev_score > 80 else 'MEDIUM' if ev_score > 40 else 'LOW'
-            opportunities.append({
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'source': 'Hyperliquid',
-                'exchange': 'Hyperliquid',
-                'signal_type': 'funding_arbitrage',
-                'strategy': 'funding_arbitrage',
-                'asset': name,
-                'symbol': name,
-                'direction': 'LONG' if funding < 0 else 'SHORT',
-                'entry_price': mark,
-                'funding_8h_pct': funding * 100,
-                'funding_annual_pct': ann_funding,
-                'volume_24h': volume,
-                'oi_usd': oi,
-                'ev_score': ev_score,
-                'conviction': conviction,
-                'recommended_position_size_usd': CANONICAL_POSITION_SIZES['Hyperliquid'],
-                'paper_only': True,
-                'experimental': False,
-            })
-
-        opportunities.sort(key=lambda x: x['ev_score'], reverse=True)
-        print(f"  Found {len(opportunities)} Hyperliquid opportunities")
-        return opportunities[:5]
-    except Exception as e:
-        print(f"  Hyperliquid scan error: {e}")
+    result, universe, contexts = fetch_hyperliquid_meta(timeout=10)
+    if not result.ok:
+        message = f"Hyperliquid scan error: {result.error}"
+        print(f"  {message}")
+        append_runtime_event(
+            stage="signal_scanner",
+            exchange="Hyperliquid",
+            lifecycle_stage="scan",
+            status="ERROR",
+            message=message,
+            metadata=result.to_dict(),
+        )
         return []
+
+    opportunities = []
+    for asset, ctx in zip(universe, contexts):
+        name = asset['name']
+        funding = float(ctx.get('funding', 0))
+        mark = float(ctx.get('markPx', 0))
+        volume = float(ctx.get('dayNtlVlm', 0))
+        oi = float(ctx.get('openInterest', 0)) * mark
+
+        if volume <= 500000 or oi <= 200000 or mark <= 0:
+            continue
+
+        ann_funding = funding * 3 * 365 * 100
+        if abs(ann_funding) <= 10:
+            continue
+
+        ev_score = abs(ann_funding) * (volume / 1_000_000)
+        conviction = 'HIGH' if ev_score > 80 else 'MEDIUM' if ev_score > 40 else 'LOW'
+        opportunities.append({
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'source': 'Hyperliquid',
+            'exchange': 'Hyperliquid',
+            'signal_type': 'funding_arbitrage',
+            'strategy': 'funding_arbitrage',
+            'asset': name,
+            'symbol': name,
+            'direction': 'LONG' if funding < 0 else 'SHORT',
+            'entry_price': mark,
+            'funding_8h_pct': funding * 100,
+            'funding_annual_pct': ann_funding,
+            'volume_24h': volume,
+            'oi_usd': oi,
+            'ev_score': ev_score,
+            'conviction': conviction,
+            'recommended_position_size_usd': CANONICAL_POSITION_SIZES['Hyperliquid'],
+            'paper_only': True,
+            'experimental': False,
+        })
+
+    opportunities.sort(key=lambda x: x['ev_score'], reverse=True)
+    print(f"  Found {len(opportunities)} Hyperliquid opportunities")
+    append_runtime_event(
+        stage="signal_scanner",
+        exchange="Hyperliquid",
+        lifecycle_stage="scan",
+        status="INFO",
+        message=f"Hyperliquid scan completed with {len(opportunities[:5])} paper-trading signal(s)",
+        metadata={**result.to_dict(), "signals_generated": len(opportunities[:5])},
+    )
+    return opportunities[:5]
 
 
 
@@ -119,91 +131,101 @@ def scan_polymarket_markets() -> list[dict]:
     """Scan Polymarket Gamma markets and emit executable paper-trading signals."""
     print("[SCAN] Scanning Polymarket...")
 
-    try:
-        r = requests.get(
-            "https://gamma-api.polymarket.com/markets",
-            params={'limit': 100, 'closed': 'false'},
-            timeout=10,
+    result, markets = fetch_polymarket_markets(timeout=10, limit=100, closed=False)
+    if not result.ok:
+        message = f"Polymarket scan error: {result.error}"
+        print(f"  {message}")
+        append_runtime_event(
+            stage="signal_scanner",
+            exchange="Polymarket",
+            lifecycle_stage="scan",
+            status="ERROR",
+            message=message,
+            metadata=result.to_dict(),
         )
-        r.raise_for_status()
-        markets = r.json()
+        return []
 
-        opportunities: list[dict] = []
-        for market in markets:
-            tokens = market.get('tokens') or []
-            if len(tokens) < 2:
+    opportunities: list[dict] = []
+    for market in markets:
+        tokens = market.get('tokens') or []
+        if len(tokens) < 2:
+            continue
+
+        liquidity = float(
+            market.get('liquidity')
+            or market.get('liquidityNum')
+            or market.get('volume')
+            or market.get('volumeNum')
+            or 0
+        )
+        if liquidity < 1000:
+            continue
+
+        token_signals = []
+        for token in tokens:
+            outcome = str(token.get('outcome') or '').upper()
+            if outcome not in {'YES', 'NO'}:
                 continue
-
-            liquidity = float(
-                market.get('liquidity')
-                or market.get('liquidityNum')
-                or market.get('volume')
-                or market.get('volumeNum')
-                or 0
-            )
-            if liquidity < 1000:
+            bid, ask, last = _token_book(token)
+            if ask <= 0 or bid < 0 or last <= 0:
                 continue
-
-            token_signals = []
-            for token in tokens:
-                outcome = str(token.get('outcome') or '').upper()
-                if outcome not in {'YES', 'NO'}:
-                    continue
-                bid, ask, last = _token_book(token)
-                if ask <= 0 or bid < 0 or last <= 0:
-                    continue
-                spread_pct = ((ask - bid) / ask) * 100 if ask else 0
-                edge_score = max(0.0, (0.55 - ask)) * 100 + min(spread_pct, 10)
-                token_signals.append({
-                    'outcome': outcome,
-                    'token_id': str(token.get('token_id') or token.get('tokenId') or token.get('id') or outcome),
-                    'best_bid': bid,
-                    'best_ask': ask,
-                    'last_price': last,
-                    'spread_pct': spread_pct,
-                    'edge_score': edge_score,
-                })
-
-            if not token_signals:
-                continue
-
-            best = max(token_signals, key=lambda token: token['edge_score'])
-            ev_score = best['edge_score'] + min(liquidity / 50_000, 10)
-            conviction = 'HIGH' if ev_score >= 12 else 'MEDIUM' if ev_score >= 6 else 'LOW'
-            market_id = str(market.get('conditionId') or market.get('condition_id') or market.get('id') or market.get('slug') or market.get('question'))
-            question = str(market.get('question') or market.get('title') or market.get('slug') or market_id)
-            opportunities.append({
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'source': 'Polymarket',
-                'exchange': 'Polymarket',
-                'signal_type': 'polymarket_binary_market',
-                'strategy': 'polymarket_spread',
-                'asset': market_id,
-                'symbol': market_id,
-                'market_id': market_id,
-                'market_question': question,
-                'side': best['outcome'],
-                'direction': best['outcome'],
-                'token_id': best['token_id'],
-                'entry_price': best['best_ask'],
-                'best_bid': best['best_bid'],
-                'best_ask': best['best_ask'],
-                'last_price': best['last_price'],
-                'spread_pct': best['spread_pct'],
-                'liquidity_usd': liquidity,
-                'ev_score': ev_score,
-                'conviction': conviction,
-                'recommended_position_size_usd': CANONICAL_POSITION_SIZES['Polymarket'],
-                'paper_only': True,
-                'experimental': True,
+            spread_pct = ((ask - bid) / ask) * 100 if ask else 0
+            edge_score = max(0.0, (0.55 - ask)) * 100 + min(spread_pct, 10)
+            token_signals.append({
+                'outcome': outcome,
+                'token_id': str(token.get('token_id') or token.get('tokenId') or token.get('id') or outcome),
+                'best_bid': bid,
+                'best_ask': ask,
+                'last_price': last,
+                'spread_pct': spread_pct,
+                'edge_score': edge_score,
             })
 
-        opportunities.sort(key=lambda x: x['ev_score'], reverse=True)
-        print(f"  Found {len(opportunities)} Polymarket opportunities")
-        return opportunities[:5]
-    except Exception as e:
-        print(f"  Polymarket scan error: {e}")
-        return []
+        if not token_signals:
+            continue
+
+        best = max(token_signals, key=lambda token: token['edge_score'])
+        ev_score = best['edge_score'] + min(liquidity / 50_000, 10)
+        conviction = 'HIGH' if ev_score >= 12 else 'MEDIUM' if ev_score >= 6 else 'LOW'
+        market_id = str(market.get('conditionId') or market.get('condition_id') or market.get('id') or market.get('slug') or market.get('question'))
+        question = str(market.get('question') or market.get('title') or market.get('slug') or market_id)
+        opportunities.append({
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'source': 'Polymarket',
+            'exchange': 'Polymarket',
+            'signal_type': 'polymarket_binary_market',
+            'strategy': 'polymarket_spread',
+            'asset': market_id,
+            'symbol': market_id,
+            'market_id': market_id,
+            'market_question': question,
+            'side': best['outcome'],
+            'direction': best['outcome'],
+            'token_id': best['token_id'],
+            'entry_price': best['best_ask'],
+            'best_bid': best['best_bid'],
+            'best_ask': best['best_ask'],
+            'last_price': best['last_price'],
+            'spread_pct': best['spread_pct'],
+            'liquidity_usd': liquidity,
+            'ev_score': ev_score,
+            'conviction': conviction,
+            'recommended_position_size_usd': CANONICAL_POSITION_SIZES['Polymarket'],
+            'paper_only': True,
+            'experimental': True,
+        })
+
+    opportunities.sort(key=lambda x: x['ev_score'], reverse=True)
+    print(f"  Found {len(opportunities)} Polymarket opportunities")
+    append_runtime_event(
+        stage="signal_scanner",
+        exchange="Polymarket",
+        lifecycle_stage="scan",
+        status="INFO",
+        message=f"Polymarket scan completed with {len(opportunities[:5])} paper-trading signal(s)",
+        metadata={**result.to_dict(), "signals_generated": len(opportunities[:5])},
+    )
+    return opportunities[:5]
 
 
 
@@ -240,6 +262,19 @@ def log_signals(signals: list[dict]) -> None:
     with open(SIGNALS_FILE, 'a') as f:
         for signal in signals:
             f.write(json.dumps(signal) + '\n')
+            append_runtime_event(
+                stage="signal_scanner",
+                exchange=signal.get('exchange', signal.get('source', 'unknown')),
+                lifecycle_stage="signal_generated",
+                status="INFO",
+                message="Paper-trading signal persisted",
+                metadata={
+                    'signal_type': signal.get('signal_type'),
+                    'symbol': signal.get('symbol'),
+                    'asset': signal.get('asset'),
+                    'ev_score': signal.get('ev_score'),
+                },
+            )
 
 
 
