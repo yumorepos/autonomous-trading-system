@@ -1,148 +1,105 @@
 # Autonomous Trading System
 
 Version: 4.0  
-Status: Research & Paper Trading  
-Deployed: March 2026
+Status: Research repository for paper-trading orchestration only
 
-A modular, research-focused trading system designed to explore signal generation, risk management, and automated decision pipelines in financial markets.
+This repository documents and runs a **paper-trading-only** research system. The current canonical path is the **Hyperliquid Phase 1 flow**. **Polymarket is present only as disabled or incomplete exploratory work and is not part of the active execution path.**
 
----
+## Current Truthful Status
 
-## Overview
+- **Execution mode:** Paper trading only.
+- **Canonical exchange path:** Hyperliquid only.
+- **Polymarket:** Disabled/incomplete in the canonical flow.
+- **Audience:** Portfolio/research review, not live deployment.
+- **Production claim:** Removed intentionally; this repo should be treated as an experimental operating record.
 
-This project simulates an end-to-end trading workflow, combining:
+## What the Active System Actually Does
 
-* Real-time market data ingestion
-* Signal generation and filtering
-* Risk-aware portfolio allocation
-* Paper trade execution
-* Continuous performance evaluation
+The active orchestrator runs a fixed Phase 1 loop:
 
-The system is designed for experimentation, learning, and validation, not live capital deployment.
+1. Data integrity gate validates source health.
+2. Hyperliquid scanner collects funding-arbitrage signals.
+3. Execution safety validates the next candidate entry.
+4. The paper trader creates or closes **paper** positions.
+5. Authoritative state is updated in `workspace/logs/`.
+6. Monitoring and reporting scripts read that persisted state.
 
----
+The repository contains additional experimental scripts and historical reports, but they are **not** the source of truth unless explicitly referenced by the current canonical flow.
 
-## Key Features
+## Canonical Entry Point
 
-### Data Processing
+Do **not** run `python main.py`; there is no active `main.py` orchestrator in this repository.
 
-* Real-time market data integration
-* Data validation and filtering
-* Signal deduplication and lifecycle handling
-
-### Signal & Strategy Layer
-
-* Multi-source signal aggregation
-* Adaptive weighting based on historical performance
-* Market condition awareness (e.g., trending vs ranging environments)
-
-### Risk Management
-
-* Position sizing controls
-* Portfolio exposure limits
-* Trade validation before execution
-
-### Execution (Paper Trading)
-
-* Simulated trade execution
-* Full trade logging and audit trail
-* Performance tracking across strategies
-
-### Evaluation & Monitoring
-
-* Strategy performance metrics (e.g., win rate, drawdown, consistency)
-* Continuous validation of system behavior
-* Structured reporting for review
-
----
-
-## System Architecture (High-Level)
-
-```
-Data Sources
-    ↓
-Signal Processing
-    ↓
-Strategy Evaluation
-    ↓
-Risk Management
-    ↓
-Paper Execution
-    ↓
-Performance Tracking
-```
-
----
-
-## Tech Stack
-
-* Language: Python
-* Data Sources: Crypto market APIs (e.g., price, funding, liquidity)
-* Execution: Paper trading environment
-* Scheduling: Automated periodic execution
-* Storage: Structured logs and reports
-
----
-
-## Project Structure
-
-* data/ — raw and processed market data
-* signals/ — signal generation and filtering
-* strategies/ — strategy logic and evaluation
-* execution/ — paper trading engine
-* risk/ — risk management logic
-* reports/ — performance and monitoring outputs
-
----
-
-## Usage
-
-Run the system locally:
+Use the actual Phase 1 orchestrator instead:
 
 ```bash
-python main.py
+python3 scripts/trading-agency-phase1.py
 ```
 
-Monitor outputs:
+Useful supporting commands:
 
 ```bash
-tail -f logs/trades.jsonl
+python3 scripts/exit-monitor.py
+python3 scripts/timeout-monitor.py
+python3 scripts/supervisor-governance.py
+python3 scripts/execution-safety-layer.py
 ```
 
----
+## Environment Setup
 
-## Current Status
+Create a virtual environment and install dependencies:
 
-* Running in paper trading mode
-* Collecting performance data
-* Evaluating strategy robustness across market conditions
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
----
+## Repository Layout
 
-## Roadmap
+```text
+config/      Runtime path configuration.
+docs/        Active documentation plus archived historical status reports.
+models/      Canonical trade and position-state schemas.
+scripts/     Operational scripts used by the paper-trading workflow.
+tests/       Destructive/manual validation scripts.
+utils/       JSON helpers and system health management.
+workspace/   Runtime state, operator controls, logs, and generated artifacts.
+```
 
-* Expand strategy diversity
-* Improve signal quality and filtering
-* Enhance performance analytics
-* Explore controlled live deployment (future)
+## `workspace/` Structure
 
----
+`workspace/` is the runtime area created and maintained by `config/runtime.py`. By default it is local to this repository, but it can be relocated with `OPENCLAW_WORKSPACE`.
+
+Typical contents:
+
+```text
+workspace/
+├── data/                  Generated datasets and intermediate files
+├── logs/                  JSON/JSONL state, reports, and audit outputs
+├── operator_control.json  Human override switches
+└── system_status.json     Latest computed health/recovery status
+```
+
+Notes:
+
+- `workspace/logs/position-state.json` is the authoritative open-position state file.
+- `workspace/logs/phase1-paper-trades.jsonl` is the append-only paper trade log.
+- Many reports are generated into `workspace/` during script execution.
+
+## Reproducibility Notes
+
+- Runtime directories are auto-created by `config/runtime.py`.
+- Network access is required for live market data reads from Hyperliquid.
+- Paper-trading behavior depends on current market conditions and the existing files in `workspace/logs/`.
+- Historical “FINAL” or “VERIFIED” artifacts that overstated capability were moved to `docs/archive/`.
+
+## Documentation Map
+
+- `docs/SYSTEM_ARCHITECTURE.md` — current operator-facing system summary.
+- `SYSTEM_STATUS.md` — current scoped status summary.
+- `docs/archive/` — historical documents retained for audit history but not authoritative status, including archived Polymarket integration claims.
 
 ## Disclaimer
 
-This project is for research and educational purposes only.  
-It does not constitute financial advice or a production trading system.  
-No real capital is deployed.
-
----
-
-## License
-
-MIT
-
----
-
-## Author
-
-Yumo  
-2026
+This repository is for research, auditing, and portfolio presentation. It does **not** constitute financial advice, and it should not be described as a production trading system.

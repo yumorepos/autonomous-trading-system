@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-Polymarket Execution Layer
-Handles both paper trading and real execution for Polymarket markets
-Architecture mirrors Hyperliquid executor for consistency
+Polymarket execution scaffold.
+
+This script is not part of the active Phase 1 orchestration path. It remains in the
+repository as exploratory work only; canonical execution is Hyperliquid paper trading,
+and real Polymarket execution is incomplete/disabled.
 """
 
 import json
@@ -28,7 +30,7 @@ CLOB_API = "https://clob.polymarket.com"
 
 # Execution settings
 EXECUTION_SETTINGS = {
-    'paper_trading': True,          # Paper trading by default
+    'paper_trading': True,          # Paper trading only; real path remains incomplete/disabled
     'max_position_size': 20.0,      # Max $20 per position
     'min_liquidity': 1000.0,        # Min $1K liquidity
     'max_slippage': 0.02,           # Max 2% slippage
