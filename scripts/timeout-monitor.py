@@ -55,7 +55,27 @@ class TimeoutMonitor:
                             json={'type': 'allMids'}, timeout=5)
             if r.status_code == 200:
                 prices = r.json()
-                return float(prices.get(asset, 0))
+                price = float(prices.get(asset, 0))
+                if price > 0:
+                    self.health_manager.resolve_incident(
+                        incident_type='timeout_monitor_missing_price',
+                        source='timeout-monitor',
+                        affected_trade=asset,
+                        resolution_reason='Price became available again for timeout monitoring',
+                    )
+                    self.health_manager.resolve_incident(
+                        incident_type='timeout_monitor_api_instability',
+                        source='timeout-monitor',
+                        affected_trade=asset,
+                        resolution_reason='Timeout monitor API recovered and price lookups succeeded',
+                    )
+                    self.health_manager.resolve_incident(
+                        incident_type='timeout_monitor_failure',
+                        source='timeout-monitor',
+                        affected_trade=asset,
+                        resolution_reason='Timeout monitor recovered after successful price lookup',
+                    )
+                return price
             self.health_manager.record_incident(
                 incident_type='timeout_monitor_api_instability',
                 severity='MEDIUM',
