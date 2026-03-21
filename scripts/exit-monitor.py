@@ -20,6 +20,7 @@ from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
 from models.position_state import get_open_positions
 from models.trade_schema import validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl
+from utils.system_health import SystemHealthManager
 PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 EXIT_PROOF_LOG = LOGS_DIR / "exit-proof.jsonl"
 EXIT_MONITOR_LOG = LOGS_DIR / "exit-monitor.log"
@@ -35,6 +36,7 @@ class ExitMonitor:
     """Monitor open positions for real exits - production-hardened"""
     
     def __init__(self):
+        self.health_manager = SystemHealthManager()
         self.open_positions = self.load_open_positions()
         self.monitoring_checkpoints = []
         
@@ -58,6 +60,15 @@ class ExitMonitor:
                 positions.append(position)
         except Exception as e:
             self.log(f"Failed to load positions: {e}", "ERROR")
+            self.health_manager.record_incident(
+                incident_type='exit_monitor_failure',
+                severity='HIGH',
+                source='exit-monitor',
+                message=f"Failed to load open positions: {e}",
+                affected_system='position-monitoring',
+                affected_components=['exit_monitor', 'position_state'],
+                metadata={'error': str(e)},
+            )
             return []
 
         self.log(f"Loaded {len(positions)} open positions")
@@ -71,12 +82,31 @@ class ExitMonitor:
             
             if r.status_code != 200:
                 self.log(f"API returned status {r.status_code}", "ERROR")
+                self.health_manager.record_incident(
+                    incident_type='exit_monitor_api_instability',
+                    severity='MEDIUM',
+                    source='exit-monitor',
+                    message=f"Price lookup failed for {asset}: HTTP {r.status_code}",
+                    affected_system='position-monitoring',
+                    affected_components=['exit_monitor', 'hyperliquid_api'],
+                    metadata={'asset': asset, 'status_code': r.status_code},
+                )
                 return None
             
             mids = r.json()
             
             if asset not in mids:
                 self.log(f"Asset {asset} not in API response", "ERROR")
+                self.health_manager.record_incident(
+                    incident_type='exit_monitor_state_mismatch',
+                    severity='HIGH',
+                    source='exit-monitor',
+                    message=f"Asset {asset} missing from Hyperliquid mids response",
+                    affected_trade=asset,
+                    affected_system='position-monitoring',
+                    affected_components=['exit_monitor', 'hyperliquid_api'],
+                    metadata={'asset': asset},
+                )
                 return None
             
             price = float(mids[asset])
@@ -84,9 +114,29 @@ class ExitMonitor:
             
         except requests.Timeout:
             self.log(f"API timeout for {asset}", "ERROR")
+            self.health_manager.record_incident(
+                incident_type='exit_monitor_api_instability',
+                severity='MEDIUM',
+                source='exit-monitor',
+                message=f"Price lookup timeout for {asset}",
+                affected_trade=asset,
+                affected_system='position-monitoring',
+                affected_components=['exit_monitor', 'hyperliquid_api'],
+                metadata={'asset': asset},
+            )
             return None
         except Exception as e:
             self.log(f"Failed to get price for {asset}: {e}", "ERROR")
+            self.health_manager.record_incident(
+                incident_type='exit_monitor_failure',
+                severity='HIGH',
+                source='exit-monitor',
+                message=f"Price lookup failed for {asset}: {e}",
+                affected_trade=asset,
+                affected_system='position-monitoring',
+                affected_components=['exit_monitor', 'hyperliquid_api'],
+                metadata={'asset': asset, 'error': str(e)},
+            )
             return None
     
     def calculate_pnl(self, entry_price: float, current_price: float, position_size: float, direction: str) -> Tuple[float, float]:

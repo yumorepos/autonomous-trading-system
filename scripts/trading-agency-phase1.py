@@ -22,6 +22,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
 from models.position_state import get_open_positions
+from utils.system_health import SystemHealthManager
 from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
 AGENCY_REPORT = LOGS_DIR / "agency-phase1-report.json"
 
@@ -165,12 +166,16 @@ def run_safety_validation() -> StageResult:
     )
 
 
-def run_trader(safety_stage: StageResult) -> StageResult:
+def run_trader(safety_stage: StageResult, trading_response: dict) -> StageResult:
     """Build the trader execution plan without updating authoritative state yet."""
     trader_module = load_script_module("phase1-paper-trader.py", "phase1_paper_trader")
     try:
         candidate_signal = (safety_stage.data or {}).get('candidate_signal')
-        allow_new_entries = safety_stage.status == StageStatus.SUCCESS.value and candidate_signal is not None
+        allow_new_entries = (
+            safety_stage.status == StageStatus.SUCCESS.value
+            and candidate_signal is not None
+            and trading_response.get('allow_new_trades', True)
+        )
         allowed_signal_timestamp = candidate_signal.get('timestamp') if allow_new_entries else None
         plan = trader_module.build_execution_plan(
             allowed_signal_timestamp=allowed_signal_timestamp,
@@ -181,13 +186,38 @@ def run_trader(safety_stage: StageResult) -> StageResult:
 
     planned_trades = plan.get('planned_trades', [])
     if not planned_trades:
-        return stage_result("trader", StageStatus.SKIPPED, plan.get('entry_reason', 'No trade records generated'), plan)
+        reason = plan.get('entry_reason', 'No trade records generated')
+        if not trading_response.get('allow_new_trades', True):
+            reason = f"{reason}; CRITICAL health halt active: {trading_response.get('reason')}"
+        return stage_result("trader", StageStatus.SKIPPED, reason, plan)
+
+    if not trading_response.get('allow_new_trades', True):
+        planned_entry = plan.get('planned_entry')
+        planned_closes = plan.get('planned_closes', [])
+        return stage_result(
+            "trader",
+            StageStatus.SUCCESS,
+            (
+                f"CRITICAL health halt active: new entries blocked, "
+                f"prepared {len(planned_closes)} exit record(s)"
+                if planned_closes
+                else f"CRITICAL health halt active: {trading_response.get('reason')}"
+            ),
+            {
+                **plan,
+                'planned_trades': planned_closes,
+                'planned_entry': None,
+                'entry_reason': trading_response.get('reason'),
+                'health_action': trading_response,
+                'blocked_entry': planned_entry,
+            },
+        )
 
     return stage_result(
         "trader",
         StageStatus.SUCCESS,
         f"Prepared {len(planned_trades)} trade record(s) for authoritative state update",
-        plan,
+        {**plan, 'health_action': trading_response},
     )
 
 
@@ -232,6 +262,9 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
     performance = load_performance_data()
     open_positions = load_open_positions()
     latest_signals = load_latest_signals()
+    health_manager = SystemHealthManager()
+    health_state = health_manager.refresh_state()
+    trading_response = health_manager.trading_response()
     
     # Sort signals by EV
     latest_signals.sort(key=lambda x: x.get('ev_score', 0), reverse=True)
@@ -249,7 +282,9 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
         'current_state': {
             'open_positions': len(open_positions),
             'latest_signals_count': len(latest_signals),
-            'top_signal_ev': latest_signals[0]['ev_score'] if latest_signals else 0
+            'top_signal_ev': latest_signals[0]['ev_score'] if latest_signals else 0,
+            'system_health': health_state,
+            'action_taken': trading_response,
         },
         
         'performance_summary': performance or {
@@ -306,42 +341,66 @@ def main():
     print()
 
     optional_components = detect_optional_components()
+    health_manager = SystemHealthManager()
     print("Optional components:")
     for component_name, component_state in optional_components.items():
         print(f"  - {component_name}: {component_state['status']} ({component_state['reason']})")
     print()
 
     stage_results: list[StageResult] = []
+    opening_health = health_manager.trading_response()
+    print(
+        f"System health: {opening_health['overall_status']} | "
+        f"Action: {opening_health['action']} | "
+        f"Reason: {opening_health['reason']}"
+    )
+    print()
 
     data_stage = run_data_integrity_gate(optional_components)
     stage_results.append(data_stage)
 
     if data_stage.status == StageStatus.FAIL.value:
-        stage_results.extend([
-            stage_result("signal_scanner", StageStatus.SKIPPED, "Blocked by data integrity failure"),
-            stage_result("safety_validation", StageStatus.SKIPPED, "Scanner did not run"),
-            stage_result("trader", StageStatus.SKIPPED, "Trading blocked by upstream failure"),
-            stage_result("authoritative_state_update", StageStatus.SKIPPED, "Trader did not run"),
-        ])
+        scanner_stage = stage_result("signal_scanner", StageStatus.SKIPPED, "Blocked by data integrity failure")
+        safety_stage = stage_result("safety_validation", StageStatus.SKIPPED, "Scanner did not run; entries blocked")
+        stage_results.extend([scanner_stage, safety_stage])
+        trader_stage = run_trader(safety_stage, health_manager.trading_response())
+        stage_results.append(trader_stage)
+        state_stage = run_state_update(trader_stage)
+        stage_results.append(state_stage)
     else:
         scanner_stage = run_signal_scanner()
         stage_results.append(scanner_stage)
 
         if scanner_stage.status == StageStatus.FAIL.value:
-            stage_results.extend([
-                stage_result("safety_validation", StageStatus.SKIPPED, "Signal scanner failed"),
-                stage_result("trader", StageStatus.SKIPPED, "Signal scanner failed"),
-                stage_result("authoritative_state_update", StageStatus.SKIPPED, "Trader did not run"),
-            ])
+            safety_stage = stage_result("safety_validation", StageStatus.SKIPPED, "Signal scanner failed; entries blocked")
+            stage_results.append(safety_stage)
+            trader_stage = run_trader(safety_stage, health_manager.trading_response())
+            stage_results.append(trader_stage)
+            state_stage = run_state_update(trader_stage)
+            stage_results.append(state_stage)
         else:
             safety_stage = run_safety_validation()
             stage_results.append(safety_stage)
-            trader_stage = run_trader(safety_stage)
+            current_response = health_manager.trading_response()
+            trader_stage = run_trader(safety_stage, current_response)
             stage_results.append(trader_stage)
             state_stage = run_state_update(trader_stage)
             stage_results.append(state_stage)
 
-    monitors_stage = stage_result("monitors", StageStatus.SUCCESS, "Supervisor report refreshed")
+    final_response = health_manager.trading_response()
+    monitors_stage = stage_result(
+        "monitors",
+        StageStatus.SUCCESS,
+        (
+            f"Health {final_response['overall_status']} | "
+            f"active_incidents={len(health_manager.refresh_state().get('active_incidents', []))} | "
+            f"action={final_response['action']}"
+        ),
+        {
+            'system_health': health_manager.refresh_state(),
+            'action_taken': final_response,
+        },
+    )
     stage_results.append(monitors_stage)
     
     print()
@@ -358,6 +417,11 @@ def main():
     for result in stage_results:
         print(f"   - {result.stage}: {result.status} ({result.reason})")
     print(f"📈 State: {report['current_state']['open_positions']} open positions, {report['current_state']['latest_signals_count']} signals")
+    print(
+        f"🩺 Health: {report['current_state']['system_health']['overall_status']} | "
+        f"Incidents: {len(report['current_state']['system_health']['active_incidents'])} | "
+        f"Action: {report['current_state']['action_taken']['action']}"
+    )
     
     if report['performance_summary'].get('total_trades', 0) > 0:
         perf = report['performance_summary']

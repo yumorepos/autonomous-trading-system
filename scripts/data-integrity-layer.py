@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from utils.system_health import SystemHealthManager
 DATA_STATE = LOGS_DIR / "data-integrity-state.json"
 REJECTED_SIGNALS = LOGS_DIR / "rejected-signals.jsonl"
 SOURCE_METRICS = LOGS_DIR / "source-reliability-metrics.json"
@@ -84,6 +85,7 @@ class DataIntegrityLayer:
     def __init__(self):
         self.state = self.load_state()
         self.metrics = self.load_metrics()
+        self.health_manager = SystemHealthManager()
     
     def load_state(self) -> Dict:
         """Load current data state"""
@@ -632,12 +634,34 @@ class DataIntegrityLayer:
             ))
 
         failed_critical = [check for check in checks if check.severity == 'CRITICAL' and not check.passed]
+        warning_failures = [check for check in checks if check.severity == 'WARNING' and not check.passed]
         for check in failed_critical:
             reasons.append(f"{check.check_name}: {check.reason}")
 
         self.state['health'] = self.determine_system_health().value
         self.save_state()
         self.save_metrics()
+
+        if failed_critical:
+            self.health_manager.record_incident(
+                incident_type='data_integrity_failure',
+                severity='CRITICAL',
+                source='data-integrity',
+                message=" | ".join(reasons),
+                affected_system='signal-ingestion',
+                affected_components=['data_integrity', 'signal_scanner'],
+                metadata={'checks': [asdict(check) for check in failed_critical]},
+            )
+        elif warning_failures:
+            self.health_manager.record_incident(
+                incident_type='data_integrity_warning',
+                severity='LOW',
+                source='data-integrity',
+                message=" | ".join(check.reason for check in warning_failures),
+                affected_system='signal-ingestion',
+                affected_components=['data_integrity'],
+                metadata={'checks': [asdict(check) for check in warning_failures]},
+            )
 
         return {
             'passed': len(failed_critical) == 0,

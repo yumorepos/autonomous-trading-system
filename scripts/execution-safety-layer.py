@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from utils.system_health import SystemHealthManager
 SAFETY_STATE = LOGS_DIR / "execution-safety-state.json"
 BLOCKED_ACTIONS = LOGS_DIR / "blocked-actions.jsonl"
 INCIDENT_LOG = LOGS_DIR / "incident-log.jsonl"
@@ -89,6 +90,7 @@ class ExecutionSafetyLayer:
         self.state = self.load_state()
         self.recent_trades = self.load_recent_trades()
         self.incident_history = self.load_incidents()
+        self.health_manager = SystemHealthManager()
     
     def load_state(self) -> Dict:
         """Load current safety state"""
@@ -495,6 +497,39 @@ class ExecutionSafetyLayer:
         failed_critical = [r for r in critical_checks if not r.passed]
         
         passed = len(failed_critical) == 0
+
+        warnings = [r for r in results if r.severity == "WARNING" and not r.passed]
+        if failed_critical:
+            severity = "HIGH"
+            if any(r.check_name in {"kill_switch", "circuit_breakers"} for r in failed_critical):
+                severity = "CRITICAL"
+            self.health_manager.record_incident(
+                incident_type="safety_failure",
+                severity=severity,
+                source="execution-safety",
+                message=" | ".join(result.reason for result in failed_critical),
+                affected_system="trade-entry",
+                affected_components=["execution_safety", "trade_entry"],
+                metadata={
+                    "asset": proposal.asset,
+                    "strategy": proposal.strategy,
+                    "checks": [asdict(result) for result in failed_critical],
+                },
+            )
+        elif warnings:
+            self.health_manager.record_incident(
+                incident_type="safety_warning",
+                severity="LOW",
+                source="execution-safety",
+                message=" | ".join(result.reason for result in warnings),
+                affected_system="trade-entry",
+                affected_components=["execution_safety"],
+                metadata={
+                    "asset": proposal.asset,
+                    "strategy": proposal.strategy,
+                    "checks": [asdict(result) for result in warnings],
+                },
+            )
 
         return passed, results
 
