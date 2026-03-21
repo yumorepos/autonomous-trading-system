@@ -151,11 +151,11 @@ def generate_agency_report(scanner_result, social_result, trader_result):
     if performance:
         # Check if any strategy is ready for promotion
         for strat in performance.get('strategy_rankings', []):
-            if strat['trades'] >= 30 and strat['win_rate'] >= 60 and strat['total_pnl'] > 0:
+            if strat['trades'] >= 30 and strat['win_rate'] >= 60 and strat['total_pnl_usd'] > 0:
                 report['supervisor_action_required'].append({
                     'type': 'strategy_promotion',
                     'strategy': strat['strategy'],
-                    'reason': f"Validated: {strat['trades']} trades, {strat['win_rate']}% WR, ${strat['total_pnl']} PnL",
+                    'reason': f"Validated: {strat['trades']} trades, {strat['win_rate']}% WR, ${strat['total_pnl_usd']} PnL",
                     'recommendation': 'Promote to Phase 3 shortlist'
                 })
         
@@ -213,7 +213,7 @@ def main():
     
     if report['performance_summary'].get('total_trades', 0) > 0:
         perf = report['performance_summary']
-        print(f"💰 Performance: {perf['total_trades']} trades, {perf['win_rate']}% WR, ${perf['total_pnl']:+.2f} PnL")
+        print(f"💰 Performance: {perf['total_trades']} trades, {perf['win_rate']}% WR, ${perf['total_pnl_usd']:+.2f} PnL")
     else:
         print(f"⏳ Performance: No closed trades yet")
     
