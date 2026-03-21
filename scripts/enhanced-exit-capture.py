@@ -5,14 +5,19 @@ Complete 5-step lifecycle proof for first real exit
 """
 
 import json
+import sys
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-PAPER_TRADES = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
-ENHANCED_EXIT_PROOF = WORKSPACE / "logs" / "enhanced-exit-proof.jsonl"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
+ENHANCED_EXIT_PROOF = LOGS_DIR / "enhanced-exit-proof.jsonl"
 
 class EnhancedExitCapture:
     """Enhanced lifecycle capture with 5-step verification"""

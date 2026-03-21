@@ -14,10 +14,14 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-PAPER_TRADES = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
-SAFEGUARD_LOG = WORKSPACE / "logs" / "exit-safeguards.jsonl"
-SAFEGUARD_DECISIONS = WORKSPACE / "logs" / "safeguard-decisions.log"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
+SAFEGUARD_LOG = LOGS_DIR / "exit-safeguards.jsonl"
+SAFEGUARD_DECISIONS = LOGS_DIR / "safeguard-decisions.log"
 
 # Safeguard settings
 MAX_HOLD_HOURS = 48  # Force close after 48 hours

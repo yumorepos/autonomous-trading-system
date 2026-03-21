@@ -6,6 +6,7 @@ Sits between data sources and signal scanner
 """
 
 import json
+import sys
 import requests
 import time
 from datetime import datetime, timezone, timedelta
@@ -14,10 +15,14 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-DATA_STATE = WORKSPACE / "logs" / "data-integrity-state.json"
-REJECTED_SIGNALS = WORKSPACE / "logs" / "rejected-signals.jsonl"
-SOURCE_METRICS = WORKSPACE / "logs" / "source-reliability-metrics.json"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+DATA_STATE = LOGS_DIR / "data-integrity-state.json"
+REJECTED_SIGNALS = LOGS_DIR / "rejected-signals.jsonl"
+SOURCE_METRICS = LOGS_DIR / "source-reliability-metrics.json"
 DATA_HEALTH_REPORT = WORKSPACE / "DATA_HEALTH_REPORT.md"
 
 # Data Quality Thresholds

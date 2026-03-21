@@ -5,14 +5,20 @@ Track positions converging toward timeout with same rigor as SL/TP exits
 """
 
 import json
+import sys
 import requests
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-PAPER_TRADES = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
-TIMEOUT_HISTORY = WORKSPACE / "logs" / "timeout-history.jsonl"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from utils.json_utils import safe_read_json, safe_read_jsonl
+PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
+TIMEOUT_HISTORY = LOGS_DIR / "timeout-history.jsonl"
 TIMEOUT_REPORT = WORKSPACE / "TIMEOUT_MONITOR_REPORT.md"
 
 # Thresholds
@@ -29,16 +35,12 @@ class TimeoutMonitor:
     def load_history(self) -> Dict:
         """Load historical tracking data"""
         history = {}
-        
-        if TIMEOUT_HISTORY.exists():
-            with open(TIMEOUT_HISTORY) as f:
-                for line in f:
-                    if line.strip():
-                        data = json.loads(line)
-                        key = (data['asset'], data['entry_time'])
-                        if key not in history:
-                            history[key] = []
-                        history[key].append(data)
+
+        for data in safe_read_jsonl(TIMEOUT_HISTORY):
+            key = (data['asset'], data['entry_time'])
+            if key not in history:
+                history[key] = []
+            history[key].append(data)
         
         return history
     
@@ -58,24 +60,15 @@ class TimeoutMonitor:
         """Load open positions from authoritative state"""
         positions = []
         
-        if not PAPER_TRADES.exists():
-            return []
-        
         # Load state file
-        state = {}
-        if (WORKSPACE / "logs" / "position-state.json").exists():
-            with open(WORKSPACE / "logs" / "position-state.json") as f:
-                state = json.load(f)
+        state = safe_read_json(LOGS_DIR / "position-state.json") or {}
         
         # Load trades - get latest version of each position
         all_trades = {}
-        with open(PAPER_TRADES) as f:
-            for line in f:
-                if line.strip():
-                    trade = json.loads(line)
-                    pid = trade.get('position_id')
-                    if pid:
-                        all_trades[pid] = trade
+        for trade in safe_read_jsonl(PAPER_TRADES):
+            pid = trade.get('position_id')
+            if pid:
+                all_trades[pid] = trade
         
         # Filter to OPEN only via state file
         for pid, trade in all_trades.items():
@@ -212,22 +205,6 @@ class TimeoutMonitor:
                 'hours_to_timeout': time_remaining
             }
         }
-    
-    def load_history(self) -> Dict:
-        """Load historical tracking data"""
-        history = {}
-        
-        if TIMEOUT_HISTORY.exists():
-            with open(TIMEOUT_HISTORY) as f:
-                for line in f:
-                    if line.strip():
-                        data = json.loads(line)
-                        key = (data['asset'], data['entry_time'])
-                        if key not in history:
-                            history[key] = []
-                        history[key].append(data)
-        
-        return history
     
     def monitor_position(self, position: Dict) -> Dict:
         """Monitor single position with timeout focus"""

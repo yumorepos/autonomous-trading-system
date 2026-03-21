@@ -5,15 +5,20 @@ Simulates trades based on signals, tracks performance, ranks strategies
 """
 
 import json
+import sys
 import os
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-PAPER_TRADES_FILE = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
-PERFORMANCE_FILE = WORKSPACE / "logs" / "phase1-performance.json"
-SIGNALS_FILE = WORKSPACE / "logs" / "phase1-signals.jsonl"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+PAPER_TRADES_FILE = LOGS_DIR / "phase1-paper-trades.jsonl"
+PERFORMANCE_FILE = LOGS_DIR / "phase1-performance.json"
+SIGNALS_FILE = LOGS_DIR / "phase1-signals.jsonl"
 
 PAPER_BALANCE = 97.80  # Starting paper balance
 MAX_OPEN_POSITIONS = 3  # HARD CAP - block all new entries if at limit (force exit proof)

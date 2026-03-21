@@ -6,15 +6,21 @@ Captures complete lifecycle proof for every real close
 """
 
 import json
+import sys
 import requests
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-PAPER_TRADES = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
-EXIT_PROOF_LOG = WORKSPACE / "logs" / "exit-proof.jsonl"
-EXIT_MONITOR_LOG = WORKSPACE / "logs" / "exit-monitor.log"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from utils.json_utils import safe_read_json, safe_read_jsonl
+PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
+EXIT_PROOF_LOG = LOGS_DIR / "exit-proof.jsonl"
+EXIT_MONITOR_LOG = LOGS_DIR / "exit-monitor.log"
 EXIT_MONITOR_REPORT = WORKSPACE / "EXIT_MONITOR_REPORT.md"
 
 # Exit conditions
@@ -47,32 +53,15 @@ class ExitMonitor:
             return []
         
         # Load authoritative state
-        state = {}
-        state_file = WORKSPACE / "logs" / "position-state.json"
-        if state_file.exists():
-            with open(state_file) as f:
-                state = json.load(f)
+        state = safe_read_json(LOGS_DIR / "position-state.json") or {}
         
         # Load all positions (latest version)
         all_positions = {}
-        line_num = 0
-        
         try:
-            with open(PAPER_TRADES) as f:
-                for line in f:
-                    line_num += 1
-                    if not line.strip():
-                        continue
-                    
-                    try:
-                        trade = json.loads(line)
-                    except json.JSONDecodeError as e:
-                        self.log(f"Failed to parse line {line_num}: {e}", "ERROR")
-                        continue
-                    
-                    pid = trade.get('position_id')
-                    if pid:
-                        all_positions[pid] = trade
+            for trade in safe_read_jsonl(PAPER_TRADES):
+                pid = trade.get('position_id')
+                if pid:
+                    all_positions[pid] = trade
             
             # Filter to OPEN only via state file
             positions = []

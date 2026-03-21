@@ -5,14 +5,19 @@ Simulates 10 complete trades: entry → tracking → exit → PnL → logging
 """
 
 import json
+import sys
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List
 import random
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-TEST_TRADES = WORKSPACE / "logs" / "test-lifecycle-trades.jsonl"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+TEST_TRADES = LOGS_DIR / "test-lifecycle-trades.jsonl"
 TEST_REPORT = WORKSPACE / "LIFECYCLE_TEST_REPORT.md"
 
 class LifecycleTester:
