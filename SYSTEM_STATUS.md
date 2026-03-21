@@ -1,66 +1,102 @@
 # System Status
 
 **Last Updated:** 2026-03-21 UTC  
-**Verdict:** Canonical paper-trading architecture supports Hyperliquid by default plus optional experimental Polymarket paper mode
+**Verdict:** Portfolio-ready **paper-trading research system** with CI-backed verification and truthful scope limits
 
 ---
 
-## Canonical Active Architecture
+## At-a-Glance Status
 
-The active architecture in this repository is the orchestrated Phase 1 paper-trading path:
-
-1. `scripts/bootstrap-runtime-check.py`
-2. `scripts/trading-agency-phase1.py`
-3. `scripts/data-integrity-layer.py`
-4. `scripts/phase1-signal-scanner.py`
-5. `scripts/execution-safety-layer.py`
-6. `scripts/phase1-paper-trader.py`
-7. `scripts/timeout-monitor.py`
-
-This architecture is authoritative for paper trading only.
+| Area | Current status |
+|---|---|
+| Core capability | Multi-exchange paper-trading orchestration |
+| Canonical default | `hyperliquid_only` |
+| Optional modes | `polymarket_only`, `mixed` |
+| Live trading | **Not implemented** |
+| Real-money execution | **Not supported** |
+| CI | Safe verification runs on every push and pull request |
+| Portfolio truthfulness | Explicitly separates proven behavior from future work |
 
 ---
 
-## Runtime Modes
+## Current Capabilities
 
-- `hyperliquid_only` — **default canonical mode**
-- `polymarket_only` — optional experimental paper mode
-- `mixed` — optional paper-evaluation mode for both exchanges
+- canonical Phase 1 paper-trading orchestration
+- mode-aware scanning and data-integrity validation
+- normalized paper-trade persistence across both supported exchange paths
+- authoritative open-position state in one canonical file
+- monitoring and support reporting for paper-trading operations
+- isolated regression and lifecycle verification tests
 
-The orchestrator, scanner, and data-integrity scope are controlled by the selected runtime mode.
+## Current Limitations
 
----
-
-## Scope Limits
-
-- **Execution mode:** paper trading only
-- **Default exchange:** Hyperliquid
-- **Optional exchange:** Polymarket
-- **Live deployment claim:** not supported
-- **Real exchange execution:** not implemented
-
----
-
-## Explicitly Non-Canonical or Limited
-
-- **`scripts/exit-monitor.py`:** standalone proof/audit script only; not authoritative close-state persistence
-- **`scripts/polymarket-executor.py`:** non-canonical helper/scaffold; not the authoritative Polymarket execution path
-- **`docs/archive/`:** historical only
-- **Supporting analytics/readiness scripts:** useful for review, but not proof of live readiness
+- live trading is not implemented
+- no production deployment claim is justified
+- external API reachability is environment-dependent and not guaranteed by CI
+- Polymarket support remains optional and experimental
+- some retained support scripts model hypothetical future workflows and are **not** canonical execution
 
 ---
 
-## What Reviewers Should Trust
+## Canonical vs Non-Canonical
 
-Use these files for current repository truth:
+### Canonical
+
+- `scripts/bootstrap-runtime-check.py`
+- `scripts/trading-agency-phase1.py`
+- `scripts/data-integrity-layer.py`
+- `scripts/phase1-signal-scanner.py`
+- `scripts/execution-safety-layer.py`
+- `scripts/phase1-paper-trader.py`
+- `scripts/timeout-monitor.py`
+- `workspace/logs/phase1-paper-trades.jsonl`
+- `workspace/logs/position-state.json`
+
+### Non-Canonical / Support Only
+
+- `scripts/polymarket-executor.py` — helper/scaffold only
+- `scripts/exit-monitor.py` — proof/audit only
+- `scripts/live-readiness-validator.py` — future-scope research model only
+- `scripts/exit-safeguards.py` — support utility; not part of the canonical loop
+- `docs/archive/` and `scripts/archive/` — historical context only
+
+---
+
+## What CI Proves
+
+The required CI workflow verifies:
+
+- bootstrap/runtime dependency checking
+- Python compile/syntax validation
+- script-style regression tests
+- isolated lifecycle integrity for canonical paper-trading flows
+
+CI intentionally avoids making flaky network access a merge blocker.
+
+## What Remains Unverified in CI
+
+- current external API reachability from the runner
+- long-duration forward performance characteristics
+- any live execution behavior, because none is implemented
+
+---
+
+## Future Work
+
+Future work, if pursued, should remain clearly separated from the current portfolio-ready claim:
+
+- accumulate more paper-trading runtime evidence for Polymarket
+- continue improving operator reporting and paper-trading analytics
+- expand research proof without changing the paper-only scope
+
+---
+
+## Reviewer Guidance
+
+Start here for the current truth:
 
 - `README.md`
-- `SYSTEM_STATUS.md`
+- `docs/OPERATOR_QUICKSTART.md`
 - `docs/SYSTEM_ARCHITECTURE.md`
 - `docs/REPO_TRUTHFULNESS_AUDIT.md`
-
----
-
-## Summary
-
-The repository now supports **truthful end-to-end paper trading** for Hyperliquid and optional Polymarket through one canonical architecture. Hyperliquid remains the default and best-supported path. Polymarket is integrated for paper trading but should still be described as optional and experimental until broader runtime evidence exists.
+- `SYSTEM_STATUS.md`

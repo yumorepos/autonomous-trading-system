@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Hard Exit Safeguards - Production Hardened
+Hard Exit Safeguards - Paper-Trading Support Utility
 - Force close after max hold time
 - API failure handling (real, not placeholder)
 - Manual close-all with safety checks
@@ -31,7 +31,7 @@ API_TIMEOUT_SECONDS = 10
 MAX_CONSECUTIVE_API_FAILURES = 3
 
 class ExitSafeguards:
-    """Production-hardened exit safeguards"""
+    """Paper-trading support utility for exit safeguard review."""
     
     def __init__(self):
         self.api_failure_count = 0
@@ -71,7 +71,7 @@ class ExitSafeguards:
             return []
     
     def check_api_health(self) -> bool:
-        """Check if Hyperliquid API is accessible - REAL check"""
+        """Check if Hyperliquid API is reachable for paper-trading monitoring"""
         try:
             r = requests.post(
                 "https://api.hyperliquid.xyz/info",
@@ -120,7 +120,7 @@ class ExitSafeguards:
         })
         
         # In paper trading: mark for closure
-        # In live trading: execute actual close order
+        # Live order execution is intentionally not implemented in this repository
         
         print(f"   [OK] Position marked for forced closure")
         print(f"   [NOTE] Decision logged to {SAFEGUARD_LOG}")
@@ -151,7 +151,7 @@ class ExitSafeguards:
             print(f"{i}. {asset} @ ${entry_price:.4f} ({age_hours:.1f}h old)")
         
         print()
-        print("[WARN]  This action is IRREVERSIBLE in live trading")
+        print("[WARN]  Live trading is not implemented; this affects paper-trading state only")
         print()
         
         # Safety confirmation (skipped in automated runs)
@@ -177,7 +177,7 @@ class ExitSafeguards:
         return True
     
     def check_safeguards(self):
-        """Run safeguard checks - production hardened"""
+        """Run safeguard checks for the paper-trading support workflow."""
         print("="*80)
         print("EXIT SAFEGUARDS CHECK")
         print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}")

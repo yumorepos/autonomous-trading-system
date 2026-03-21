@@ -4,6 +4,7 @@
 import os
 import sys
 import tempfile
+from types import SimpleNamespace
 import types
 import importlib.util
 from pathlib import Path
@@ -17,6 +18,7 @@ class FakeResponse:
     def __init__(self, payload, status_code=200):
         self._payload = payload
         self.status_code = status_code
+        self.elapsed = SimpleNamespace(total_seconds=lambda: 0.01)
     def json(self):
         return self._payload
     def raise_for_status(self):
@@ -26,6 +28,7 @@ class FakeResponse:
 
 class FakeRequests:
     Timeout = RuntimeError
+    RequestException = RuntimeError
 
     @staticmethod
     def post(url, json=None, timeout=0):

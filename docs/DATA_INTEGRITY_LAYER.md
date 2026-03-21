@@ -1,7 +1,7 @@
 # Data Integrity & Signal Reliability Layer
 **Version:** 1.0  
-**Deployed:** 2026-03-20 19:18 EDT  
-**Status:** ✅ OPERATIONAL
+**Document scope:** active paper-trading data-validation notes  
+**Status:** ✅ active support documentation for paper-trading data validation
 
 ---
 

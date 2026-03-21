@@ -279,7 +279,7 @@ def log_signals(signals: list[dict]) -> None:
 
 
 def generate_report(signals: list[dict]) -> None:
-    report = f"""# Phase 1 Signal Report -- Live Scan
+    report = f"""# Phase 1 Signal Report -- Paper Scan
 **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}  
 **Mode:** Paper Trading Research Only  
 **Trading Mode:** {TRADING_MODE} ({trading_mode_summary()})
@@ -336,7 +336,7 @@ def generate_report(signals: list[dict]) -> None:
 
 def main() -> None:
     print("=" * 80)
-    print("PHASE 1: AUTONOMOUS SIGNAL GENERATION ENGINE")
+    print("PHASE 1: PAPER-TRADING SIGNAL GENERATION ENGINE")
     print(f"Scan Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print(f"Trading Mode: {TRADING_MODE} ({trading_mode_summary()})")
     print("=" * 80)

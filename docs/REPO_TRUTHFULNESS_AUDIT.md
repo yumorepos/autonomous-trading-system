@@ -1,7 +1,7 @@
 # Repository Truthfulness Audit
 
 **Date:** 2026-03-21  
-**Purpose:** define the current truthful scope of the repository after aligning Hyperliquid and optional Polymarket paper-trading paths to one canonical architecture.
+**Purpose:** define the current truthful scope of the repository after aligning Hyperliquid and optional Polymarket paper-trading paths to one canonical architecture and a CI-safe verification suite.
 
 ## Canonical Truth
 
@@ -32,9 +32,11 @@ Supported runtime modes:
 | `scripts/timeout-monitor.py` | KEEP_ACTIVE | Canonical monitor script run by orchestrator. |
 | `scripts/polymarket-executor.py` | KEEP_NON_CANONICAL | Standalone helper/scaffold only; not the authoritative Polymarket path. |
 | `scripts/exit-monitor.py` | KEEP_NON_CANONICAL | Proof/audit generator only; not authoritative close persistence. |
-| `scripts/performance-dashboard.py` | KEEP_ACTIVE_RELABELED | Useful dashboard, but labels now distinguish canonical vs optional experimental paths. |
+| `scripts/live-readiness-validator.py` | KEEP_NON_CANONICAL_FUTURE_SCOPE | Research model for hypothetical future criteria only. |
+| `scripts/performance-dashboard.py` | KEEP_ACTIVE_RELABELED | Useful dashboard, but labels distinguish canonical vs optional experimental paths. |
 | `scripts/stability-monitor.py` | KEEP_ACTIVE_RESCOPED | Mode-aware support monitor rather than an unconditional multi-exchange status claim. |
-| `tests/destructive/*.py` | KEEP_ACTIVE_REPAIRED | Temp-workspace lifecycle tests updated to canonical state model. |
+| `.github/workflows/basic.yml` | KEEP_ACTIVE | Required CI-safe verification workflow for every push and pull request. |
+| `tests/destructive/*.py` | KEEP_ACTIVE_REPAIRED | Isolated temp-workspace lifecycle tests updated to canonical paper-state model. |
 
 ## Explicit Scope Limits
 
@@ -43,6 +45,7 @@ Supported runtime modes:
 - Polymarket remains optional and experimental
 - live trading is not supported
 - supporting dashboards/reports are not proof of live readiness
+- CI intentionally avoids flaky network-dependent requirements
 
 ## Reviewer Guidance
 
@@ -50,6 +53,7 @@ Trust these files first:
 
 - `README.md`
 - `SYSTEM_STATUS.md`
+- `docs/OPERATOR_QUICKSTART.md`
 - `docs/SYSTEM_ARCHITECTURE.md`
 - `docs/REPO_TRUTHFULNESS_AUDIT.md`
 
