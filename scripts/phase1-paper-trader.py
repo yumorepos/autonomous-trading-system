@@ -23,6 +23,7 @@ from config.runtime import LOGS_DIR, TRADING_MODE, mode_includes_hyperliquid, mo
 from models.position_state import apply_trade_to_position_state, get_open_positions
 from models.trade_schema import normalize_trade_record, validate_trade_record
 from utils.json_utils import safe_read_jsonl, write_json_atomic
+from utils.runtime_logging import append_runtime_event
 
 PAPER_TRADES_FILE = LOGS_DIR / "phase1-paper-trades.jsonl"
 PERFORMANCE_FILE = LOGS_DIR / "phase1-performance.json"
@@ -43,6 +44,14 @@ def log_non_canonical_signal(signal: dict | None, reason: str) -> None:
     signal_type = (signal or {}).get('signal_type', 'unknown')
     identifier = (signal or {}).get('asset') or (signal or {}).get('market_id') or 'unknown'
     print(f"  [SKIP] SKIPPED_NON_CANONICAL_SIGNAL: {identifier} ({signal_type}) - {reason}")
+    append_runtime_event(
+        stage='paper_trader',
+        exchange=(signal or {}).get('exchange', (signal or {}).get('source', 'unknown')),
+        lifecycle_stage='validation_skipped',
+        status='WARN',
+        message=f"Non-canonical paper-trading signal skipped: {reason}",
+        metadata={'identifier': identifier, 'signal_type': signal_type},
+    )
 
 
 
@@ -127,6 +136,14 @@ class PaperTrader:
             'paper_only': True,
         }
         print(f"  [OK] Hyperliquid paper trade: {direction} {position_size:.4f} {asset} @ ${entry_price:.4f}")
+        append_runtime_event(
+            stage='paper_trader',
+            exchange='Hyperliquid',
+            lifecycle_stage='entry_planned',
+            status='INFO',
+            message='Hyperliquid paper trade planned',
+            metadata={'trade_id': self.position_id, 'symbol': asset, 'side': direction, 'entry_price': entry_price},
+        )
         return trade
 
     def execute_polymarket(self) -> dict:
@@ -164,6 +181,14 @@ class PaperTrader:
             'experimental': True,
         }
         print(f"  [OK] Polymarket paper trade: {side} {market_id} ({quantity:.4f} shares) @ ${entry_price:.4f}")
+        append_runtime_event(
+            stage='paper_trader',
+            exchange='Polymarket',
+            lifecycle_stage='entry_planned',
+            status='INFO',
+            message='Polymarket paper trade planned',
+            metadata={'trade_id': self.position_id, 'market_id': market_id, 'side': side, 'entry_price': entry_price},
+        )
         return trade
 
 
@@ -317,6 +342,19 @@ def log_trade(trade: dict) -> None:
     PAPER_TRADES_FILE.parent.mkdir(exist_ok=True)
     with open(PAPER_TRADES_FILE, 'a') as f:
         f.write(json.dumps(trade) + '\n')
+    append_runtime_event(
+        stage='paper_trader',
+        exchange=trade.get('exchange', 'unknown'),
+        lifecycle_stage='trade_persisted',
+        status='INFO',
+        message='Paper-trading trade record persisted',
+        metadata={
+            'trade_id': trade.get('trade_id'),
+            'symbol': trade.get('symbol'),
+            'status': trade.get('status'),
+            'paper_only': trade.get('paper_only', True),
+        },
+    )
     apply_trade_to_position_state(POSITION_STATE_FILE, trade)
 
 
@@ -347,6 +385,14 @@ def evaluate_exit_trades(open_positions: list[dict]) -> list[dict]:
             'realized_pnl_usd': pnl_usd,
             'realized_pnl_pct': pnl_pct,
         })
+        append_runtime_event(
+            stage='paper_trader',
+            exchange=exchange,
+            lifecycle_stage='exit_planned',
+            status='INFO',
+            message='Paper-trading exit planned',
+            metadata={'trade_id': position.get('trade_id'), 'symbol': position.get('symbol'), 'exit_reason': reason},
+        )
     return planned_closes
 
 

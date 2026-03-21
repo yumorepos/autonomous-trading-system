@@ -12,6 +12,7 @@ from models.trade_schema import (
     warn_on_status_transition,
 )
 from utils.json_utils import safe_read_json, write_json_atomic
+from utils.runtime_logging import append_runtime_event
 
 
 def _warn(message: str) -> None:
@@ -130,10 +131,26 @@ def apply_trade_to_position_state(path: Path | str, trade_record: dict[str, Any]
         canonical = _canonical_open_position(trade_record, context=f"position-state[{trade_id}]")
         if canonical is not None:
             positions[trade_id] = canonical
+            append_runtime_event(
+                stage="position_state",
+                exchange=canonical.get("exchange", "unknown"),
+                lifecycle_stage="position_open",
+                status="INFO",
+                message="Canonical paper-trading position opened/updated",
+                metadata={"trade_id": trade_id, "symbol": canonical.get("symbol"), "status": canonical.get("status")},
+            )
     elif current_status == "CLOSED":
         if trade_id not in positions:
             _warn(f"position-state[{trade_id}]: close received for non-open position")
         positions.pop(trade_id, None)
+        append_runtime_event(
+            stage="position_state",
+            exchange=(trade_record or {}).get("exchange", "unknown"),
+            lifecycle_stage="position_closed",
+            status="INFO",
+            message="Canonical paper-trading position removed from open state",
+            metadata={"trade_id": trade_id, "symbol": normalized.get("symbol"), "status": current_status},
+        )
     else:
         _warn(f"position-state[{trade_id}]: invalid status {current_status!r}, skipping update")
 
