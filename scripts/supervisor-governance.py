@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.trade_schema import normalize_trade_record, validate_trade_record
 AGENCY_REPORT = LOGS_DIR / "agency-phase1-report.json"
 STRATEGY_REGISTRY = LOGS_DIR / "strategy-registry.json"
 SUPERVISOR_DECISIONS = LOGS_DIR / "supervisor-decisions.jsonl"
@@ -118,13 +119,13 @@ def calculate_expectancy(trades: List[Dict]) -> float:
     """Calculate expectancy (average P&L per trade)"""
     if not trades:
         return 0
-    return sum(t['pnl'] for t in trades) / len(trades)
+    return sum((t.get('realized_pnl_usd') or 0) for t in trades) / len(trades)
 
 
 def calculate_profit_factor(trades: List[Dict]) -> float:
     """Profit factor = gross profit / gross loss"""
-    wins = [t['pnl'] for t in trades if t['pnl'] > 0]
-    losses = [abs(t['pnl']) for t in trades if t['pnl'] < 0]
+    wins = [(t.get('realized_pnl_usd') or 0) for t in trades if (t.get('realized_pnl_usd') or 0) > 0]
+    losses = [abs(t.get('realized_pnl_usd') or 0) for t in trades if (t.get('realized_pnl_usd') or 0) < 0]
     
     gross_profit = sum(wins) if wins else 0
     gross_loss = sum(losses) if losses else 1
@@ -142,7 +143,7 @@ def calculate_max_drawdown(trades: List[Dict]) -> float:
     max_dd = 0
     
     for trade in trades:
-        cumulative += trade['pnl']
+        cumulative += (trade.get('realized_pnl_usd') or 0)
         peak = max(peak, cumulative)
         dd = ((peak - cumulative) / peak * 100) if peak > 0 else 0
         max_dd = max(max_dd, dd)
@@ -155,7 +156,7 @@ def calculate_sharpe_ratio(trades: List[Dict]) -> float:
     if len(trades) < 5:
         return 0
     
-    returns = [t['pnl'] for t in trades]
+    returns = [(t.get('realized_pnl_usd') or 0) for t in trades]
     avg_return = sum(returns) / len(returns)
     variance = sum((r - avg_return) ** 2 for r in returns) / len(returns)
     std_dev = variance ** 0.5
@@ -167,7 +168,7 @@ def calculate_win_rate(trades: List[Dict]) -> float:
     """Win rate percentage"""
     if not trades:
         return 0
-    wins = [t for t in trades if t['pnl'] > 0]
+    wins = [t for t in trades if (t.get('realized_pnl_usd') or 0) > 0]
     return (len(wins) / len(trades)) * 100
 
 
@@ -175,7 +176,7 @@ def detect_loss_streak(trades: List[Dict]) -> int:
     """Count current losing streak"""
     streak = 0
     for trade in reversed(trades):
-        if trade['pnl'] <= 0:
+        if (trade.get('realized_pnl_usd') or 0) <= 0:
             streak += 1
         else:
             break
@@ -203,7 +204,7 @@ def calculate_all_metrics(trades: List[Dict]) -> Dict:
         'max_drawdown': round(calculate_max_drawdown(trades), 1),
         'expectancy': round(calculate_expectancy(trades), 2),
         'loss_streak': detect_loss_streak(trades),
-        'total_pnl': round(sum(t['pnl'] for t in trades), 2)
+        'total_pnl': round(sum((t.get('realized_pnl_usd') or 0) for t in trades), 2)
     }
 
 
@@ -293,14 +294,17 @@ def load_paper_trades() -> Dict[str, List[Dict]]:
     with open(trades_file) as f:
         for line in f:
             if line.strip():
-                trade = json.loads(line)
-                if trade['status'] != 'OPEN':
-                    strategy = trade['signal'].get('signal_type', 'unknown')
-                    
+                normalized = normalize_trade_record(json.loads(line))
+                if not validate_trade_record(normalized, context='supervisor-governance.load_paper_trades'):
+                    continue
+                if normalized['status'] != 'OPEN':
+                    raw = normalized.get('raw', {})
+                    strategy = raw.get('signal', {}).get('signal_type', raw.get('strategy', 'unknown'))
+
                     if strategy not in trades_by_strategy:
                         trades_by_strategy[strategy] = []
-                    
-                    trades_by_strategy[strategy].append(trade)
+
+                    trades_by_strategy[strategy].append(normalized)
     
     return trades_by_strategy
 

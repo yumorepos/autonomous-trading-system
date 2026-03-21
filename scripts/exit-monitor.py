@@ -17,6 +17,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.position_state import get_open_positions
+from models.trade_schema import validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl
 PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 EXIT_PROOF_LOG = LOGS_DIR / "exit-proof.jsonl"
@@ -47,45 +49,17 @@ class ExitMonitor:
         print(f"[{level}] {message}")
     
     def load_open_positions(self) -> List[Dict]:
-        """Load current open positions from real log file"""
-        if not PAPER_TRADES.exists():
-            self.log("No paper trades log found", "WARNING")
-            return []
-        
-        # Load authoritative state
-        state = safe_read_json(LOGS_DIR / "position-state.json") or {}
-        
-        # Load all positions (latest version)
-        all_positions = {}
+        """Load current open positions from authoritative position-state.json only."""
         try:
-            for trade in safe_read_jsonl(PAPER_TRADES):
-                pid = trade.get('position_id')
-                if pid:
-                    all_positions[pid] = trade
-            
-            # Filter to OPEN only via state file
             positions = []
-            for pid, trade in all_positions.items():
-                if state.get(pid) == 'OPEN':
-                    # Validate required fields
-                    required_fields = ['signal', 'entry_price', 'position_size', 'entry_time']
-                    missing = [f for f in required_fields if f not in trade]
-                    
-                    if missing:
-                        self.log(f"Position {pid} missing fields {missing}, skipping", "ERROR")
-                        continue
-                    
-                    # Validate signal structure
-                    if 'asset' not in trade.get('signal', {}):
-                        self.log(f"Position {pid} signal missing 'asset' field, skipping", "ERROR")
-                        continue
-                    
-                    positions.append(trade)
-        
+            for position in get_open_positions(LOGS_DIR / "position-state.json"):
+                if not validate_trade_record(position, context=f"exit-monitor[{position.get('trade_id', 'unknown')}]"):
+                    continue
+                positions.append(position)
         except Exception as e:
             self.log(f"Failed to load positions: {e}", "ERROR")
             return []
-        
+
         self.log(f"Loaded {len(positions)} open positions")
         return positions
     
@@ -130,7 +104,7 @@ class ExitMonitor:
     def check_exit_conditions(self, position: Dict, current_price: float) -> Tuple[bool, Optional[str]]:
         """Check if position should exit - returns (should_exit, reason)"""
         entry_price = position['entry_price']
-        direction = position['signal'].get('direction', 'LONG')
+        direction = position.get('side', position.get('direction', 'LONG'))
         
         # Calculate P&L
         _, pnl_pct = self.calculate_pnl(entry_price, current_price, position['position_size'], direction)
@@ -144,7 +118,7 @@ class ExitMonitor:
             return True, 'stop_loss'
         
         # Check time limit
-        entry_time = datetime.fromisoformat(position['entry_time'])
+        entry_time = datetime.fromisoformat(position['entry_timestamp'])
         now = datetime.now(timezone.utc)
         age_hours = (now - entry_time).total_seconds() / 3600
         
@@ -157,25 +131,25 @@ class ExitMonitor:
         """Create monitoring checkpoint for lifecycle proof"""
         checkpoint = {
             'timestamp': datetime.now(timezone.utc).isoformat(),
-            'asset': position['signal']['asset'],
+            'asset': position['symbol'],
             'entry_price': position['entry_price'],
             'current_price': current_price,
             'pnl_pct': pnl_pct,
             'status': 'OPEN',
-            'age_hours': (datetime.now(timezone.utc) - datetime.fromisoformat(position['entry_time'])).total_seconds() / 3600
+            'age_hours': (datetime.now(timezone.utc) - datetime.fromisoformat(position['entry_timestamp'])).total_seconds() / 3600
         }
         
         return checkpoint
     
     def capture_exit_proof(self, position: Dict, exit_reason: str, exit_price: float) -> Dict:
         """Capture complete lifecycle proof for a real closed trade"""
-        entry_time = datetime.fromisoformat(position['entry_time'])
+        entry_time = datetime.fromisoformat(position['entry_timestamp'])
         exit_time = datetime.now(timezone.utc)
         
-        asset = position['signal']['asset']
+        asset = position['symbol']
         entry_price = position['entry_price']
         position_size = position['position_size']
-        direction = position['signal'].get('direction', 'LONG')
+        direction = position.get('side', position.get('direction', 'LONG'))
         
         # Calculate final P&L
         pnl_usd, pnl_pct = self.calculate_pnl(entry_price, exit_price, position_size, direction)
@@ -183,7 +157,7 @@ class ExitMonitor:
         hold_duration_seconds = (exit_time - entry_time).total_seconds()
         
         # Generate trade ID if not present
-        trade_id = f"HL_{asset}_{entry_time.strftime('%Y%m%d_%H%M%S')}"
+        trade_id = position.get('trade_id') or f"HL_{asset}_{entry_time.strftime('%Y%m%d_%H%M%S')}"
         
         # Build complete lifecycle proof
         proof = {
@@ -192,16 +166,16 @@ class ExitMonitor:
             
             # 1. Entry proof
             'entry': {
-                'timestamp': position['entry_time'],
+                'timestamp': position['entry_timestamp'],
                 'asset': asset,
                 'side': direction,
                 'entry_price': entry_price,
                 'position_size': position_size,
                 'entry_value_usd': entry_price * position_size,
-                'source': position['signal']['source'],
-                'signal_type': position['signal']['signal_type'],
-                'ev_score': position['signal'].get('ev_score', 0),
-                'conviction': position['signal'].get('conviction', 'UNKNOWN')
+                'source': position.get('signal', {}).get('source', 'unknown'),
+                'signal_type': position.get('signal', {}).get('signal_type', position.get('strategy', 'unknown')),
+                'ev_score': position.get('signal', {}).get('ev_score', 0),
+                'conviction': position.get('signal', {}).get('conviction', 'UNKNOWN')
             },
             
             # 2. Monitoring history
@@ -297,9 +271,9 @@ class ExitMonitor:
         exits_captured = 0
         
         for position in self.open_positions:
-            asset = position['signal']['asset']
+            asset = position['symbol']
             entry_price = position['entry_price']
-            direction = position['signal'].get('direction', 'LONG')
+            direction = position.get('side', position.get('direction', 'LONG'))
             
             # Get current price
             current_price = self.get_current_price(asset)
@@ -318,7 +292,7 @@ class ExitMonitor:
             # Check exit conditions
             should_exit, exit_reason = self.check_exit_conditions(position, current_price)
             
-            entry_time = datetime.fromisoformat(position['entry_time'])
+            entry_time = datetime.fromisoformat(position['entry_timestamp'])
             age_hours = (datetime.now(timezone.utc) - entry_time).total_seconds() / 3600
             
             if should_exit:

@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.trade_schema import normalize_trade_record, validate_trade_record
 ALPHA_STATE = LOGS_DIR / "alpha-intelligence-state.json"
 PERFORMANCE_DB = LOGS_DIR / "alpha-performance-db.json"
 SIGNAL_WEIGHTS = LOGS_DIR / "dynamic-signal-weights.json"
@@ -176,8 +177,11 @@ class AlphaIntelligenceLayer:
         with open(PAPER_TRADES) as f:
             for line in f:
                 if line.strip():
-                    trades.append(json.loads(line))
-        
+                    trade = normalize_trade_record(json.loads(line))
+                    if not validate_trade_record(trade, context='alpha-intelligence.load_trades'):
+                        continue
+                    trades.append(trade)
+
         return trades
     
     # === MARKET REGIME DETECTION ===
@@ -201,7 +205,7 @@ class AlphaIntelligenceLayer:
             )
         
         # Calculate volatility from P&L
-        pnls = [t['pnl_pct'] / 100 for t in recent_trades[-20:]]  # Last 20 trades
+        pnls = [((t.get('realized_pnl_pct') or 0) / 100) for t in recent_trades[-20:]]  # Last 20 trades
         volatility = np.std(pnls) if len(pnls) > 1 else 0.015
         
         # Calculate trend from cumulative P&L
@@ -244,8 +248,9 @@ class AlphaIntelligenceLayer:
         by_regime = defaultdict(list)
         
         for trade in closed_trades:
-            source = trade['signal'].get('source', 'unknown')
-            strategy = trade['signal'].get('signal_type', 'unknown')
+            raw = trade.get('raw', {})
+            source = raw.get('signal', {}).get('source', raw.get('exchange', 'unknown'))
+            strategy = raw.get('signal', {}).get('signal_type', raw.get('strategy', 'unknown'))
             # Regime at trade time (TODO: track this in trades)
             regime = 'RANGE'  # Default for now
             
@@ -284,10 +289,10 @@ class AlphaIntelligenceLayer:
                 'avg_duration_hours': 0
             }
         
-        wins = [t for t in trades if t['pnl'] > 0]
-        losses = [t for t in trades if t['pnl'] <= 0]
+        wins = [t for t in trades if (t.get('realized_pnl_usd') or 0) > 0]
+        losses = [t for t in trades if (t.get('realized_pnl_usd') or 0) <= 0]
         
-        pnls = [t['pnl'] for t in trades]
+        pnls = [(t.get('realized_pnl_usd') or 0) for t in trades]
         avg_pnl = sum(pnls) / len(pnls)
         
         # Sharpe ratio
@@ -298,16 +303,16 @@ class AlphaIntelligenceLayer:
             sharpe = 0
         
         # Profit factor
-        gross_profit = sum(t['pnl'] for t in wins) if wins else 0
-        gross_loss = abs(sum(t['pnl'] for t in losses)) if losses else 1
+        gross_profit = sum((t.get('realized_pnl_usd') or 0) for t in wins) if wins else 0
+        gross_loss = abs(sum((t.get('realized_pnl_usd') or 0) for t in losses)) if losses else 1
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
         
         # Average duration
         durations = []
         for t in trades:
-            if t.get('entry_time') and t.get('exit_time'):
-                entry = datetime.fromisoformat(t['entry_time'].replace('Z', '+00:00'))
-                exit = datetime.fromisoformat(t['exit_time'].replace('Z', '+00:00'))
+            if t.get('entry_timestamp') and t.get('exit_timestamp'):
+                entry = datetime.fromisoformat(t['entry_timestamp'].replace('Z', '+00:00'))
+                exit = datetime.fromisoformat(t['exit_timestamp'].replace('Z', '+00:00'))
                 duration = (exit - entry).total_seconds() / 3600  # hours
                 durations.append(duration)
         

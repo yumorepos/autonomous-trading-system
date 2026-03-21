@@ -19,6 +19,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.position_state import get_open_positions
+from models.trade_schema import validate_trade_record
 PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 SAFEGUARD_LOG = LOGS_DIR / "exit-safeguards.jsonl"
 SAFEGUARD_DECISIONS = LOGS_DIR / "safeguard-decisions.log"
@@ -56,48 +58,17 @@ class ExitSafeguards:
         return log_entry
     
     def load_open_positions(self) -> List[Dict]:
-        """Load open positions with schema validation"""
-        if not PAPER_TRADES.exists():
-            print("⚠️  No paper trades log found")
-            return []
-        
-        positions = []
-        
+        """Load open positions from authoritative position-state.json only."""
         try:
-            with open(PAPER_TRADES) as f:
-                for line_num, line in enumerate(f, 1):
-                    if not line.strip():
-                        continue
-                    
-                    try:
-                        trade = json.loads(line)
-                    except json.JSONDecodeError as e:
-                        print(f"⚠️  Failed to parse line {line_num}: {e}")
-                        continue
-                    
-                    # Only include OPEN positions
-                    if trade.get('status') != 'OPEN':
-                        continue
-                    
-                    # Validate required fields
-                    required = ['signal', 'entry_price', 'position_size', 'entry_time', 'status']
-                    missing = [f for f in required if f not in trade]
-                    
-                    if missing:
-                        print(f"⚠️  Position missing fields {missing}, skipping")
-                        continue
-                    
-                    if 'asset' not in trade['signal']:
-                        print(f"⚠️  Position signal missing 'asset' field, skipping")
-                        continue
-                    
-                    positions.append(trade)
-        
+            positions = []
+            for trade in get_open_positions(LOGS_DIR / "position-state.json"):
+                if not validate_trade_record(trade, context=f"exit-safeguards[{trade.get('trade_id', 'unknown')}]"):
+                    continue
+                positions.append(trade)
+            return positions
         except Exception as e:
             print(f"❌ Failed to load positions: {e}")
             return []
-        
-        return positions
     
     def check_api_health(self) -> bool:
         """Check if Hyperliquid API is accessible - REAL check"""
@@ -129,8 +100,8 @@ class ExitSafeguards:
     
     def force_close_position(self, position: Dict, reason: str) -> bool:
         """Force close a position - logs decision, executes in paper trading"""
-        asset = position['signal']['asset']
-        entry_time = position['entry_time']
+        asset = position['symbol']
+        entry_time = position['entry_timestamp']
         entry_price = position['entry_price']
         position_size = position['position_size']
         

@@ -15,7 +15,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
-from models.trade_schema import normalize_trade_record
+from models.position_state import get_open_positions
+from models.trade_schema import normalize_trade_record, validate_trade_record
 from utils.json_utils import safe_read_jsonl
 
 class PerformanceDashboard:
@@ -24,10 +25,18 @@ class PerformanceDashboard:
     def __init__(self):
         self.hl_trades = self.load_trades(LOGS_DIR / "phase1-paper-trades.jsonl")
         self.pm_trades = self.load_trades(LOGS_DIR / "polymarket-trades.jsonl")
+        self.open_positions = get_open_positions(LOGS_DIR / "position-state.json")
     
     def load_trades(self, file_path: Path) -> List[Dict]:
-        """Load trades from JSONL"""
-        return [normalize_trade_record(record) for record in safe_read_jsonl(file_path)]
+        """Load normalized closed trades from JSONL."""
+        trades = []
+        for record in safe_read_jsonl(file_path):
+            normalized = normalize_trade_record(record)
+            if not validate_trade_record(normalized, context=f'performance-dashboard[{file_path.name}]'):
+                continue
+            if normalized.get('status') == 'CLOSED':
+                trades.append(normalized)
+        return trades
     
     def calculate_stats(self, trades: List[Dict]) -> Dict:
         """Calculate performance stats"""
@@ -44,8 +53,7 @@ class PerformanceDashboard:
             }
         
         closed_trades = [t for t in trades if t.get('status') == 'CLOSED']
-        open_trades = [t for t in trades if t.get('status') == 'OPEN']
-        
+
         winners = [t for t in closed_trades if (t.get('realized_pnl_usd') or 0) > 0]
         losers = [t for t in closed_trades if (t.get('realized_pnl_usd') or 0) < 0]
         
@@ -55,7 +63,7 @@ class PerformanceDashboard:
         
         return {
             'total': len(trades),
-            'open': len(open_trades),
+            'open': 0,
             'closed': len(closed_trades),
             'win_rate': win_rate,
             'total_pnl': total_pnl,
@@ -69,8 +77,10 @@ class PerformanceDashboard:
         # Calculate combined stats
         all_trades = self.hl_trades + self.pm_trades
         combined_stats = self.calculate_stats(all_trades)
+        combined_stats['open'] = len(self.open_positions)
         
         hl_stats = self.calculate_stats(self.hl_trades)
+        hl_stats['open'] = len([p for p in self.open_positions if p.get('raw', {}).get('exchange', p.get('exchange', 'Hyperliquid')) == 'Hyperliquid' or p.get('exchange') == 'Hyperliquid'])
         pm_stats = self.calculate_stats(self.pm_trades)
         
         print("="*80)
@@ -121,15 +131,14 @@ class PerformanceDashboard:
             print("📈 OPEN POSITIONS")
             print("-" * 80)
             
-            open_trades = [t for t in all_trades if t.get('status') == 'OPEN']
-            for trade in open_trades[:10]:  # Show max 10
-                exchange = trade.get('raw', {}).get('source', trade.get('raw', {}).get('exchange', 'Unknown'))
+            for trade in self.open_positions[:10]:  # Show max 10
+                exchange = trade.get('exchange', trade.get('raw', {}).get('exchange', 'Unknown'))
                 asset = trade.get('symbol', 'Unknown')
                 entry = trade.get('entry_price', 0) or 0
                 print(f"  [{exchange}] {asset} @ ${entry:.2f}")
-            
-            if len(open_trades) > 10:
-                print(f"  ... and {len(open_trades) - 10} more")
+
+            if len(self.open_positions) > 10:
+                print(f"  ... and {len(self.open_positions) - 10} more")
 
 
 def main():
