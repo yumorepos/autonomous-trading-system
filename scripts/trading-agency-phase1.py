@@ -128,11 +128,24 @@ def run_safety_validation() -> StageResult:
             {'candidate_signal': None},
         )
 
+    valid_canonical_signal, canonical_reason = trader_module.validate_canonical_signal(candidate_signal)
+    if not valid_canonical_signal:
+        trader_module.log_non_canonical_signal(candidate_signal, canonical_reason)
+        return stage_result(
+            "safety_validation",
+            StageStatus.SKIPPED,
+            f"SKIPPED_NON_CANONICAL_SIGNAL: {canonical_reason}",
+            {
+                'candidate_signal': candidate_signal,
+                'canonical_validation': canonical_reason,
+            },
+        )
+
     proposal = safety_module.TradeProposal(
         strategy='funding_arbitrage',
-        asset=candidate_signal['asset'],
-        direction=candidate_signal['direction'],
-        entry_price=float(candidate_signal['entry_price']),
+        asset=candidate_signal.get('asset'),
+        direction=candidate_signal.get('direction'),
+        entry_price=float(candidate_signal.get('entry_price')),
         position_size_usd=trader_module.PAPER_BALANCE * 0.02,
         signal_timestamp=candidate_signal['timestamp'],
         allocation_weight=0.02,
