@@ -1,7 +1,9 @@
 # Three-Stage Governance Model
-**Version:** 3.0 (Production)  
+**Version:** 3.1 (Research / Paper-Trading Governance)  
 **Implemented:** 2026-03-20 18:57 EDT  
-**Status:** ✅ ENFORCED
+**Status:** ✅ ACTIVE FOR RESEARCH OVERSIGHT
+
+> **Truthfulness note:** this document describes research-stage governance metadata and escalation logic. It does **not** mean this repository currently supports live trading.
 
 ---
 

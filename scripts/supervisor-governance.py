@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Three-Stage Governance Supervisor
-VALIDATE -> QUARANTINE -> PROMOTE -> [Human Approval] -> LIVE
+Three-stage governance supervisor.
+VALIDATE -> QUARANTINE -> PROMOTE -> [Human Approval] -> LIVE (theoretical future stage)
 
-Enforces strict lifecycle management with quarantine buffer and human approval gate
+This script manages research-stage governance metadata only. It does not imply
+that live trading is currently supported in this repository.
 """
 
 import json
@@ -55,8 +56,8 @@ class StrategyGovernance:
     
     VALIDATE = 'VALIDATE'      # Paper trading, collecting data
     QUARANTINE = 'QUARANTINE'  # Performance warning, monitoring closely
-    PROMOTE = 'PROMOTE'        # Validated, ready for live (needs approval)
-    LIVE = 'LIVE'             # Human approved, live capital allowed
+    PROMOTE = 'PROMOTE'        # Validated, pending hypothetical future approval
+    LIVE = 'LIVE'             # Theoretical future stage; not current repository capability
     DEMOTE = 'DEMOTE'         # Failed, removed from consideration
     
     def __init__(self):
@@ -341,7 +342,7 @@ def generate_governance_report(decisions: Dict, gov: StrategyGovernance) -> str:
     lines = []
     lines.append("# SUPERVISOR GOVERNANCE REPORT")
     lines.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M EDT')}")
-    lines.append("**Model:** Three-Stage Governance (VALIDATE -> QUARANTINE -> PROMOTE -> LIVE)")
+    lines.append("**Model:** Three-Stage Governance (research metadata only; LIVE is a future/theoretical stage)")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -359,7 +360,7 @@ def generate_governance_report(decisions: Dict, gov: StrategyGovernance) -> str:
     lines.append(f"- **VALIDATE:** {len(stages.get('VALIDATE', []))} (paper trading)")
     lines.append(f"- **QUARANTINE:** {len(stages.get('QUARANTINE', []))} (performance warning)")
     lines.append(f"- **PROMOTE:** {len(stages.get('PROMOTE', []))} (awaiting human approval)")
-    lines.append(f"- **LIVE:** {len(stages.get('LIVE', []))} (human approved, live capital)")
+    lines.append(f"- **LIVE:** {len(stages.get('LIVE', []))} (future/theoretical stage only)")
     lines.append(f"- **DEMOTE:** {len(stages.get('DEMOTE', []))} (failed validation)")
     lines.append("")
     lines.append("---")
@@ -427,7 +428,7 @@ def generate_governance_report(decisions: Dict, gov: StrategyGovernance) -> str:
         if pending:
             lines.append("## [ALERT] HUMAN APPROVAL REQUIRED")
             lines.append("")
-            lines.append(f"**{len(pending)} strategies awaiting approval for live capital**")
+            lines.append(f"**{len(pending)} strategies awaiting hypothetical future approval**")
             lines.append("")
             
             for item in pending:

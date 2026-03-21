@@ -2,15 +2,15 @@
 """
 DESTRUCTIVE TEST -- NEVER RUN AGAINST LIVE STATE
 Full Lifecycle Integration Test
-Tests: Entry -> State -> simulated close record -> Performance
-Runs only inside a temporary workspace.
-This does not verify the live exit-detection path; it verifies isolated state/performance handling after a synthetic close record is written.
+Verifies canonical Hyperliquid entry -> canonical state -> actual close -> performance
+inside an isolated temporary workspace with mocked market data.
 """
 
 import json
 import os
 import sys
 import tempfile
+import types
 from datetime import datetime, timezone
 from pathlib import Path
 import importlib.util
@@ -20,9 +20,18 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
+def fake_requests_module():
+    def _fail(*args, **kwargs):
+        raise RuntimeError('network call not expected in isolated lifecycle test')
+    return types.SimpleNamespace(post=_fail, get=_fail, Timeout=RuntimeError)
+
+
+
 def load_trader(workspace_root: Path):
     os.environ['OPENCLAW_WORKSPACE'] = str(workspace_root)
+    os.environ['OPENCLAW_TRADING_MODE'] = 'hyperliquid_only'
     sys.modules.pop('config.runtime', None)
+    sys.modules['requests'] = fake_requests_module()
     spec = importlib.util.spec_from_file_location(
         'phase1_paper_trader',
         REPO_ROOT / 'scripts' / 'phase1-paper-trader.py'
@@ -33,16 +42,23 @@ def load_trader(workspace_root: Path):
     return trader
 
 
+
 def inject_signal(signals_file: Path, asset: str, direction: str, entry_price: float, ev_score: float):
     signal = {
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'source': 'Hyperliquid',
+        'exchange': 'Hyperliquid',
         'signal_type': 'funding_arbitrage',
+        'strategy': 'funding_arbitrage',
         'asset': asset,
+        'symbol': asset,
         'direction': direction,
         'entry_price': entry_price,
         'ev_score': ev_score,
         'conviction': 'HIGH' if ev_score > 80 else 'MEDIUM',
+        'recommended_position_size_usd': 1.96,
+        'paper_only': True,
+        'experimental': False,
     }
     signals_file.parent.mkdir(parents=True, exist_ok=True)
     with open(signals_file, 'a') as handle:
@@ -50,55 +66,12 @@ def inject_signal(signals_file: Path, asset: str, direction: str, entry_price: f
     return signal
 
 
-def get_state(trades_file: Path, state_file: Path):
+
+def load_trade_log(trades_file: Path):
     if not trades_file.exists():
-        return {'open': [], 'closed': [], 'all': []}
-
-    all_trades = []
+        return []
     with open(trades_file) as handle:
-        for line in handle:
-            if line.strip():
-                all_trades.append(json.loads(line))
-
-    state = {}
-    if state_file.exists():
-        with open(state_file) as handle:
-            state = json.load(handle)
-
-    open_trades = [t for t in all_trades if state.get(t.get('position_id')) == 'OPEN']
-    closed_trades = [t for t in all_trades if state.get(t.get('position_id')) == 'CLOSED']
-    return {'open': open_trades, 'closed': closed_trades, 'all': all_trades}
-
-
-def simulate_exit(position: dict, trades_file: Path, state_file: Path, exit_price: float, reason: str):
-    entry_price = position['entry_price']
-    position_size = position['position_size']
-    direction = position['direction']
-
-    if direction == 'LONG':
-        pnl_usd = (exit_price - entry_price) * position_size
-        pnl_pct = ((exit_price - entry_price) / entry_price) * 100
-    else:
-        pnl_usd = (entry_price - exit_price) * position_size
-        pnl_pct = ((entry_price - exit_price) / entry_price) * 100
-
-    closed = {
-        **position,
-        'status': 'CLOSED',
-        'exit_price': exit_price,
-        'exit_time': datetime.now(timezone.utc).isoformat(),
-        'exit_reason': reason,
-        'realized_pnl_usd': pnl_usd,
-        'realized_pnl_pct': pnl_pct,
-    }
-    with open(trades_file, 'a') as handle:
-        handle.write(json.dumps(closed) + '\n')
-
-    with open(state_file) as handle:
-        state = json.load(handle)
-    state[position['position_id']] = 'CLOSED'
-    with open(state_file, 'w') as handle:
-        json.dump(state, handle, indent=2)
+        return [json.loads(line) for line in handle if line.strip()]
 
 
 if __name__ == '__main__':
@@ -113,7 +86,6 @@ if __name__ == '__main__':
         logs_dir = workspace_root / 'logs'
         signals_file = logs_dir / 'phase1-signals.jsonl'
         trades_file = logs_dir / 'phase1-paper-trades.jsonl'
-        state_file = logs_dir / 'position-state.json'
         perf_file = logs_dir / 'phase1-performance.json'
 
         trader = load_trader(workspace_root)
@@ -121,20 +93,27 @@ if __name__ == '__main__':
         inject_signal(signals_file, 'BTC', 'LONG', 50000.0, 70)
         trader.main()
 
-        state_after_entry = get_state(trades_file, state_file)
-        assert len(state_after_entry['open']) == 1, 'Expected one open position after entry'
-        position = state_after_entry['open'][0]
-        print(f"[OK] Entry opened: {position['position_id']}")
+        open_positions = trader.load_open_positions()
+        assert len(open_positions) == 1, 'Expected one canonical open position after entry'
+        position = open_positions[0]
+        assert position['status'] == 'OPEN'
+        assert position['exchange'] == 'Hyperliquid'
+        print(f"[OK] Entry opened: {position['trade_id']}")
 
-        simulate_exit(position, trades_file, state_file, 55000.0, 'take_profit')
+        trader.get_current_price = lambda asset: 55000.0 if asset == 'BTC' else 0
         trader.main()
 
-        final_state = get_state(trades_file, state_file)
-        assert len(final_state['closed']) >= 1, 'Expected at least one closed position'
-        assert perf_file.exists(), 'Expected performance file after trader rerun'
+        open_after = trader.load_open_positions()
+        assert len(open_after) == 0, 'Expected canonical open positions cleared after exit'
+
+        trade_log = load_trade_log(trades_file)
+        statuses = [record['status'] for record in trade_log]
+        assert statuses == ['OPEN', 'CLOSED'], f'Expected OPEN then CLOSED trade records, got {statuses}'
+        assert perf_file.exists(), 'Expected performance file after close'
         with open(perf_file) as handle:
             perf = json.load(handle)
         assert perf.get('total_trades') == 1, 'Expected one closed trade in performance'
+        assert perf.get('exchange_breakdown', {}).get('Hyperliquid', {}).get('total_trades') == 1
 
         print('[OK] Full lifecycle passed in isolated temp workspace')
         print(f'Workspace: {workspace_root}')

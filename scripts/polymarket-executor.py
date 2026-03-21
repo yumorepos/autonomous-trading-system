@@ -237,10 +237,10 @@ class PolymarketExecutor:
         
         return {'status': 'SUCCESS', 'trade': trade}
     
-    # === REAL EXECUTION (API-READY, DISABLED BY DEFAULT) ===
+    # === REAL EXECUTION (NOT IMPLEMENTED, DISABLED BY DEFAULT) ===
     
     def real_buy(self, signal: Dict, api_key: str, secret: str) -> Dict:
-        """Execute real trade via Polymarket CLOB API (DISABLED BY DEFAULT)"""
+        """Real Polymarket execution is intentionally not implemented."""
         
         if self.paper_trading:
             return {'status': 'ERROR', 'reason': 'Real trading disabled (paper_trading=True)'}
@@ -259,7 +259,7 @@ class PolymarketExecutor:
         
         return {
             'status': 'NOT_IMPLEMENTED',
-            'reason': 'Real Polymarket execution requires full API setup',
+            'reason': 'Real Polymarket execution is intentionally not implemented in this repository',
             'next_steps': [
                 '1. Configure Polymarket API credentials',
                 '2. Set up private key for order signing',
@@ -269,14 +269,14 @@ class PolymarketExecutor:
         }
     
     def real_close(self, trade_id: str, api_key: str, secret: str) -> Dict:
-        """Close real position via Polymarket CLOB API"""
+        """Real Polymarket close execution is intentionally not implemented."""
         
         if self.paper_trading:
             return {'status': 'ERROR', 'reason': 'Real trading disabled (paper_trading=True)'}
         
         return {
             'status': 'NOT_IMPLEMENTED',
-            'reason': 'Real Polymarket execution requires full API setup'
+            'reason': 'Real Polymarket execution is intentionally not implemented in this repository'
         }
     
     # === POSITION MANAGEMENT ===
@@ -305,7 +305,9 @@ class PolymarketExecutor:
     # === VALIDATION ===
     
     def validate_signal(self, signal: Dict) -> Tuple[bool, str]:
-        """Validate signal before execution"""
+        """Validate canonical Polymarket paper signal before standalone execution."""
+        if signal.get('signal_type') not in {'polymarket_binary_market', None}:
+            return False, f"Unsupported signal_type={signal.get('signal_type')}"
         
         # Check required fields
         if 'market_id' not in signal:
@@ -346,7 +348,7 @@ class PolymarketExecutor:
 
 
 def main():
-    """Test Polymarket executor"""
+    """Show standalone/non-canonical Polymarket paper executor status."""
     print("=" * 80)
     print("POLYMARKET EXECUTOR TEST")
     print("=" * 80)
@@ -361,9 +363,10 @@ def main():
     print(f"Closed: {status['closed_positions']}")
     print()
     
-    print("[OK] Polymarket executor ready")
-    print("   - Paper trading: ENABLED")
-    print("   - Real execution: API-ready (disabled by default)")
+    print("[OK] Polymarket executor helper available")
+    print("   - Scope: standalone / non-canonical helper")
+    print("   - Paper trading: supported for canonical signal schema")
+    print("   - Real execution: NOT IMPLEMENTED")
     print()
 
 

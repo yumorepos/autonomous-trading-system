@@ -3,6 +3,8 @@
 **Deployed:** 2026-03-20 19:13 EDT  
 **Status:** ✅ OPERATIONAL
 
+> **Truthfulness note:** in this repository the safety layer protects paper-trading proposals. References to “live execution” in this document describe a future concept, not currently supported repository capability.
+
 ---
 
 ## Purpose

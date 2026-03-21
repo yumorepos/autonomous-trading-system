@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Real Exit Validation Monitor
-Hardened version - works with actual position schema
-Captures complete lifecycle proof for every real close
+Exit Proof Monitor (standalone, non-canonical).
+Works with the canonical position schema but only writes audit/proof artifacts.
+It does NOT update the authoritative close state and should not be treated as
+the canonical exit path.
 """
 
 import json
@@ -33,7 +34,7 @@ TIME_LIMIT_HOURS = 24.0
 
 
 class ExitMonitor:
-    """Monitor open positions for real exits - production-hardened"""
+    """Monitor open positions for paper-trade exit proofs (non-canonical)."""
     
     def __init__(self):
         self.health_manager = SystemHealthManager()
@@ -74,8 +75,31 @@ class ExitMonitor:
         self.log(f"Loaded {len(positions)} open positions")
         return positions
     
-    def get_current_price(self, asset: str) -> Optional[float]:
-        """Get current price from Hyperliquid API"""
+    def get_current_price(self, position: Dict) -> Optional[float]:
+        """Get current price from Hyperliquid or Polymarket for proof generation."""
+        exchange = position.get('exchange', position.get('signal', {}).get('exchange', position.get('signal', {}).get('source', 'Hyperliquid')))
+        if exchange == 'Polymarket':
+            market_id = position.get('market_id') or position.get('symbol')
+            side = position.get('side', 'YES')
+            token_id = position.get('token_id')
+            try:
+                r = requests.get(
+                    "https://gamma-api.polymarket.com/markets",
+                    params={'condition_id': market_id},
+                    timeout=5,
+                )
+                if r.status_code == 200:
+                    for market in r.json():
+                        for token in market.get('tokens', []):
+                            outcome = str(token.get('outcome') or '').upper()
+                            candidate_token_id = str(token.get('token_id') or token.get('tokenId') or token.get('id') or '')
+                            if outcome == side or (token_id and candidate_token_id == token_id):
+                                return float(token.get('price') or token.get('bestAsk') or token.get('ask') or token.get('bestBid') or token.get('bid') or 0)
+            except Exception as e:
+                self.log(f"Failed to get Polymarket price for {market_id}: {e}", "ERROR")
+            return None
+
+        asset = position['symbol']
         try:
             url = "https://api.hyperliquid.xyz/info"
             r = requests.post(url, json={'type': 'allMids'}, timeout=5)
@@ -192,7 +216,7 @@ class ExitMonitor:
         return checkpoint
     
     def capture_exit_proof(self, position: Dict, exit_reason: str, exit_price: float) -> Dict:
-        """Capture complete lifecycle proof for a real closed trade"""
+        """Capture lifecycle proof for a paper-trade close candidate."""
         entry_time = datetime.fromisoformat(position['entry_timestamp'])
         exit_time = datetime.now(timezone.utc)
         
@@ -241,14 +265,14 @@ class ExitMonitor:
                 'reason': exit_reason,
                 'triggered_at': exit_time.isoformat(),
                 'exit_price': exit_price,
-                'price_verified_source': 'Hyperliquid API',
+                'price_verified_source': position.get('exchange', 'Hyperliquid') + ' API',
                 'price_fetch_successful': True
             },
             
             # 4. Exit execution result
             'execution': {
                 'executed_at': exit_time.isoformat(),
-                'execution_method': 'paper_trading',
+                'execution_method': 'paper_trading_non_canonical_proof',
                 'execution_successful': True,
                 'slippage_pct': 0.0  # Paper trading has no slippage
             },
@@ -273,10 +297,10 @@ class ExitMonitor:
             
             # 7. Readiness validator impact
             'validator_impact': {
-                'contributes_to_closed_trades': True,
-                'closed_trades_required': 100,
+                'contributes_to_closed_trades': False,
+                'closed_trades_required': 0,
                 'closed_trades_after_this': self.count_closed_trades() + 1,
-                'progress_toward_validation': ((self.count_closed_trades() + 1) / 100) * 100
+                'progress_toward_validation': 0
             }
         }
         
@@ -304,7 +328,7 @@ class ExitMonitor:
     def monitor(self):
         """Monitor all open positions for exit conditions"""
         print("="*80)
-        print("REAL EXIT VALIDATION MONITOR")
+        print("EXIT PROOF MONITOR (NON-CANONICAL)")
         print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}")
         print("="*80)
         print()
@@ -326,7 +350,7 @@ class ExitMonitor:
             direction = position.get('side', position.get('direction', 'LONG'))
             
             # Get current price
-            current_price = self.get_current_price(asset)
+            current_price = self.get_current_price(position)
             
             if current_price is None:
                 print(f"[WARN]  {asset}: Failed to fetch price, skipping")
@@ -369,7 +393,7 @@ class ExitMonitor:
         
         print()
         print(f"Summary: {exits_captured} exits captured this check")
-        print(f"Total exits captured: {self.count_closed_trades()}/10")
+        print(f"Total exit proofs captured: {self.count_closed_trades()}")
         print()
         
         if exits_captured > 0:
@@ -379,18 +403,18 @@ class ExitMonitor:
         """Generate exit monitor report"""
         total_proofs = self.count_closed_trades()
         
-        report = f"""# Real Exit Validation Report
+        report = f"""# Exit Proof Report (Non-Canonical)
 **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}
-**Total Real Exits Captured:** {total_proofs}
-**Target:** 10 real closed trades with full proof
+**Total Exit Proofs Captured:** {total_proofs}
+**Canonical Status:** This script does not update authoritative close state
 
 ---
 
-## Progress Toward 10 Real Closes
+## Scope
 
-- **Captured:** {total_proofs}/10
-- **Progress:** {(total_proofs/10)*100:.0f}%
-- **Remaining:** {max(0, 10 - total_proofs)}
+- **Purpose:** standalone audit/proof capture only
+- **Updates canonical close state:** no
+- **Suitable for canonical orchestration:** no
 
 ---
 
@@ -436,7 +460,7 @@ Runs every 15 minutes. Next check: {(datetime.now() + timedelta(minutes=15)).str
 
 ---
 
-*Real exit validation active. Evidence only, no assumptions.*
+*Standalone paper-trade exit proof monitoring. Evidence only; not authoritative execution.*
 """
         
         with open(EXIT_MONITOR_REPORT, 'w') as f:
