@@ -20,6 +20,7 @@ from models.position_state import get_open_positions
 from models.trade_schema import validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl
 from utils.system_health import SystemHealthManager
+from utils.runtime_logging import append_runtime_event
 PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 TIMEOUT_HISTORY = LOGS_DIR / "timeout-history.jsonl"
 TIMEOUT_REPORT = WORKSPACE / "TIMEOUT_MONITOR_REPORT.md"
@@ -479,6 +480,14 @@ No open positions to monitor.
 """
             with open(TIMEOUT_REPORT, 'w') as f:
                 f.write(report)
+            append_runtime_event(
+                stage='timeout_monitor',
+                exchange='system',
+                lifecycle_stage='monitoring',
+                status='WARN',
+                message='Timeout monitor ran with no open paper-trading positions',
+                metadata={'open_positions': 0, 'report_path': str(TIMEOUT_REPORT)},
+            )
             return
         
         print(f"Monitoring {len(self.positions)} positions...")
@@ -510,6 +519,18 @@ No open positions to monitor.
         print(f"[STATS] Report: {TIMEOUT_REPORT}")
         
         self.generate_report(tracked)
+        append_runtime_event(
+            stage='timeout_monitor',
+            exchange='system',
+            lifecycle_stage='monitoring',
+            status='INFO',
+            message='Timeout monitor completed for paper-trading open positions',
+            metadata={
+                'open_positions': len(self.positions),
+                'timeout_candidates': len(timeout_candidates),
+                'report_path': str(TIMEOUT_REPORT),
+            },
+        )
 
 
 def main():

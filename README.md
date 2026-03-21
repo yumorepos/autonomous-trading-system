@@ -71,7 +71,21 @@ Before running the orchestrator, verify runtime dependencies:
 
 ```bash
 python3 scripts/bootstrap-runtime-check.py
+python3 scripts/runtime-connectivity-check.py
 ```
+
+If you want a fully isolated environment and your machine has internet access to PyPI:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python scripts/bootstrap-runtime-check.py
+python scripts/runtime-connectivity-check.py
+```
+
+`runtime-connectivity-check.py` performs **read-only** API validation for the Hyperliquid `metaAndAssetCtxs` endpoint and the Polymarket Gamma `markets` endpoint, with explicit timeout handling and schema checks. It never places trades and only verifies paper-trading data reachability.
 
 ## Repository Layout
 
