@@ -30,6 +30,14 @@ The canonical operator path starts with `scripts/trading-agency-phase1.py`.
    - The orchestrator safely runs `scripts/timeout-monitor.py`, which reads authoritative state and writes timeout-tracking artifacts.
    - The orchestrator does **not** run `scripts/exit-monitor.py` in the canonical loop because that script currently writes exit-proof artifacts without performing the authoritative close-state update.
 
+## Non-Canonical Artifacts
+
+The repository still contains historical and exploratory material, but it should not be presented as active system behavior:
+
+- `scripts/archive/` contains legacy alternate implementations and simulation-only scripts.
+- `docs/archive/` contains historical reports, repair notes, and stale status documents retained only for audit provenance.
+- `scripts/polymarket-executor.py` is exploratory scaffold code and is not part of the active Phase 1 execution path.
+
 ## State Model
 
 The repository has two important state layers:

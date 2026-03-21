@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+ARCHIVED LEGACY TEST -- targeted the archived alternate trader, not the canonical implementation.
+
 Test Suite for Paper Trader Fixes
 Verifies: SHORT PnL, position IDs, multi-strategy, performance persistence
 """
