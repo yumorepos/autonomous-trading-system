@@ -113,6 +113,12 @@ def check_exit(position: dict) -> tuple[bool, str]:
     Check if position should exit
     Returns: (should_exit, reason)
     """
+    # Validate required fields
+    if not position.get('signal') or 'asset' not in position.get('signal', {}):
+        return False, None
+    if 'entry_price' not in position or 'entry_time' not in position:
+        return False, None
+    
     asset = position['signal']['asset']
     entry_price = position['entry_price']
     direction = position.get('direction', 'LONG')
@@ -190,6 +196,12 @@ def load_open_positions() -> list:
     # Filter to truly open positions using state file
     open_positions = []
     for pos in all_positions:
+        # Skip malformed records
+        if not pos.get('signal') or 'asset' not in pos.get('signal', {}):
+            continue
+        if 'entry_price' not in pos or 'entry_time' not in pos:
+            continue
+        
         position_id = pos.get('position_id')
         
         if not position_id:
