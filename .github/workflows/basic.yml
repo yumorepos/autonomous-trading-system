@@ -1,0 +1,52 @@
+name: basic
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  basic-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Python compile check
+        run: python -m compileall config docs models scripts tests utils
+
+      - name: Basic import test
+        run: |
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          import config.runtime
+          import models.position_state
+          import models.trade_schema
+          import utils.json_utils
+          import utils.system_health
+
+          repo_root = Path.cwd()
+          for script_name, module_name in [
+              ("scripts/trading-agency-phase1.py", "trading_agency_phase1"),
+              ("scripts/phase1-paper-trader.py", "phase1_paper_trader"),
+              ("scripts/phase1-signal-scanner.py", "phase1_signal_scanner"),
+              ("scripts/execution-safety-layer.py", "execution_safety_layer"),
+          ]:
+              spec = importlib.util.spec_from_file_location(module_name, repo_root / script_name)
+              module = importlib.util.module_from_spec(spec)
+              assert spec.loader is not None
+              spec.loader.exec_module(module)
+
+          print("basic imports ok")
+          PY
