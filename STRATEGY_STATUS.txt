@@ -1,0 +1,3 @@
+STRATEGIES:
+- Hyperliquid funding arbitrage: ACTIVE
+- Polymarket: DISABLED (scanner schema incomplete)
