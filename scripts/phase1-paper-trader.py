@@ -36,6 +36,29 @@ STOP_LOSS_PCT = -10.0
 TIMEOUT_HOURS = 24.0
 
 
+def log_non_canonical_signal(signal: dict | None, reason: str) -> None:
+    signal_type = (signal or {}).get('signal_type', 'unknown')
+    identifier = (signal or {}).get('asset') or (signal or {}).get('market') or 'unknown'
+    print(f"  [SKIP] SKIPPED_NON_CANONICAL_SIGNAL: {identifier} ({signal_type}) - {reason}")
+
+
+def validate_canonical_signal(signal: dict | None) -> tuple[bool, str]:
+    if not isinstance(signal, dict):
+        return False, "signal payload is not a dict"
+
+    if signal.get('signal_type') != 'funding_arbitrage':
+        return False, f"signal_type={signal.get('signal_type')!r} is not canonical funding_arbitrage"
+
+    missing_fields = [
+        field for field in ('asset', 'direction', 'entry_price')
+        if signal.get(field) is None
+    ]
+    if missing_fields:
+        return False, f"missing required fields: {missing_fields}"
+
+    return True, "canonical hyperliquid signal"
+
+
 class PaperTrader:
     """Paper trading engine for supported Phase 1 paper-trade signals."""
     
@@ -45,14 +68,12 @@ class PaperTrader:
         
     def execute(self):
         """Execute paper trade for any strategy type"""
-        signal_type = self.signal.get('signal_type')
-        
-        # ONLY funding_arbitrage supported (Polymarket disabled - schema incomplete)
-        if signal_type == 'funding_arbitrage':
-            return self.execute_hyperliquid()
-        else:
-            # Polymarket explicitly disabled (scanner missing required fields)
+        valid, reason = validate_canonical_signal(self.signal)
+        if not valid:
+            log_non_canonical_signal(self.signal, reason)
             return None
+
+        return self.execute_hyperliquid()
     
     def execute_hyperliquid(self):
         """Execute Hyperliquid funding arbitrage"""
@@ -322,10 +343,17 @@ def select_trade_candidate(
         return None, f"At capacity ({len(open_positions)}/{MAX_OPEN_POSITIONS})"
 
     unconsumed = filter_unconsumed_signals(signals)
-    good_signals = [
-        s for s in unconsumed
-        if s.get('ev_score', 0) >= MIN_EV_SCORE and s.get('timestamp')
-    ]
+    good_signals = []
+    for signal in unconsumed:
+        if signal.get('ev_score', 0) < MIN_EV_SCORE or not signal.get('timestamp'):
+            continue
+
+        valid, reason = validate_canonical_signal(signal)
+        if not valid:
+            log_non_canonical_signal(signal, reason)
+            continue
+
+        good_signals.append(signal)
 
     if allowed_signal_timestamp is not None:
         good_signals = [s for s in good_signals if s.get('timestamp') == allowed_signal_timestamp]
