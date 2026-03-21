@@ -2,8 +2,9 @@
 """
 DESTRUCTIVE TEST -- NEVER RUN AGAINST LIVE STATE
 Full Lifecycle Integration Test
-Tests: Entry -> State -> Exit -> Performance -> Validator
+Tests: Entry -> State -> simulated close record -> Performance
 Runs only inside a temporary workspace.
+This does not verify the live exit-detection path; it verifies isolated state/performance handling after a synthetic close record is written.
 """
 
 import json
