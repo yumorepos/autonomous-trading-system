@@ -25,7 +25,6 @@ class TimeoutMonitor:
     
     def __init__(self):
         self.positions = []
-        self.history = self.load_history()
         
     def load_history(self) -> Dict:
         """Load historical tracking data"""
@@ -56,23 +55,40 @@ class TimeoutMonitor:
         return None
     
     def load_positions(self) -> List[Dict]:
-        """Load open positions"""
+        """Load open positions from authoritative state"""
         positions = []
         
-        if PAPER_TRADES.exists():
-            with open(PAPER_TRADES) as f:
-                for line in f:
-                    if line.strip():
-                        trade = json.loads(line)
-                        if trade.get('status') == 'OPEN':
-                            positions.append(trade)
+        if not PAPER_TRADES.exists():
+            return []
+        
+        # Load state file
+        state = {}
+        if (WORKSPACE / "logs" / "position-state.json").exists():
+            with open(WORKSPACE / "logs" / "position-state.json") as f:
+                state = json.load(f)
+        
+        # Load trades - get latest version of each position
+        all_trades = {}
+        with open(PAPER_TRADES) as f:
+            for line in f:
+                if line.strip():
+                    trade = json.loads(line)
+                    pid = trade.get('position_id')
+                    if pid:
+                        all_trades[pid] = trade
+        
+        # Filter to OPEN only via state file
+        for pid, trade in all_trades.items():
+            if state.get(pid) == 'OPEN':
+                positions.append(trade)
         
         return positions
     
     def calculate_pnl_trend(self, asset: str, entry_time: str) -> Dict:
         """Calculate P&L trend over last 3-5 checks"""
+        history = self.load_history()
         key = (asset, entry_time)
-        checks = self.history.get(key, [])
+        checks = history.get(key, [])
         
         # Get last 5 checks
         recent = checks[-5:] if len(checks) > 5 else checks
@@ -196,6 +212,22 @@ class TimeoutMonitor:
                 'hours_to_timeout': time_remaining
             }
         }
+    
+    def load_history(self) -> Dict:
+        """Load historical tracking data"""
+        history = {}
+        
+        if TIMEOUT_HISTORY.exists():
+            with open(TIMEOUT_HISTORY) as f:
+                for line in f:
+                    if line.strip():
+                        data = json.loads(line)
+                        key = (data['asset'], data['entry_time'])
+                        if key not in history:
+                            history[key] = []
+                        history[key].append(data)
+        
+        return history
     
     def monitor_position(self, position: Dict) -> Dict:
         """Monitor single position with timeout focus"""
@@ -345,6 +377,19 @@ class TimeoutMonitor:
         
         if not self.positions:
             print("⚠️  No open positions")
+            # Generate empty report
+            report = f"""# Timeout Monitor Report
+**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}
+**Purpose:** Enhanced monitoring for timeout-driven exits
+
+---
+
+## TIMEOUT CANDIDATES: 0
+
+No open positions to monitor.
+"""
+            with open(TIMEOUT_REPORT, 'w') as f:
+                f.write(report)
             return
         
         print(f"Monitoring {len(self.positions)} positions...")
