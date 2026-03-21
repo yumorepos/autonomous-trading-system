@@ -7,16 +7,21 @@ Enforces strict lifecycle management with quarantine buffer and human approval g
 """
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-AGENCY_REPORT = WORKSPACE / "logs" / "agency-phase1-report.json"
-STRATEGY_REGISTRY = WORKSPACE / "logs" / "strategy-registry.json"
-SUPERVISOR_DECISIONS = WORKSPACE / "logs" / "supervisor-decisions.jsonl"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+AGENCY_REPORT = LOGS_DIR / "agency-phase1-report.json"
+STRATEGY_REGISTRY = LOGS_DIR / "strategy-registry.json"
+SUPERVISOR_DECISIONS = LOGS_DIR / "supervisor-decisions.jsonl"
 DECISION_REPORT = WORKSPACE / "SUPERVISOR_GOVERNANCE_REPORT.md"
-HUMAN_APPROVAL_QUEUE = WORKSPACE / "logs" / "human-approval-queue.json"
+HUMAN_APPROVAL_QUEUE = LOGS_DIR / "human-approval-queue.json"
 
 # Three-Stage Governance Criteria
 VALIDATION_CRITERIA = {
@@ -278,7 +283,7 @@ def evaluate_quarantine(strategy_name: str, metrics: Dict, gov: StrategyGovernan
 
 def load_paper_trades() -> Dict[str, List[Dict]]:
     """Load paper trades grouped by strategy"""
-    trades_file = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
+    trades_file = LOGS_DIR / "phase1-paper-trades.jsonl"
     
     if not trades_file.exists():
         return {}

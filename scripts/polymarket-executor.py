@@ -6,6 +6,7 @@ Architecture mirrors Hyperliquid executor for consistency
 """
 
 import json
+import sys
 import requests
 import time
 from datetime import datetime, timezone
@@ -13,9 +14,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from decimal import Decimal
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-POLYMARKET_TRADES = WORKSPACE / "logs" / "polymarket-trades.jsonl"
-POLYMARKET_STATE = WORKSPACE / "logs" / "polymarket-state.json"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+POLYMARKET_TRADES = LOGS_DIR / "polymarket-trades.jsonl"
+POLYMARKET_STATE = LOGS_DIR / "polymarket-state.json"
 
 # Polymarket API endpoints
 GAMMA_API = "https://gamma-api.polymarket.com"

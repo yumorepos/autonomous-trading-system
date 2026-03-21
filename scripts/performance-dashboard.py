@@ -5,31 +5,29 @@ Shows: total trades, win rate, avg P&L, per-exchange stats, open vs closed
 """
 
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.trade_schema import normalize_trade_record
+from utils.json_utils import safe_read_jsonl
 
 class PerformanceDashboard:
     """CLI performance dashboard"""
     
     def __init__(self):
-        self.hl_trades = self.load_trades(WORKSPACE / "logs" / "phase1-paper-trades.jsonl")
-        self.pm_trades = self.load_trades(WORKSPACE / "logs" / "polymarket-trades.jsonl")
-        self.test_trades = self.load_trades(WORKSPACE / "logs" / "test-lifecycle-trades.jsonl")
+        self.hl_trades = self.load_trades(LOGS_DIR / "phase1-paper-trades.jsonl")
+        self.pm_trades = self.load_trades(LOGS_DIR / "polymarket-trades.jsonl")
     
     def load_trades(self, file_path: Path) -> List[Dict]:
         """Load trades from JSONL"""
-        if not file_path.exists():
-            return []
-        
-        trades = []
-        with open(file_path) as f:
-            for line in f:
-                if line.strip():
-                    trades.append(json.loads(line))
-        return trades
+        return [normalize_trade_record(record) for record in safe_read_jsonl(file_path)]
     
     def calculate_stats(self, trades: List[Dict]) -> Dict:
         """Calculate performance stats"""
@@ -48,10 +46,10 @@ class PerformanceDashboard:
         closed_trades = [t for t in trades if t.get('status') == 'CLOSED']
         open_trades = [t for t in trades if t.get('status') == 'OPEN']
         
-        winners = [t for t in closed_trades if t.get('pnl', 0) > 0]
-        losers = [t for t in closed_trades if t.get('pnl', 0) < 0]
+        winners = [t for t in closed_trades if (t.get('realized_pnl_usd') or 0) > 0]
+        losers = [t for t in closed_trades if (t.get('realized_pnl_usd') or 0) < 0]
         
-        total_pnl = sum(t.get('pnl', 0) for t in closed_trades)
+        total_pnl = sum(t.get('realized_pnl_usd', 0) or 0 for t in closed_trades)
         avg_pnl = total_pnl / len(closed_trades) if closed_trades else 0
         win_rate = (len(winners) / len(closed_trades) * 100) if closed_trades else 0
         
@@ -69,12 +67,11 @@ class PerformanceDashboard:
     def display(self):
         """Display performance dashboard"""
         # Calculate combined stats
-        all_trades = self.hl_trades + self.pm_trades + self.test_trades
+        all_trades = self.hl_trades + self.pm_trades
         combined_stats = self.calculate_stats(all_trades)
         
         hl_stats = self.calculate_stats(self.hl_trades)
         pm_stats = self.calculate_stats(self.pm_trades)
-        test_stats = self.calculate_stats(self.test_trades)
         
         print("="*80)
         print("PERFORMANCE DASHBOARD")
@@ -116,14 +113,6 @@ class PerformanceDashboard:
         print(f"  P&L:      ${pm_stats['total_pnl']:+.2f}")
         
         print()
-        print("Test Trades (Simulated)")
-        print(f"  Total:    {test_stats['total']}")
-        print(f"  Open:     {test_stats['open']}")
-        print(f"  Closed:   {test_stats['closed']}")
-        print(f"  Win Rate: {test_stats['win_rate']:.1f}%")
-        print(f"  P&L:      ${test_stats['total_pnl']:+.2f}")
-        
-        print()
         print("="*80)
         
         # Open positions detail
@@ -134,9 +123,9 @@ class PerformanceDashboard:
             
             open_trades = [t for t in all_trades if t.get('status') == 'OPEN']
             for trade in open_trades[:10]:  # Show max 10
-                exchange = trade.get('source', trade.get('exchange', 'Unknown'))
-                asset = trade.get('asset', 'Unknown')
-                entry = trade.get('entry_price', trade.get('price', 0))
+                exchange = trade.get('raw', {}).get('source', trade.get('raw', {}).get('exchange', 'Unknown'))
+                asset = trade.get('symbol', 'Unknown')
+                entry = trade.get('entry_price', 0) or 0
                 print(f"  [{exchange}] {asset} @ ${entry:.2f}")
             
             if len(open_trades) > 10:

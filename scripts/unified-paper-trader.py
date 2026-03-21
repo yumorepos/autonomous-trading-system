@@ -12,19 +12,23 @@ from datetime import datetime, timezone
 from typing import Dict, List
 
 # Add scripts to path for imports
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-sys.path.insert(0, str(WORKSPACE / "scripts"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 # Import PolymarketExecutor directly
 import importlib.util
-spec = importlib.util.spec_from_file_location("polymarket_executor", WORKSPACE / "scripts" / "polymarket-executor.py")
+spec = importlib.util.spec_from_file_location("polymarket_executor", REPO_ROOT / "scripts" / "polymarket-executor.py")
 pm_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pm_module)
 PolymarketExecutor = pm_module.PolymarketExecutor
 
-SIGNALS_FILE = WORKSPACE / "logs" / "phase1-signals.jsonl"
-PAPER_TRADES_FILE = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
-PERFORMANCE_FILE = WORKSPACE / "logs" / "phase1-performance.json"
+SIGNALS_FILE = LOGS_DIR / "phase1-signals.jsonl"
+PAPER_TRADES_FILE = LOGS_DIR / "phase1-paper-trades.jsonl"
+PERFORMANCE_FILE = LOGS_DIR / "phase1-performance.json"
 
 # Trading parameters
 MAX_OPEN_POSITIONS = 5

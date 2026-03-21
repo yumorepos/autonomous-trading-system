@@ -6,17 +6,23 @@ FIXES: SHORT PnL, position IDs, multi-strategy, performance persistence
 """
 
 import json
+import sys
 import os
 import requests
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-PAPER_TRADES_FILE = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
-PERFORMANCE_FILE = WORKSPACE / "logs" / "phase1-performance.json"
-SIGNALS_FILE = WORKSPACE / "logs" / "phase1-signals.jsonl"
-POSITION_STATE_FILE = WORKSPACE / "logs" / "position-state.json"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
+PAPER_TRADES_FILE = LOGS_DIR / "phase1-paper-trades.jsonl"
+PERFORMANCE_FILE = LOGS_DIR / "phase1-performance.json"
+SIGNALS_FILE = LOGS_DIR / "phase1-signals.jsonl"
+POSITION_STATE_FILE = LOGS_DIR / "position-state.json"
 
 PAPER_BALANCE = 97.80  # Starting paper balance
 MAX_OPEN_POSITIONS = 3  # Hard cap
@@ -156,21 +162,12 @@ def load_position_state() -> dict:
     FIXED: Replaces fragile JSONL append-only reconstruction
     State file tracks: position_id -> status mapping
     """
-    if not POSITION_STATE_FILE.exists():
-        return {}
-    
-    try:
-        with open(POSITION_STATE_FILE) as f:
-            return json.load(f)
-    except:
-        return {}
+    return safe_read_json(POSITION_STATE_FILE) or {}
 
 
 def save_position_state(state: dict):
     """Save position state to file"""
-    POSITION_STATE_FILE.parent.mkdir(exist_ok=True)
-    with open(POSITION_STATE_FILE, 'w') as f:
-        json.dump(state, f, indent=2)
+    write_json_atomic(POSITION_STATE_FILE, state)
 
 
 def load_open_positions() -> list:
@@ -179,19 +176,11 @@ def load_open_positions() -> list:
     
     FIXED: Uses position_id and state file to prevent ghost positions
     """
-    if not PAPER_TRADES_FILE.exists():
-        return []
-    
     # Load position state
     state = load_position_state()
     
     # Load all positions from log
-    all_positions = []
-    with open(PAPER_TRADES_FILE) as f:
-        for line in f:
-            if line.strip():
-                trade = json.loads(line)
-                all_positions.append(trade)
+    all_positions = safe_read_jsonl(PAPER_TRADES_FILE)
     
     # Filter to truly open positions using state file
     open_positions = []
@@ -218,16 +207,7 @@ def load_open_positions() -> list:
 
 def load_latest_signals(limit: int = 10) -> list:
     """Load latest signals from log"""
-    if not SIGNALS_FILE.exists():
-        return []
-    
-    signals = []
-    with open(SIGNALS_FILE) as f:
-        for line in f:
-            if line.strip():
-                signals.append(json.loads(line))
-    
-    return signals[-limit:]
+    return safe_read_jsonl(SIGNALS_FILE)[-limit:]
 
 
 def filter_unconsumed_signals(signals: list) -> list:
@@ -235,18 +215,12 @@ def filter_unconsumed_signals(signals: list) -> list:
     Filter out signals that have already been consumed
     A signal is consumed if a position (open or closed) exists with matching signal timestamp
     """
-    if not PAPER_TRADES_FILE.exists():
-        return signals
-    
     # Collect all consumed signal timestamps
     consumed_timestamps = set()
-    with open(PAPER_TRADES_FILE) as f:
-        for line in f:
-            if line.strip():
-                trade = json.loads(line)
-                sig_timestamp = trade.get('signal', {}).get('timestamp')
-                if sig_timestamp:
-                    consumed_timestamps.add(sig_timestamp)
+    for trade in safe_read_jsonl(PAPER_TRADES_FILE):
+        sig_timestamp = trade.get('signal', {}).get('timestamp')
+        if sig_timestamp:
+            consumed_timestamps.add(sig_timestamp)
     
     # Filter to unconsumed only
     unconsumed = [s for s in signals if s.get('timestamp') not in consumed_timestamps]
@@ -260,17 +234,11 @@ def calculate_performance() -> dict:
     
     FIXED: Actually writes to file (was missing f.write())
     """
-    if not PAPER_TRADES_FILE.exists():
-        return {}
-    
     # Load all closed trades
     closed_trades = []
-    with open(PAPER_TRADES_FILE) as f:
-        for line in f:
-            if line.strip():
-                trade = json.loads(line)
-                if trade.get('status') == 'CLOSED':
-                    closed_trades.append(trade)
+    for trade in safe_read_jsonl(PAPER_TRADES_FILE):
+        if trade.get('status') == 'CLOSED':
+            closed_trades.append(trade)
     
     if not closed_trades:
         return {'total_trades': 0}
@@ -292,9 +260,7 @@ def calculate_performance() -> dict:
     }
     
     # FIXED: Actually write to file
-    PERFORMANCE_FILE.parent.mkdir(exist_ok=True)
-    with open(PERFORMANCE_FILE, 'w') as f:
-        json.dump(performance, f, indent=2)
+    write_json_atomic(PERFORMANCE_FILE, performance)
     
     return performance
 

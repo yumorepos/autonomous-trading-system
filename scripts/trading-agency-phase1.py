@@ -6,13 +6,19 @@ Reports results back to supervisor system
 """
 
 import json
+import sys
 import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-AGENCY_REPORT = WORKSPACE / "logs" / "agency-phase1-report.json"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
+AGENCY_REPORT = LOGS_DIR / "agency-phase1-report.json"
 
 
 def run_signal_scanner():
@@ -20,7 +26,7 @@ def run_signal_scanner():
     print("🔍 Agency: Running signal scanner...")
     
     result = subprocess.run(
-        ["python3", str(WORKSPACE / "scripts" / "phase1-signal-scanner.py")],
+        ["python3", str(REPO_ROOT / "scripts" / "phase1-signal-scanner.py")],
         capture_output=True, text=True, timeout=60
     )
     
@@ -35,9 +41,13 @@ def run_signal_scanner():
 def run_social_scanner():
     """Execute social media scanner"""
     print("🐦 Agency: Running social scanner...")
-    
+    social_scanner = REPO_ROOT / "scripts" / "phase1-social-scanner.py"
+    if not social_scanner.exists():
+        print("  ⚠️ Social scanner skipped: script not found")
+        return {'status': 'skipped', 'note': 'phase1-social-scanner.py not present'}
+
     result = subprocess.run(
-        ["python3", str(WORKSPACE / "scripts" / "phase1-social-scanner.py")],
+        ["python3", str(social_scanner)],
         capture_output=True, text=True, timeout=60
     )
     
@@ -54,7 +64,7 @@ def run_paper_trader():
     print("💼 Agency: Running paper trader...")
     
     result = subprocess.run(
-        ["python3", str(WORKSPACE / "scripts" / "phase1-paper-trader.py")],
+        ["python3", str(REPO_ROOT / "scripts" / "phase1-paper-trader.py")],
         capture_output=True, text=True, timeout=60
     )
     
@@ -68,48 +78,18 @@ def run_paper_trader():
 
 def load_performance_data():
     """Load latest performance metrics"""
-    perf_file = WORKSPACE / "logs" / "phase1-performance.json"
-    
-    if perf_file.exists():
-        with open(perf_file) as f:
-            return json.load(f)
-    
-    return None
+    return safe_read_json(LOGS_DIR / "phase1-performance.json")
 
 
 def load_open_positions():
-    """Load current open positions"""
-    trades_file = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
-    
-    if not trades_file.exists():
-        return []
-    
-    open_pos = []
-    with open(trades_file) as f:
-        for line in f:
-            if line.strip():
-                trade = json.loads(line)
-                if trade['status'] == 'OPEN':
-                    open_pos.append(trade)
-    
-    return open_pos
+    """Load current open positions from authoritative state only."""
+    state = safe_read_json(LOGS_DIR / "position-state.json") or {}
+    return [position_id for position_id, status in state.items() if status == 'OPEN']
 
 
 def load_latest_signals():
     """Load latest signals"""
-    signals_file = WORKSPACE / "logs" / "phase1-signals.jsonl"
-    
-    if not signals_file.exists():
-        return []
-    
-    signals = []
-    with open(signals_file) as f:
-        for line in f:
-            if line.strip():
-                signals.append(json.loads(line))
-    
-    # Return last 10 signals
-    return signals[-10:]
+    return safe_read_jsonl(LOGS_DIR / "phase1-signals.jsonl")[-10:]
 
 
 def generate_agency_report(scanner_result, social_result, trader_result):
@@ -177,9 +157,8 @@ def generate_agency_report(scanner_result, social_result, trader_result):
     
     # Save report
     AGENCY_REPORT.parent.mkdir(exist_ok=True)
-    with open(AGENCY_REPORT, 'w') as f:
-        json.dump(report, f, indent=2)
-    
+    write_json_atomic(AGENCY_REPORT, report)
+
     return report
 
 

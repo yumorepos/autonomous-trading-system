@@ -10,8 +10,12 @@ import time
 from pathlib import Path
 from datetime import datetime, timezone
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-sys.path.insert(0, str(WORKSPACE / "scripts"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 # Import components
 import importlib.util
@@ -22,14 +26,14 @@ def load_module(name, path):
     spec.loader.exec_module(module)
     return module
 
-pm_executor = load_module("pm_executor", WORKSPACE / "scripts" / "polymarket-executor.py")
+pm_executor = load_module("pm_executor", REPO_ROOT / "scripts" / "polymarket-executor.py")
 PolymarketExecutor = pm_executor.PolymarketExecutor
 
 # Test files
-SIGNALS_FILE = WORKSPACE / "logs" / "phase1-signals.jsonl"
-PM_TRADES = WORKSPACE / "logs" / "polymarket-trades.jsonl"
-PM_STATE = WORKSPACE / "logs" / "polymarket-state.json"
-HL_TRADES = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
+SIGNALS_FILE = LOGS_DIR / "phase1-signals.jsonl"
+PM_TRADES = LOGS_DIR / "polymarket-trades.jsonl"
+PM_STATE = LOGS_DIR / "polymarket-state.json"
+HL_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 
 class SystemAuditor:
     """Complete system validation"""
