@@ -2,132 +2,88 @@
 
 ## Scope
 
-This document describes the **current canonical Phase 1 paper-trading system** in this repository. It is intentionally scoped to what the code actively supports today:
+This document describes the **current canonical Phase 1 paper-trading system** in this repository.
 
-- **Paper trading only**
-- **Hyperliquid execution path only**
-- **Polymarket disabled/incomplete in the active flow**
+Supported runtime modes:
+- **`hyperliquid_only`** — default canonical mode
+- **`polymarket_only`** — optional experimental paper mode
+- **`mixed`** — optional paper-only evaluation mode
+
+The architecture is still **paper trading only**. No live exchange execution path is supported.
 
 ## Execution Flow
 
 The canonical operator path starts with `scripts/trading-agency-phase1.py`.
 
-1. **Optional component detection**
-   - The orchestrator reports whether optional components exist, but does not promote them into the active path automatically.
-2. **Data integrity gate**
+1. **Bootstrap/runtime verification**
+   - `scripts/bootstrap-runtime-check.py` verifies clean-environment runtime dependencies before the orchestrator loads networked scripts.
+2. **Optional component detection**
+   - The orchestrator reports whether optional components are actually active for the selected mode.
+3. **Data integrity gate**
    - `scripts/data-integrity-layer.py` validates source health before scanning.
-3. **Signal scanning**
-   - `scripts/phase1-signal-scanner.py` fetches market data and writes candidate signals.
-   - In practice, the active trade path is the Hyperliquid funding-arbitrage branch.
-4. **Pre-trade safety validation**
-   - `scripts/execution-safety-layer.py` evaluates freshness, duplicate risk, exchange health, size limits, and circuit-breaker conditions.
-5. **Paper trade planning**
-   - `scripts/phase1-paper-trader.py` builds an execution plan for entries and exits.
-6. **Authoritative state update**
+   - Hyperliquid is checked when Hyperliquid mode is active.
+   - Polymarket is checked only when Polymarket mode is active.
+4. **Signal scanning**
+   - `scripts/phase1-signal-scanner.py` emits canonical executable paper signals.
+   - Hyperliquid signals use the funding-arbitrage schema.
+   - Polymarket signals use a canonical binary-market paper-trading schema.
+5. **Pre-trade safety validation**
+   - `scripts/execution-safety-layer.py` validates the next candidate entry.
+   - Exchange health, liquidity, spread, freshness, and circuit-breaker checks are exchange-aware.
+6. **Paper trade planning**
+   - `scripts/phase1-paper-trader.py` builds entry and exit records for both exchanges using one canonical persistence model.
+7. **Authoritative state update**
    - Planned trade records are persisted to `workspace/logs/phase1-paper-trades.jsonl`.
    - Canonical open-position state is updated in `workspace/logs/position-state.json`.
-7. **Monitor/report stage**
-   - The orchestrator safely runs `scripts/timeout-monitor.py`, which reads authoritative state and writes timeout-tracking artifacts.
-   - The orchestrator does **not** run `scripts/exit-monitor.py` in the canonical loop because that script currently writes exit-proof artifacts without performing the authoritative close-state update.
+8. **Monitor/report stage**
+   - The orchestrator runs `scripts/timeout-monitor.py`, which reads canonical open positions and writes monitoring artifacts.
+   - The orchestrator does **not** run `scripts/exit-monitor.py` in the canonical loop because that script writes proof artifacts without performing authoritative close-state persistence.
 
-## Non-Canonical Artifacts
+## Canonical State Model
 
-The repository still contains historical and exploratory material, but it should not be presented as active system behavior:
-
-- `scripts/archive/` contains legacy alternate implementations and simulation-only scripts.
-- `docs/archive/` contains historical reports, repair notes, and stale status documents retained only for audit provenance.
-- `scripts/polymarket-executor.py` is exploratory scaffold code and is not part of the active Phase 1 execution path.
-
-## State Model
-
-The repository has two important state layers:
-
-### 1. Append-only trade history
+### Append-only trade history
 - File: `workspace/logs/phase1-paper-trades.jsonl`
-- Purpose: durable event log of paper trade records
+- Purpose: durable event log of canonical paper-trade records for all exchanges
 - Shape: normalized by `models/trade_schema.py`
 
-### 2. Authoritative open-position state
+### Authoritative open-position state
 - File: `workspace/logs/position-state.json`
 - Purpose: current open positions only
 - Shape: managed by `models/position_state.py`
 
-### Supporting operator/system state
+### Supporting state
+- `workspace/logs/phase1-performance.json` stores normalized closed-trade performance summaries.
 - `workspace/operator_control.json` stores human override inputs.
 - `workspace/system_status.json` stores current health, recovery, and permissions decisions.
-- `workspace/system_health.json` and incident logs preserve escalation/recovery history.
 
-## Safety Layers
+## Exchange-Specific Truth
 
-Safety is not a single script; it is a set of controls applied before and after planning:
+### Hyperliquid
+- Default mode and best-supported path
+- Uses funding-arbitrage scanner signals
+- Remains the baseline paper-trading mode for reviewers/operators
 
-### Data integrity layer
-- Validates source availability and basic market-data reliability before scanning.
-- Prevents the scanner from running under unacceptable data conditions.
+### Polymarket
+- Optional mode only
+- Paper-trading only
+- Experimental until broader runtime evidence exists
+- Uses canonical binary-market paper signals and canonical persistence
+- Real execution remains intentionally unsupported
 
-### Execution safety layer
-- Checks signal freshness.
-- Blocks duplicate orders within a configured window.
-- Enforces position-size and portfolio limits.
-- Measures exchange/API health and latency.
-- Maintains circuit-breaker state and kill-switch behavior.
+## Non-Canonical Artifacts
 
-### Schema and state guards
-- `models/trade_schema.py` normalizes legacy records into one canonical shape.
-- `models/position_state.py` rejects malformed open-position records and protects status transitions.
+The repository still contains supporting scripts that are useful for review but should not be mistaken for authoritative execution:
 
-## Incident System
-
-`utils/system_health.py` centralizes incident handling.
-
-It tracks:
-- incident severity (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
-- escalation windows
-- active vs resolved incidents
-- affected systems/components
-- operator actions
-- anti-flapping and cooldown windows
-
-The intent is operational truthfulness: failures are recorded, escalated, and reflected into system status rather than silently ignored.
-
-## Recovery System
-
-Recovery decisions are also managed through `SystemHealthManager`.
-
-Key behaviors:
-- `HEALTHY`, `DEGRADED`, and `CRITICAL` health states
-- cooldown transitions from critical to degraded and degraded to healthy
-- anti-flapping locks when status changes too often
-- computed trading permissions such as:
-  - allow new trades
-  - allow monitoring
-  - allow exits
-
-This means the system can continue monitoring or exiting even when new entries are blocked.
-
-## Operator Controls
-
-Human controls live in `workspace/operator_control.json`.
-
-Current control categories:
-- `manual_mode`
-- `trading_override`
-- `recovery_override`
-- operator notes and timestamps
-
-These controls are normalized, validated, and audit-logged. They allow an operator to:
-- keep the system in normal automatic mode
-- restrict or halt new trade entry
-- hold recovery status at a more conservative level
-- document why an override was applied
+- `scripts/polymarket-executor.py` — standalone helper/scaffold, not the canonical Polymarket path
+- `scripts/exit-monitor.py` — proof/audit generator, not authoritative close persistence
+- `scripts/archive/` — legacy or simulation-only artifacts
+- `docs/archive/` — historical reports and prior audit history
 
 ## What Is Explicitly Out of Scope
 
-To keep the repository truthful, the following should **not** be presented as active capabilities:
+To keep the repository truthful, the following should **not** be presented as current capabilities:
 
 - live capital deployment
 - production-ready exchange execution
-- active Polymarket trading
-- multi-exchange orchestration in the canonical path
-
-Historical documents that made stronger claims were archived for reference only.
+- autonomous real-money Polymarket or Hyperliquid trading
+- anything beyond paper-trading orchestration and truth-based operational review

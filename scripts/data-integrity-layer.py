@@ -19,7 +19,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from config.runtime import (
+    WORKSPACE_ROOT as WORKSPACE,
+    LOGS_DIR,
+    DATA_DIR,
+    TRADING_MODE,
+    mode_includes_hyperliquid,
+    mode_includes_polymarket,
+)
 from utils.system_health import SystemHealthManager
 DATA_STATE = LOGS_DIR / "data-integrity-state.json"
 REJECTED_SIGNALS = LOGS_DIR / "rejected-signals.jsonl"
@@ -763,6 +770,7 @@ def main():
     print("=" * 80)
     print("DATA INTEGRITY & SIGNAL RELIABILITY LAYER")
     print(f"Check Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}")
+    print(f"Trading Mode: {TRADING_MODE}")
     print("=" * 80)
     print()
     
@@ -771,25 +779,25 @@ def main():
     # Check source health
     print("Checking data sources...")
     
-    hl_ok, hl_latency, hl_error = integrity.check_source_health(
-        'hyperliquid',
-        'https://api.hyperliquid.xyz/info'
-    )
-    
-    if hl_ok:
-        print(f"  Hyperliquid: [OK] UP ({hl_latency:.0f}ms)")
-    else:
-        print(f"  Hyperliquid: [FAIL] {hl_error}")
-    
-    pm_ok, pm_latency, pm_error = integrity.check_source_health(
-        'polymarket',
-        'https://gamma-api.polymarket.com/markets'
-    )
-    
-    if pm_ok:
-        print(f"  Polymarket: [OK] UP ({pm_latency:.0f}ms)")
-    else:
-        print(f"  Polymarket: [FAIL] {pm_error}")
+    if mode_includes_hyperliquid(TRADING_MODE):
+        hl_ok, hl_latency, hl_error = integrity.check_source_health(
+            'hyperliquid',
+            'https://api.hyperliquid.xyz/info'
+        )
+        if hl_ok:
+            print(f"  Hyperliquid: [OK] UP ({hl_latency:.0f}ms)")
+        else:
+            print(f"  Hyperliquid: [FAIL] {hl_error}")
+
+    if mode_includes_polymarket(TRADING_MODE):
+        pm_ok, pm_latency, pm_error = integrity.check_source_health(
+            'polymarket',
+            'https://gamma-api.polymarket.com/markets'
+        )
+        if pm_ok:
+            print(f"  Polymarket: [OK] UP ({pm_latency:.0f}ms)")
+        else:
+            print(f"  Polymarket: [FAIL] {pm_error}")
     
     print()
     

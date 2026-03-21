@@ -1,54 +1,61 @@
 # Autonomous Trading System
 
-Version: 4.0  
-Status: Research repository for paper-trading orchestration only
+Version: 5.0  
+Status: Research repository for orchestrated paper trading only
 
-This repository documents and runs a **paper-trading-only** research system. The current canonical path is the **Hyperliquid Phase 1 flow**. **Polymarket is present only as disabled or incomplete exploratory work and is not part of the active execution path.**
+This repository runs a **paper-trading-only** research system with one canonical architecture and three truthful runtime modes:
+
+- `hyperliquid_only` — default canonical mode
+- `polymarket_only` — optional experimental paper mode
+- `mixed` — optional side-by-side paper evaluation mode
+
+**Hyperliquid remains the default path. Polymarket is now wired into the same canonical paper-trading flow, but it is still optional, paper-only, and experimental. No live trading path is supported.**
 
 ## Current Truthful Status
 
-- **Execution mode:** Paper trading only.
-- **Canonical exchange path:** Hyperliquid only.
-- **Polymarket:** Disabled/incomplete in the canonical flow.
-- **Audience:** Portfolio/research review, not live deployment.
-- **Production claim:** Removed intentionally; this repo should be treated as an experimental operating record.
+- **Execution mode:** paper trading only
+- **Default exchange path:** Hyperliquid
+- **Optional exchange path:** Polymarket paper trading
+- **Live trading:** unsupported
+- **Audience:** research, audit, portfolio review
 
-## What the Active System Actually Does
+## Canonical Architecture
 
 The active orchestrator runs a fixed Phase 1 loop:
 
-1. Data integrity gate validates source health.
-2. Hyperliquid scanner collects funding-arbitrage signals.
-3. Execution safety validates the next candidate entry.
-4. The paper trader creates or closes **paper** positions.
-5. Authoritative state is updated in `workspace/logs/`.
-6. The orchestrator monitor stage runs the timeout monitor and records a truthful status snapshot.
-7. The exit monitor remains a standalone script because it currently writes exit-proof artifacts without updating the authoritative close state.
-
-The repository contains additional experimental scripts and historical reports, but they are **not** the source of truth unless explicitly referenced by the current canonical flow.
+1. Bootstrap/runtime dependency check
+2. Data integrity gate validates enabled sources
+3. Scanner generates canonical paper-trading signals for the selected mode
+4. Execution safety validates the next candidate entry
+5. Paper trader plans and persists entry/exit records
+6. Authoritative state is updated in `workspace/logs/`
+7. Timeout monitor reads canonical open positions and writes monitoring artifacts
+8. Supervisor/analytics scripts remain optional support tools, not the authoritative execution path
 
 ## Canonical Entry Point
 
-Do **not** run `python main.py`; there is no active `main.py` orchestrator in this repository.
-
-Use the actual Phase 1 orchestrator instead:
+Run the orchestrator with the desired paper-trading mode:
 
 ```bash
-python3 scripts/trading-agency-phase1.py
+python3 scripts/bootstrap-runtime-check.py
+OPENCLAW_TRADING_MODE=hyperliquid_only python3 scripts/trading-agency-phase1.py
+OPENCLAW_TRADING_MODE=polymarket_only python3 scripts/trading-agency-phase1.py
+OPENCLAW_TRADING_MODE=mixed python3 scripts/trading-agency-phase1.py
 ```
 
 Useful supporting commands:
 
 ```bash
 python3 scripts/timeout-monitor.py
-python3 scripts/exit-monitor.py
-python3 scripts/supervisor-governance.py
 python3 scripts/execution-safety-layer.py
+python3 scripts/performance-dashboard.py
+python3 scripts/supervisor-governance.py
 ```
 
 Notes:
-- `timeout-monitor.py` is the monitor script the orchestrator can safely invoke in the canonical loop.
-- `exit-monitor.py` is still a standalone audit script; it is **not** run by the orchestrator because it can emit exit-proof artifacts without authoritative close persistence.
+- `timeout-monitor.py` is the only monitor script run by the orchestrator.
+- `exit-monitor.py` is a standalone proof/audit script and is not part of authoritative close-state persistence.
+- `polymarket-executor.py` remains a standalone helper/non-canonical scaffold; the canonical Polymarket paper path runs through the same orchestrator + trader + canonical persistence flow as Hyperliquid.
 
 ## Environment Setup
 
@@ -60,21 +67,27 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Before running the orchestrator, verify runtime dependencies:
+
+```bash
+python3 scripts/bootstrap-runtime-check.py
+```
+
 ## Repository Layout
 
 ```text
-config/      Runtime path configuration.
-docs/        Active documentation plus archived historical status reports.
+config/      Runtime path configuration and mode selection helpers.
+docs/        Active documentation plus historical/audit materials.
 models/      Canonical trade and position-state schemas.
-scripts/     Operational scripts used by the paper-trading workflow.
-tests/       Destructive/manual validation scripts.
+scripts/     Operational scripts for paper-trading workflow and support tools.
+tests/       Temp-workspace and schema/bootstrap verification scripts.
 utils/       JSON helpers and system health management.
 workspace/   Runtime state, operator controls, logs, and generated artifacts.
 ```
 
 ## `workspace/` Structure
 
-`workspace/` is the runtime area created and maintained by `config/runtime.py`. By default it is local to this repository, but it can be relocated with `OPENCLAW_WORKSPACE`.
+`workspace/` is created and maintained by `config/runtime.py`. By default it is local to this repository, but it can be relocated with `OPENCLAW_WORKSPACE`.
 
 Typical contents:
 
@@ -86,27 +99,41 @@ workspace/
 └── system_status.json     Latest computed health/recovery status
 ```
 
-Notes:
+Canonical state files:
 
-- `workspace/logs/position-state.json` is the authoritative open-position state file.
-- `workspace/logs/phase1-paper-trades.jsonl` is the append-only paper trade log.
-- Many reports are generated into `workspace/` during script execution.
+- `workspace/logs/phase1-signals.jsonl` — append-only scanner output
+- `workspace/logs/phase1-paper-trades.jsonl` — append-only canonical paper trade log for all exchanges
+- `workspace/logs/position-state.json` — authoritative open-position state only
+- `workspace/logs/phase1-performance.json` — normalized closed-trade performance summary
 
-## Reproducibility Notes
+## Runtime Modes
 
-- Runtime directories are auto-created by `config/runtime.py`.
-- Network access is required for live market data reads from Hyperliquid.
-- Paper-trading behavior depends on current market conditions and the existing files in `workspace/logs/`.
-- Historical “FINAL” or “VERIFIED” artifacts that overstated capability were moved to `docs/archive/`.
-- Legacy alternate implementations and simulation-only scripts were moved to `scripts/archive/` so they are not confused with the active trading path.
+### `hyperliquid_only`
+- default mode
+- scans Hyperliquid only
+- validates Hyperliquid only in data-integrity scope
+- canonical baseline mode for reviewers
 
-## Documentation Map
+### `polymarket_only`
+- optional mode
+- scans Polymarket only
+- paper-trading only
+- experimental until more runtime evidence exists
 
-- `docs/SYSTEM_ARCHITECTURE.md` — current operator-facing system summary.
-- `SYSTEM_STATUS.md` — current scoped status summary.
-- `docs/REPO_TRUTHFULNESS_AUDIT.md` — cleanup audit showing what was kept active vs archived.
-- `docs/archive/` — historical documents retained for audit history but not authoritative status, including archived Polymarket integration claims and stale root-level reports.
+### `mixed`
+- optional evaluation mode
+- scans both exchanges
+- still paper-trading only
+- intended for side-by-side research, not live capital allocation
+
+## Truthfulness Boundaries
+
+- Hyperliquid and Polymarket are supported for **paper trading only**.
+- Polymarket support is **optional and experimental**.
+- Real exchange execution is **not implemented**.
+- Supporting reports/dashboards should not be read as proof of live readiness.
+- Historical reports under `docs/archive/` remain for provenance, not current operational truth.
 
 ## Disclaimer
 
-This repository is for research, auditing, and portfolio presentation. It does **not** constitute financial advice, and it should not be described as a production trading system.
+This repository is for research, auditing, and portfolio presentation. It is **not** a production trading system, does **not** provide live execution support, and does **not** constitute financial advice.

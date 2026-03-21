@@ -73,6 +73,7 @@ class ValidationResult:
 
 @dataclass
 class TradeProposal:
+    exchange: str
     strategy: str
     asset: str
     direction: str  # LONG/SHORT
@@ -419,6 +420,13 @@ class ExecutionSafetyLayer:
                     timeout=5
                 )
                 resp.raise_for_status()
+            elif exchange == "Polymarket":
+                resp = requests.get(
+                    'https://gamma-api.polymarket.com/markets',
+                    params={'limit': 5, 'closed': 'false'},
+                    timeout=5
+                )
+                resp.raise_for_status()
             
             latency_ms = (time.time() - start) * 1000
             
@@ -459,32 +467,45 @@ class ExecutionSafetyLayer:
     def check_liquidity(self, proposal: TradeProposal) -> ValidationResult:
         """Check market liquidity"""
         try:
-            # Get market data from Hyperliquid
-            resp = requests.post(
-                'https://api.hyperliquid.xyz/info',
-                json={'type': 'metaAndAssetCtxs'},
-                timeout=5
-            )
-            data = resp.json()
-            
-            # Find asset
-            asset_data = None
-            for asset in data[1]:
-                if asset['coin'] == proposal.asset:
-                    asset_data = asset
-                    break
-            
-            if not asset_data:
-                return ValidationResult(
-                    passed=False,
-                    check_name="liquidity",
-                    reason=f"Asset {proposal.asset} not found",
-                    severity="CRITICAL",
-                    timestamp=datetime.now(timezone.utc).isoformat()
+            if proposal.exchange == "Polymarket":
+                resp = requests.get(
+                    'https://gamma-api.polymarket.com/markets',
+                    params={'condition_id': proposal.asset},
+                    timeout=5
                 )
-            
-            # Check volume
-            volume_24h = float(asset_data.get('dayNtlVlm', 0))
+                resp.raise_for_status()
+                markets = resp.json()
+                if not markets:
+                    return ValidationResult(
+                        passed=False,
+                        check_name="liquidity",
+                        reason=f"Polymarket market {proposal.asset} not found",
+                        severity="CRITICAL",
+                        timestamp=datetime.now(timezone.utc).isoformat()
+                    )
+                asset_data = markets[0]
+                volume_24h = float(asset_data.get('liquidity') or asset_data.get('liquidityNum') or asset_data.get('volume') or 0)
+            else:
+                resp = requests.post(
+                    'https://api.hyperliquid.xyz/info',
+                    json={'type': 'metaAndAssetCtxs'},
+                    timeout=5
+                )
+                data = resp.json()
+                asset_data = None
+                for asset in data[1]:
+                    if asset['coin'] == proposal.asset:
+                        asset_data = asset
+                        break
+                if not asset_data:
+                    return ValidationResult(
+                        passed=False,
+                        check_name="liquidity",
+                        reason=f"Asset {proposal.asset} not found",
+                        severity="CRITICAL",
+                        timestamp=datetime.now(timezone.utc).isoformat()
+                    )
+                volume_24h = float(asset_data.get('dayNtlVlm', 0))
             
             passed = volume_24h >= SAFETY_LIMITS['min_liquidity_usd']
             
@@ -510,25 +531,57 @@ class ExecutionSafetyLayer:
     def check_spread(self, proposal: TradeProposal) -> ValidationResult:
         """Check bid-ask spread as an advisory sanity signal (not a blocking gate)."""
         try:
-            # Get L2 book from Hyperliquid
-            resp = requests.post(
-                'https://api.hyperliquid.xyz/info',
-                json={'type': 'l2Book', 'coin': proposal.asset},
-                timeout=5
-            )
-            book = resp.json()
-            
-            if not book.get('levels') or len(book['levels']) < 2:
-                return ValidationResult(
-                    passed=False,
-                    check_name="spread",
-                    reason="Order book unavailable",
-                    severity="WARNING",
-                    timestamp=datetime.now(timezone.utc).isoformat()
+            if proposal.exchange == "Polymarket":
+                resp = requests.get(
+                    'https://gamma-api.polymarket.com/markets',
+                    params={'condition_id': proposal.asset},
+                    timeout=5
                 )
-            
-            best_bid = float(book['levels'][0][0]['px'])
-            best_ask = float(book['levels'][1][0]['px'])
+                resp.raise_for_status()
+                markets = resp.json()
+                if not markets:
+                    return ValidationResult(
+                        passed=False,
+                        check_name="spread",
+                        reason="Polymarket market unavailable",
+                        severity="WARNING",
+                        timestamp=datetime.now(timezone.utc).isoformat()
+                    )
+                market = markets[0]
+                selected_token = None
+                for token in market.get('tokens', []):
+                    if str(token.get('outcome') or '').upper() == str(proposal.direction).upper():
+                        selected_token = token
+                        break
+                if selected_token is None:
+                    selected_token = (market.get('tokens') or [{}])[0]
+                best_bid = float(selected_token.get('bestBid') or selected_token.get('bid') or selected_token.get('price') or 0)
+                best_ask = float(selected_token.get('bestAsk') or selected_token.get('ask') or selected_token.get('price') or 0)
+                if best_bid <= 0 or best_ask <= 0:
+                    return ValidationResult(
+                        passed=False,
+                        check_name="spread",
+                        reason="Polymarket order book unavailable",
+                        severity="WARNING",
+                        timestamp=datetime.now(timezone.utc).isoformat()
+                    )
+            else:
+                resp = requests.post(
+                    'https://api.hyperliquid.xyz/info',
+                    json={'type': 'l2Book', 'coin': proposal.asset},
+                    timeout=5
+                )
+                book = resp.json()
+                if not book.get('levels') or len(book['levels']) < 2:
+                    return ValidationResult(
+                        passed=False,
+                        check_name="spread",
+                        reason="Order book unavailable",
+                        severity="WARNING",
+                        timestamp=datetime.now(timezone.utc).isoformat()
+                    )
+                best_bid = float(book['levels'][0][0]['px'])
+                best_ask = float(book['levels'][1][0]['px'])
             spread_pct = ((best_ask - best_bid) / best_bid) * 100
             
             passed = spread_pct <= SAFETY_LIMITS['max_spread_pct']
@@ -613,15 +666,6 @@ class ExecutionSafetyLayer:
         """Validate data integrity across system"""
         issues = []
         
-        # Check portfolio allocation exists
-        if not PORTFOLIO_ALLOCATION.exists():
-            issues.append("Portfolio allocation missing")
-        
-        # Check strategy registry exists
-        if not STRATEGY_REGISTRY.exists():
-            issues.append("Strategy registry missing")
-        
-        # Check recent data freshness
         if PORTFOLIO_ALLOCATION.exists():
             with open(PORTFOLIO_ALLOCATION) as f:
                 allocation = json.load(f)
@@ -632,6 +676,15 @@ class ExecutionSafetyLayer:
                 
                 if age > 3600 * 6:  # 6 hours
                     issues.append(f"Allocation data stale ({age/3600:.1f}h old)")
+        
+        if STRATEGY_REGISTRY.exists():
+            with open(STRATEGY_REGISTRY) as f:
+                registry = json.load(f)
+            if registry.get('generated_at'):
+                registry_time = datetime.fromisoformat(registry['generated_at'].replace('Z', '+00:00'))
+                age = (datetime.now(timezone.utc) - registry_time).total_seconds()
+                if age > 3600 * 12:
+                    issues.append(f"Strategy registry stale ({age/3600:.1f}h old)")
         
         passed = len(issues) == 0
         
@@ -658,7 +711,7 @@ class ExecutionSafetyLayer:
         results.append(self.check_circuit_breakers())
         
         # Health checks (failures = caution)
-        results.append(self.check_exchange_health())
+        results.append(self.check_exchange_health(proposal.exchange))
         results.append(self.check_data_integrity())
         
         # Market checks (failures = caution)

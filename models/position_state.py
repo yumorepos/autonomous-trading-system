@@ -39,7 +39,20 @@ def _canonical_open_position(record: dict[str, Any] | None, context: str) -> dic
         'direction': normalized.get('side'),
         'entry_time': normalized.get('entry_timestamp'),
     })
-    for extra_field in ['signal', 'exchange', 'strategy', 'stop_loss_pct', 'take_profit_pct', 'timeout_hours', 'raw']:
+    for extra_field in [
+        'signal',
+        'exchange',
+        'strategy',
+        'stop_loss_pct',
+        'take_profit_pct',
+        'timeout_hours',
+        'market_id',
+        'market_question',
+        'token_id',
+        'paper_only',
+        'experimental',
+        'raw',
+    ]:
         if source.get(extra_field) is not None:
             canonical[extra_field] = source.get(extra_field)
     canonical['status'] = 'OPEN'

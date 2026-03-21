@@ -48,8 +48,31 @@ class TimeoutMonitor:
         
         return history
     
-    def get_current_price(self, asset: str) -> Optional[float]:
-        """Get current price"""
+    def get_current_price(self, position: Dict) -> Optional[float]:
+        """Get current price for Hyperliquid or Polymarket open positions."""
+        exchange = position.get('exchange', position.get('signal', {}).get('exchange', position.get('signal', {}).get('source', 'Hyperliquid')))
+        if exchange == 'Polymarket':
+            market_id = position.get('market_id') or position.get('symbol')
+            side = position.get('side', 'YES')
+            token_id = position.get('token_id')
+            try:
+                r = requests.get(
+                    "https://gamma-api.polymarket.com/markets",
+                    params={'condition_id': market_id},
+                    timeout=5,
+                )
+                if r.status_code == 200:
+                    for market in r.json():
+                        for token in market.get('tokens', []):
+                            outcome = str(token.get('outcome') or '').upper()
+                            candidate_token_id = str(token.get('token_id') or token.get('tokenId') or token.get('id') or '')
+                            if outcome == side or (token_id and candidate_token_id == token_id):
+                                return float(token.get('price') or token.get('bestAsk') or token.get('ask') or token.get('bestBid') or token.get('bid') or 0)
+            except Exception:
+                pass
+            return None
+
+        asset = position['symbol']
         try:
             r = requests.post("https://api.hyperliquid.xyz/info", 
                             json={'type': 'allMids'}, timeout=5)
@@ -247,7 +270,7 @@ class TimeoutMonitor:
         entry_price = position['entry_price']
         
         # Get current state
-        current_price = self.get_current_price(asset)
+        current_price = self.get_current_price(position)
         if not current_price:
             self.health_manager.record_incident(
                 incident_type='timeout_monitor_missing_price',

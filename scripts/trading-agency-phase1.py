@@ -19,7 +19,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR
+from config.runtime import (
+    WORKSPACE_ROOT as WORKSPACE,
+    LOGS_DIR,
+    TRADING_MODE,
+    mode_includes_hyperliquid,
+    mode_includes_polymarket,
+)
 from models.position_state import get_open_positions
 from utils.system_health import SystemHealthManager
 from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
@@ -77,7 +83,7 @@ def safety_snapshot_summary(snapshot: dict | None) -> str:
     )
 
 
-def detect_optional_components() -> dict:
+def detect_optional_components(trading_mode: str = TRADING_MODE) -> dict:
     """Detect optional modules explicitly so missing components are visible."""
     social_scanner = REPO_ROOT / "scripts" / "phase1-social-scanner.py"
     polymarket_executor = REPO_ROOT / "scripts" / "polymarket-executor.py"
@@ -87,14 +93,43 @@ def detect_optional_components() -> dict:
             'reason': 'Script detected' if social_scanner.exists() else 'phase1-social-scanner.py not present',
         },
         'polymarket_execution': {
-            'status': 'DISABLED' if polymarket_executor.exists() else 'MISSING',
-            'reason': (
-                'Polymarket executor exists but is not active in Phase 1 paper trading'
+            'status': (
+                'ENABLED'
+                if polymarket_executor.exists() and mode_includes_polymarket(trading_mode)
+                else 'DISABLED'
                 if polymarket_executor.exists()
-                else 'polymarket-executor.py not present'
+                else 'MISSING'
+            ),
+            'reason': (
+                f"Polymarket executor active for trading_mode={trading_mode}"
+                if polymarket_executor.exists() and mode_includes_polymarket(trading_mode)
+                else (
+                    f"Polymarket executor exists but is not active for trading_mode={trading_mode}"
+                    if polymarket_executor.exists()
+                    else 'polymarket-executor.py not present'
+                )
             ),
         },
     }
+
+
+def run_bootstrap_check() -> StageResult:
+    """Verify clean-environment runtime prerequisites before loading networked scripts."""
+    command = ["python3", str(REPO_ROOT / "scripts" / "bootstrap-runtime-check.py")]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    if result.returncode == 0:
+        return stage_result(
+            "bootstrap",
+            StageStatus.SUCCESS,
+            "Runtime dependency check passed",
+            {'stdout': result.stdout, 'command': command},
+        )
+    return stage_result(
+        "bootstrap",
+        StageStatus.FAIL,
+        result.stderr.strip() or result.stdout.strip() or "Bootstrap dependency check failed",
+        {'stdout': result.stdout, 'stderr': result.stderr, 'command': command},
+    )
 
 
 def run_data_integrity_gate(optional_components: dict) -> StageResult:
@@ -189,11 +224,12 @@ def run_safety_validation() -> StageResult:
         )
 
     proposal = safety_module.TradeProposal(
-        strategy='funding_arbitrage',
-        asset=candidate_signal.get('asset'),
-        direction=candidate_signal.get('direction'),
+        exchange=candidate_signal.get('exchange', candidate_signal.get('source', 'Hyperliquid')),
+        strategy=candidate_signal.get('strategy', candidate_signal.get('signal_type', 'funding_arbitrage')),
+        asset=candidate_signal.get('symbol') or candidate_signal.get('asset') or candidate_signal.get('market_id'),
+        direction=candidate_signal.get('side') or candidate_signal.get('direction'),
         entry_price=float(candidate_signal.get('entry_price')),
-        position_size_usd=trader_module.PAPER_BALANCE * 0.02,
+        position_size_usd=float(candidate_signal.get('recommended_position_size_usd', trader_module.PAPER_BALANCE * 0.02)),
         signal_timestamp=candidate_signal['timestamp'],
         allocation_weight=0.02,
     )
@@ -628,14 +664,24 @@ def main():
     print("Supervisor Role: Review results, make strategic decisions")
     print()
 
-    optional_components = detect_optional_components()
+    optional_components = detect_optional_components(TRADING_MODE)
     health_manager = SystemHealthManager()
     print("Optional components:")
     for component_name, component_state in optional_components.items():
         print(f"  - {component_name}: {component_state['status']} ({component_state['reason']})")
     print()
+    print(f"Trading mode: {TRADING_MODE}")
+    print(f"  - Hyperliquid enabled: {mode_includes_hyperliquid(TRADING_MODE)}")
+    print(f"  - Polymarket enabled: {mode_includes_polymarket(TRADING_MODE)}")
+    print()
 
     stage_results: list[StageResult] = []
+    bootstrap_stage = run_bootstrap_check()
+    stage_results.append(bootstrap_stage)
+    if bootstrap_stage.status == StageStatus.FAIL.value:
+        generate_agency_report(stage_results, optional_components, health_manager.write_system_status())
+        return
+
     opening_health = health_manager.trading_response()
     health_manager.write_system_status()
     print(
