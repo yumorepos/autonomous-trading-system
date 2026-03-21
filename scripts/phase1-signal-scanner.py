@@ -20,6 +20,7 @@ from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
 from utils.json_utils import safe_read_jsonl
 SIGNALS_FILE = LOGS_DIR / "phase1-signals.jsonl"
 REPORT_FILE = WORKSPACE / "PHASE1_SIGNAL_REPORT.md"
+SIGNAL_MODE = os.getenv("OPENCLAW_SIGNAL_MODE", "hyperliquid_only").strip().lower()
 
 
 def scan_hyperliquid_funding():
@@ -224,10 +225,14 @@ def main():
     print("=" * 80)
     print()
     
-    # Scan all sources
+    # Scan canonical source only by default. Optional non-canonical scans remain
+    # opt-in for exploratory workflows via OPENCLAW_SIGNAL_MODE=mixed.
     hl_signals = scan_hyperliquid_funding()
-    pm_signals = scan_polymarket_spreads()
-    
+
+    pm_signals = []
+    if SIGNAL_MODE != 'hyperliquid_only':
+        pm_signals = scan_polymarket_spreads()
+
     # Combine and rank
     all_signals = hl_signals + pm_signals
     all_signals.sort(key=lambda x: x['ev_score'], reverse=True)

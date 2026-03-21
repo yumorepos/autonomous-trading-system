@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.trade_schema import normalize_trade_record, validate_trade_record
 from utils.system_health import SystemHealthManager
 SAFETY_STATE = LOGS_DIR / "execution-safety-state.json"
 BLOCKED_ACTIONS = LOGS_DIR / "blocked-actions.jsonl"
@@ -27,6 +28,7 @@ INCIDENT_LOG = LOGS_DIR / "incident-log.jsonl"
 SAFETY_REPORT = WORKSPACE / "EXECUTION_SAFETY_REPORT.md"
 PORTFOLIO_ALLOCATION = LOGS_DIR / "portfolio-allocation.json"
 STRATEGY_REGISTRY = LOGS_DIR / "strategy-registry.json"
+PAPER_TRADES_FILE = LOGS_DIR / "phase1-paper-trades.jsonl"
 
 # Safety Thresholds
 SAFETY_LIMITS = {
@@ -111,7 +113,20 @@ class ExecutionSafetyLayer:
             'exchange_health': {},
             'last_incident': None,
             'kill_switch_active': False,
-            'manual_override': False
+            'manual_override': False,
+            'runtime_enforcement': {
+                'last_transition': None,
+                'last_transition_at': None,
+                'last_persist_reason': None,
+                'last_proposal': None,
+                'last_validation_summary': None,
+                'last_validation_result': None,
+                'last_planned_trade_count': 0,
+                'last_persisted_trade_count': 0,
+                'blocked_actions_count': 0,
+                'breaker_accounting_source': 'advisory_static_defaults',
+                'cooldown_enforcement_mode': 'advisory_config_only',
+            },
         }
     
     def save_state(self):
@@ -119,6 +134,164 @@ class ExecutionSafetyLayer:
         self.state['last_update'] = datetime.now(timezone.utc).isoformat()
         with open(SAFETY_STATE, 'w') as f:
             json.dump(self.state, f, indent=2)
+
+    def _count_jsonl_records(self, path: Path) -> int:
+        if not path.exists():
+            return 0
+
+        count = 0
+        with open(path) as handle:
+            for line in handle:
+                if line.strip():
+                    count += 1
+        return count
+
+    def snapshot_state(self) -> Dict:
+        runtime = self.state.get('runtime_enforcement', {})
+        breakers = self.state.get('circuit_breakers', {})
+        return {
+            'status': self.state.get('status'),
+            'kill_switch_active': self.state.get('kill_switch_active', False),
+            'manual_override': self.state.get('manual_override', False),
+            'exchange_health': self.state.get('exchange_health', {}),
+            'circuit_breakers': {
+                'consecutive_losses': breakers.get('consecutive_losses', 0),
+                'daily_loss_usd': breakers.get('daily_loss_usd', 0),
+                'hourly_loss_usd': breakers.get('hourly_loss_usd', 0),
+                'peak_balance': breakers.get('peak_balance', 97.80),
+                'last_trade_timestamp': breakers.get('last_trade_timestamp'),
+            },
+            'runtime_enforcement': {
+                'last_transition': runtime.get('last_transition'),
+                'last_transition_at': runtime.get('last_transition_at'),
+                'last_persist_reason': runtime.get('last_persist_reason'),
+                'last_validation_result': runtime.get('last_validation_result'),
+                'last_planned_trade_count': runtime.get('last_planned_trade_count', 0),
+                'last_persisted_trade_count': runtime.get('last_persisted_trade_count', 0),
+                'blocked_actions_count': runtime.get('blocked_actions_count', 0),
+                'breaker_accounting_source': runtime.get('breaker_accounting_source', 'advisory_static_defaults'),
+                'cooldown_enforcement_mode': runtime.get('cooldown_enforcement_mode', 'advisory_config_only'),
+                'breaker_accounting_updated_at': runtime.get('breaker_accounting_updated_at'),
+            },
+        }
+
+    def _canonical_trade_history(self) -> List[Dict]:
+        if not PAPER_TRADES_FILE.exists():
+            return []
+
+        trades: List[Dict] = []
+        with open(PAPER_TRADES_FILE) as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                record = normalize_trade_record(json.loads(line))
+                if not validate_trade_record(record, context='execution-safety.trade-history'):
+                    continue
+                trades.append(record)
+        return trades
+
+    def refresh_breaker_state_from_canonical_history(self) -> Dict:
+        trades = self._canonical_trade_history()
+        closed_trades = [trade for trade in trades if trade.get('status') == 'CLOSED']
+        closed_trades.sort(key=lambda trade: trade.get('exit_timestamp') or trade.get('entry_timestamp') or '')
+
+        now = datetime.now(timezone.utc)
+        hourly_cutoff = now - timedelta(hours=1)
+        daily_cutoff = now - timedelta(hours=24)
+
+        consecutive_losses = 0
+        for trade in reversed(closed_trades):
+            pnl = float(trade.get('realized_pnl_usd') or 0)
+            if pnl < 0:
+                consecutive_losses += 1
+                continue
+            break
+
+        daily_loss_usd = 0.0
+        hourly_loss_usd = 0.0
+        for trade in closed_trades:
+            pnl = float(trade.get('realized_pnl_usd') or 0)
+            if pnl >= 0:
+                continue
+            exit_timestamp = trade.get('exit_timestamp')
+            if not exit_timestamp:
+                continue
+            exit_time = datetime.fromisoformat(exit_timestamp.replace('Z', '+00:00'))
+            loss_amount = abs(pnl)
+            if exit_time >= daily_cutoff:
+                daily_loss_usd += loss_amount
+            if exit_time >= hourly_cutoff:
+                hourly_loss_usd += loss_amount
+
+        last_trade_timestamp = None
+        if trades:
+            latest_trade = max(
+                trades,
+                key=lambda trade: trade.get('exit_timestamp') or trade.get('entry_timestamp') or '',
+            )
+            last_trade_timestamp = latest_trade.get('exit_timestamp') or latest_trade.get('entry_timestamp')
+
+        breakers = self.state.setdefault('circuit_breakers', {})
+        previous_breakers = {
+            'consecutive_losses': breakers.get('consecutive_losses', 0),
+            'daily_loss_usd': breakers.get('daily_loss_usd', 0.0),
+            'hourly_loss_usd': breakers.get('hourly_loss_usd', 0.0),
+            'last_trade_timestamp': breakers.get('last_trade_timestamp'),
+        }
+
+        breakers['consecutive_losses'] = consecutive_losses
+        breakers['daily_loss_usd'] = round(daily_loss_usd, 8)
+        breakers['hourly_loss_usd'] = round(hourly_loss_usd, 8)
+        breakers['last_trade_timestamp'] = last_trade_timestamp
+
+        runtime = self.state.setdefault('runtime_enforcement', {})
+        runtime['breaker_accounting_source'] = 'persisted_trade_history'
+        runtime['breaker_accounting_updated_at'] = now.isoformat()
+        runtime['cooldown_enforcement_mode'] = 'advisory_config_only'
+
+        changed_fields = {
+            field: {
+                'before': previous_breakers[field],
+                'after': breakers.get(field),
+            }
+            for field in previous_breakers
+            if previous_breakers[field] != breakers.get(field)
+        }
+        return {
+            'changed_fields': changed_fields,
+            'breaker_snapshot': {
+                'consecutive_losses': breakers.get('consecutive_losses', 0),
+                'daily_loss_usd': breakers.get('daily_loss_usd', 0.0),
+                'hourly_loss_usd': breakers.get('hourly_loss_usd', 0.0),
+                'last_trade_timestamp': breakers.get('last_trade_timestamp'),
+            },
+        }
+
+    def persist_runtime_state(
+        self,
+        transition: str,
+        *,
+        proposal: Optional[TradeProposal] = None,
+        summary: Optional[Dict] = None,
+        extra: Optional[Dict] = None,
+        persist_reason: str,
+    ) -> Dict:
+        runtime = self.state.setdefault('runtime_enforcement', {})
+        runtime['last_transition'] = transition
+        runtime['last_transition_at'] = datetime.now(timezone.utc).isoformat()
+        runtime['last_persist_reason'] = persist_reason
+        runtime['last_proposal'] = proposal.to_dict() if proposal else runtime.get('last_proposal')
+        runtime['last_validation_summary'] = summary or runtime.get('last_validation_summary')
+        if summary is not None:
+            failed = summary.get('failed_critical_checks', [])
+            runtime['last_validation_result'] = 'BLOCKED' if failed else 'PASSED'
+        if extra:
+            runtime.update(extra)
+
+        runtime['blocked_actions_count'] = self._count_jsonl_records(BLOCKED_ACTIONS)
+        self.state['status'] = self.determine_system_status().value
+        self.save_state()
+        return self.snapshot_state()
     
     def load_recent_trades(self) -> List[Dict]:
         """Load recent trades for deduplication and circuit breakers"""
