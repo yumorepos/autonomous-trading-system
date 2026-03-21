@@ -8,7 +8,7 @@
 
 | Strategy Name | Source | Signal File | Executor File | Status | Issues Found | Fix Applied | Verified |
 |--------------|--------|-------------|---------------|--------|--------------|-------------|----------|
-| **Hyperliquid Funding Arbitrage** | Hyperliquid API | phase1-signal-scanner.py | phase1-paper-trader-FIXED.py | ✅ **WORKING** | SHORT PnL broken, ghost positions, perf not saved | ✅ All fixed | ✅ 5/5 tests pass |
+| **Hyperliquid Funding Arbitrage** | Hyperliquid API | phase1-signal-scanner.py | phase1-paper-trader.py (DEPLOYED) | ❌ **BROKEN** | Trader crashes on integration test, no schema validation, ghost positions, perf not saved | ⚠️ FIXED version exists (not deployed) | ❌ 0/1 integration tests pass |
 | **Polymarket Spread Arbitrage** | Polymarket API | phase1-signal-scanner.py | phase1-paper-trader-FIXED.py | ⚠️ **RECOGNIZED (DISABLED)** | Scanner missing market_id, side fields | ⚠️ Executor ready, scanner incomplete | ✅ Disabled cleanly |
 
 ---
