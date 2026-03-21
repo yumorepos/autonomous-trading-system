@@ -3,12 +3,11 @@
 Trading Agency: Phase 1 Executor
 Runs the enforced Phase 1 execution path as a single agency worker:
 orchestrator -> data integrity -> signal scanner -> safety validation ->
-trader -> authoritative state update -> monitors.
+trader -> authoritative state update -> monitor/report stage.
 """
 
-import json
 import sys
-import os
+import re
 import subprocess
 import importlib.util
 from dataclasses import asdict, dataclass
@@ -20,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR
 from models.position_state import get_open_positions
 from utils.system_health import SystemHealthManager
 from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
@@ -395,6 +394,145 @@ def load_latest_signals():
     return safe_read_jsonl(LOGS_DIR / "phase1-signals.jsonl")[-10:]
 
 
+def count_jsonl_records(path: Path) -> int:
+    """Count non-empty JSONL lines for lightweight monitor summaries."""
+    if not path.exists():
+        return 0
+    with open(path) as handle:
+        return sum(1 for line in handle if line.strip())
+
+
+def extract_first_int(pattern: str, text: str) -> int | None:
+    match = re.search(pattern, text)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except (TypeError, ValueError):
+        return None
+
+
+def run_timeout_monitor() -> dict:
+    """Run the timeout monitor because it reads canonical state and writes monitoring artifacts only."""
+    report_path = WORKSPACE / "TIMEOUT_MONITOR_REPORT.md"
+    history_path = LOGS_DIR / "timeout-history.jsonl"
+    before_records = count_jsonl_records(history_path)
+    command = ["python3", str(REPO_ROOT / "scripts" / "timeout-monitor.py")]
+
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=90)
+    except subprocess.TimeoutExpired as exc:
+        return {
+            'script': 'timeout-monitor.py',
+            'status': StageStatus.FAIL.value,
+            'reason': 'Timeout monitor exceeded 90s runtime budget',
+            'summary': {
+                'history_records_before': before_records,
+                'history_records_after': before_records,
+                'history_records_added': 0,
+                'report_generated': report_path.exists(),
+            },
+            'stdout': exc.stdout or '',
+            'stderr': exc.stderr or '',
+            'command': command,
+        }
+
+    stdout = result.stdout or ''
+    stderr = result.stderr or ''
+    after_records = count_jsonl_records(history_path)
+    positions_monitored = extract_first_int(r'Monitoring (\d+) positions', stdout)
+    timeout_candidates = extract_first_int(r'\[TIME\]\s+(\d+) TIMEOUT CANDIDATES identified', stdout)
+    if timeout_candidates is None and 'No timeout candidates' in stdout:
+        timeout_candidates = 0
+
+    summary = {
+        'positions_monitored': positions_monitored or 0,
+        'timeout_candidates': timeout_candidates if timeout_candidates is not None else 'UNKNOWN',
+        'history_records_before': before_records,
+        'history_records_after': after_records,
+        'history_records_added': max(0, after_records - before_records),
+        'report_generated': report_path.exists(),
+        'report_path': str(report_path),
+    }
+
+    if result.returncode == 0:
+        if positions_monitored == 0 and timeout_candidates in (None, 0):
+            reason = 'Timeout monitor ran successfully; no open positions to track'
+        else:
+            reason = (
+                'Timeout monitor ran successfully; '
+                f"positions={summary['positions_monitored']} | "
+                f"timeout_candidates={summary['timeout_candidates']} | "
+                f"history_records_added={summary['history_records_added']} | "
+                f"report_generated={summary['report_generated']}"
+            )
+        status = StageStatus.SUCCESS.value
+    else:
+        status = StageStatus.FAIL.value
+        reason = stderr.strip() or stdout.strip() or 'Timeout monitor exited non-zero'
+
+    return {
+        'script': 'timeout-monitor.py',
+        'status': status,
+        'reason': reason,
+        'summary': summary,
+        'stdout': stdout,
+        'stderr': stderr,
+        'command': command,
+    }
+
+
+def evaluate_monitor_scripts() -> StageResult:
+    """Run only monitor scripts that are truthful and safe in the canonical loop."""
+    exit_monitor_result = {
+        'script': 'exit-monitor.py',
+        'status': StageStatus.SKIPPED.value,
+        'reason': (
+            'Skipped in canonical loop: script writes exit-proof artifacts for trigger events without '
+            'updating authoritative trade/state files, so running it here could overstate real closes'
+        ),
+        'summary': {
+            'compatible_with_canonical_state': False,
+            'safe_in_canonical_loop': False,
+            'behavior': 'monitoring_plus_reporting_with_exit-proof side effects',
+        },
+    }
+    timeout_monitor_result = run_timeout_monitor()
+
+    monitor_results = [exit_monitor_result, timeout_monitor_result]
+    failures = [item for item in monitor_results if item['status'] == StageStatus.FAIL.value]
+    executed = [item['script'] for item in monitor_results if item['status'] == StageStatus.SUCCESS.value]
+    skipped = [item['script'] for item in monitor_results if item['status'] == StageStatus.SKIPPED.value]
+
+    if failures:
+        stage_status = StageStatus.FAIL
+        stage_reason = (
+            f"Executed={executed or ['none']} | Skipped={skipped or ['none']} | "
+            f"Failures={[item['script'] for item in failures]}"
+        )
+    elif executed:
+        stage_status = StageStatus.SUCCESS
+        stage_reason = (
+            f"Executed={executed} | Skipped={skipped or ['none']} | "
+            'stage truthfully reports which monitor scripts actually ran'
+        )
+    else:
+        stage_status = StageStatus.SKIPPED
+        stage_reason = 'No canonical monitor scripts were safe to run'
+
+    return stage_result(
+        'monitors',
+        stage_status,
+        stage_reason,
+        {
+            'monitor_results': monitor_results,
+            'executed_scripts': executed,
+            'skipped_scripts': skipped,
+            'failed_scripts': [item['script'] for item in failures],
+        },
+    )
+
+
 def generate_agency_report(stage_results: list[StageResult], optional_components: dict, status_snapshot: dict | None = None):
     """Generate comprehensive report for supervisor"""
     
@@ -409,6 +547,8 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
     # Sort signals by EV
     latest_signals.sort(key=lambda x: x.get('ev_score', 0), reverse=True)
     
+    monitor_stage = next((result for result in stage_results if result.stage == 'monitors'), None)
+
     report = {
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'agency': 'trading-phase1',
@@ -418,6 +558,7 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
         'execution_reasons': {result.stage: result.reason for result in stage_results},
         'stage_results': [asdict(result) for result in stage_results],
         'optional_components': optional_components,
+        'monitoring_summary': (monitor_stage.data or {}) if monitor_stage else {},
         
         'current_state': {
             'open_positions': len(open_positions),
@@ -541,31 +682,32 @@ def main():
             state_stage = run_state_update(trader_stage)
             stage_results.append(state_stage)
 
+    monitors_stage = evaluate_monitor_scripts()
+    stage_results.append(monitors_stage)
+
     final_response = health_manager.trading_response()
     final_health_state = health_manager.refresh_state()
     final_status_snapshot = health_manager.write_system_status()
-    monitors_stage = stage_result(
-        "monitors",
-        StageStatus.SUCCESS,
-        (
-            f"Health {final_response['overall_status']} | "
-            f"active_incidents={len(final_health_state.get('active_incidents', []))} | "
-            f"resolved_recent={len(final_health_state.get('resolved_incidents', []))} | "
-            f"cooldown_remaining={final_health_state.get('cooldown_remaining', 0)}s | "
-            f"recovery_state={final_health_state.get('recovery_state', 'NORMAL')} | "
-            f"operator_mode={final_response.get('operator_control', {}).get('manual_mode', 'OFF')} | "
-            f"active_override={final_response.get('operator_control', {}).get('trading_override', 'ALLOW')}/"
-            f"{final_response.get('operator_control', {}).get('recovery_override', 'AUTO')} | "
-            f"action={final_response['action']} | "
-            f"alert={final_response.get('alert_level', 'INFO')}"
-        ),
-        {
-            'system_health': final_health_state,
-            'action_taken': final_response,
-            'system_status': final_status_snapshot,
-        },
+    if monitors_stage.data is None:
+        monitors_stage.data = {}
+    monitors_stage.data.update({
+        'system_health': final_health_state,
+        'action_taken': final_response,
+        'system_status': final_status_snapshot,
+    })
+    monitors_stage.reason = (
+        f"{monitors_stage.reason} | "
+        f"Health {final_response['overall_status']} | "
+        f"active_incidents={len(final_health_state.get('active_incidents', []))} | "
+        f"resolved_recent={len(final_health_state.get('resolved_incidents', []))} | "
+        f"cooldown_remaining={final_health_state.get('cooldown_remaining', 0)}s | "
+        f"recovery_state={final_health_state.get('recovery_state', 'NORMAL')} | "
+        f"operator_mode={final_response.get('operator_control', {}).get('manual_mode', 'OFF')} | "
+        f"active_override={final_response.get('operator_control', {}).get('trading_override', 'ALLOW')}/"
+        f"{final_response.get('operator_control', {}).get('recovery_override', 'AUTO')} | "
+        f"action={final_response['action']} | "
+        f"alert={final_response.get('alert_level', 'INFO')}"
     )
-    stage_results.append(monitors_stage)
     
     print()
     print("=" * 80)

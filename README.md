@@ -22,7 +22,8 @@ The active orchestrator runs a fixed Phase 1 loop:
 3. Execution safety validates the next candidate entry.
 4. The paper trader creates or closes **paper** positions.
 5. Authoritative state is updated in `workspace/logs/`.
-6. Monitoring and reporting scripts read that persisted state.
+6. The orchestrator monitor stage runs the timeout monitor and records a truthful status snapshot.
+7. The exit monitor remains a standalone script because it currently writes exit-proof artifacts without updating the authoritative close state.
 
 The repository contains additional experimental scripts and historical reports, but they are **not** the source of truth unless explicitly referenced by the current canonical flow.
 
@@ -39,11 +40,15 @@ python3 scripts/trading-agency-phase1.py
 Useful supporting commands:
 
 ```bash
-python3 scripts/exit-monitor.py
 python3 scripts/timeout-monitor.py
+python3 scripts/exit-monitor.py
 python3 scripts/supervisor-governance.py
 python3 scripts/execution-safety-layer.py
 ```
+
+Notes:
+- `timeout-monitor.py` is the monitor script the orchestrator can safely invoke in the canonical loop.
+- `exit-monitor.py` is still a standalone audit script; it is **not** run by the orchestrator because it can emit exit-proof artifacts without authoritative close persistence.
 
 ## Environment Setup
 
