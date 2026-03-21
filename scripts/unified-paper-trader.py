@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.position_state import get_open_positions
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 # Import PolymarketExecutor directly
@@ -43,19 +44,8 @@ class UnifiedPaperTrader:
         self.open_positions = self.load_open_positions()
     
     def load_open_positions(self) -> list:
-        """Load all open positions from log"""
-        if not PAPER_TRADES_FILE.exists():
-            return []
-        
-        open_pos = []
-        with open(PAPER_TRADES_FILE) as f:
-            for line in f:
-                if line.strip():
-                    trade = json.loads(line)
-                    if trade['status'] == 'OPEN':
-                        open_pos.append(trade)
-        
-        return open_pos
+        """Load Hyperliquid open positions from authoritative position-state.json."""
+        return get_open_positions(LOGS_DIR / 'position-state.json')
     
     def load_latest_signals(self, limit: int = 10) -> list:
         """Load latest signals from log"""

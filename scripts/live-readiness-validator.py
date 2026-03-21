@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.trade_schema import normalize_trade_record, validate_trade_record
 READINESS_STATE = LOGS_DIR / "live-readiness-state.json"
 VALIDATION_HISTORY = LOGS_DIR / "validation-history.jsonl"
 READINESS_REPORT = WORKSPACE / "LIVE_READINESS_REPORT.md"
@@ -115,7 +116,9 @@ class LiveReadinessValidator:
             with open(PAPER_TRADES_HL) as f:
                 for line in f:
                     if line.strip():
-                        trade = json.loads(line)
+                        trade = normalize_trade_record(json.loads(line))
+                        if not validate_trade_record(trade, context='live-readiness-validator.hyperliquid'):
+                            continue
                         trade['exchange'] = 'Hyperliquid'
                         trades.append(trade)
         
@@ -124,7 +127,9 @@ class LiveReadinessValidator:
             with open(PAPER_TRADES_PM) as f:
                 for line in f:
                     if line.strip():
-                        trade = json.loads(line)
+                        trade = normalize_trade_record(json.loads(line))
+                        if not validate_trade_record(trade, context='live-readiness-validator.polymarket'):
+                            continue
                         trade['exchange'] = 'Polymarket'
                         trades.append(trade)
         
@@ -254,14 +259,14 @@ class LiveReadinessValidator:
             }
         
         # Apply costs (support both new and legacy schema)
-        pnls_gross = [t.get('realized_pnl_usd', t.get('pnl', 0)) for t in closed_trades]
+        pnls_gross = [(t.get('realized_pnl_usd') or 0) for t in closed_trades]
         
         # Estimate costs (0.15% of position size)
         pnls_net = []
         for t in closed_trades:
-            position_size = t.get('position_size', 5.0)
+            position_size = t.get('position_size_usd', t.get('position_size', 5.0))
             cost = position_size * COSTS['total_cost_pct'] / 100
-            net_pnl = t.get('realized_pnl_usd', t.get('pnl', 0)) - cost
+            net_pnl = (t.get('realized_pnl_usd') or 0) - cost
             pnls_net.append(net_pnl)
         
         # Metrics
@@ -560,8 +565,8 @@ class LiveReadinessValidator:
         
         # Track first trade date
         if self.trades and not self.state.get('first_trade_date'):
-            first_trade = min(self.trades, key=lambda t: t.get('entry_time', ''))
-            self.state['first_trade_date'] = first_trade.get('entry_time')
+            first_trade = min(self.trades, key=lambda t: t.get('entry_timestamp', ''))
+            self.state['first_trade_date'] = first_trade.get('entry_timestamp')
         
         # Run validation checks
         print("2. Running validation checks...")
