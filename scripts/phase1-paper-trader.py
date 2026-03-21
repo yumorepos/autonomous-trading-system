@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Phase 1 Paper Trading Engine - FIXED VERSION
-Simulates trades based on signals, tracks performance, ranks strategies
-FIXES: SHORT PnL, position IDs, multi-strategy, performance persistence
+Simulates Hyperliquid paper trades based on scanner signals, tracks performance,
+and updates authoritative position state only when trade records are persisted.
 """
 
 import json
@@ -18,7 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
-from models.position_state import apply_trade_to_position_state, get_open_positions, load_position_state, save_position_state
+from models.position_state import apply_trade_to_position_state, get_open_positions
 from models.trade_schema import normalize_trade_record, validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
 PAPER_TRADES_FILE = LOGS_DIR / "phase1-paper-trades.jsonl"
@@ -37,7 +37,7 @@ TIMEOUT_HOURS = 24.0
 
 
 class PaperTrader:
-    """Paper trading engine with multi-strategy support"""
+    """Paper trading engine for supported Phase 1 paper-trade signals."""
     
     def __init__(self, signal):
         self.signal = signal
@@ -90,7 +90,8 @@ class PaperTrader:
         print(f"  ✅ Paper trade: {direction} {position_size:.4f} {asset} @ ${entry_price:.4f}")
         return trade
     
-    # Polymarket DISABLED - scanner schema incomplete (missing market_id, side)
+    # Polymarket is NOT ACTIVE here - scanner output lacks the execution fields required
+    # for authoritative paper-trade records.
 
 
 def get_current_price(asset: str) -> float:
@@ -269,6 +270,127 @@ def close_position(position: dict, exit_price: float, exit_reason: str):
     print(f"  🔴 Closed {direction} {asset}: {exit_reason} | P&L: ${pnl_usd:+.2f} ({pnl_pct:+.1f}%)")
 
 
+def evaluate_exit_trades(open_positions: list) -> list[dict]:
+    """Build close trades for positions that should exit."""
+    planned_closes = []
+    for position in open_positions:
+        asset = position['symbol']
+        should_exit, reason = check_exit(position)
+        if not should_exit:
+            continue
+
+        current_price = get_current_price(asset)
+        if not current_price:
+            print(f"  ⚠️ Exit skipped for {asset}: current price unavailable")
+            continue
+
+        entry_price = position['entry_price']
+        direction = position.get('side', position.get('direction', 'LONG'))
+        pnl_usd, pnl_pct = calculate_pnl(entry_price, current_price, position['position_size'], direction)
+        exit_timestamp = datetime.now(timezone.utc).isoformat()
+        planned_closes.append({
+            **position,
+            'trade_id': position.get('trade_id'),
+            'position_id': position.get('trade_id', position.get('position_id')),
+            'symbol': position.get('symbol', asset),
+            'asset': asset,
+            'side': position.get('side', direction),
+            'direction': direction,
+            'status': 'CLOSED',
+            'exit_timestamp': exit_timestamp,
+            'exit_time': exit_timestamp,
+            'exit_price': current_price,
+            'exit_reason': reason,
+            'realized_pnl_usd': pnl_usd,
+            'realized_pnl_pct': pnl_pct
+        })
+
+    return planned_closes
+
+
+def select_trade_candidate(
+    signals: list,
+    open_positions: list,
+    allowed_signal_timestamp: str | None = None,
+    allow_new_entries: bool = True,
+) -> tuple[dict | None, str]:
+    """Select the next eligible entry signal using the existing paper-trader rules."""
+    if not allow_new_entries:
+        return None, "New entries disabled for this cycle"
+
+    if len(open_positions) >= MAX_OPEN_POSITIONS:
+        return None, f"At capacity ({len(open_positions)}/{MAX_OPEN_POSITIONS})"
+
+    unconsumed = filter_unconsumed_signals(signals)
+    good_signals = [
+        s for s in unconsumed
+        if s.get('ev_score', 0) >= MIN_EV_SCORE and s.get('timestamp')
+    ]
+
+    if allowed_signal_timestamp is not None:
+        good_signals = [s for s in good_signals if s.get('timestamp') == allowed_signal_timestamp]
+        if not good_signals:
+            return None, f"Allowed signal {allowed_signal_timestamp} not available"
+
+    if not good_signals:
+        return None, "No signals above EV threshold"
+
+    best_signal = max(good_signals, key=lambda x: x.get('ev_score', 0))
+    open_assets = [p['symbol'] for p in open_positions if p.get('symbol')]
+    signal_asset = best_signal.get('asset')
+
+    if signal_asset and signal_asset in open_assets:
+        return None, f"Already have open position in {signal_asset}"
+
+    return best_signal, f"Selected {signal_asset or 'unknown'} @ EV {best_signal.get('ev_score', 0):.2f}"
+
+
+def build_execution_plan(
+    allowed_signal_timestamp: str | None = None,
+    allow_new_entries: bool = True,
+) -> dict:
+    """Build a deterministic set of trade records for this cycle without persisting them."""
+    open_positions = load_open_positions()
+    signals = load_latest_signals()
+
+    planned_closes = evaluate_exit_trades(open_positions)
+    refreshed_open_positions = [
+        position for position in open_positions
+        if position.get('trade_id') not in {trade.get('trade_id') for trade in planned_closes}
+    ]
+
+    candidate_signal, entry_reason = select_trade_candidate(
+        signals=signals,
+        open_positions=refreshed_open_positions,
+        allowed_signal_timestamp=allowed_signal_timestamp,
+        allow_new_entries=allow_new_entries,
+    )
+
+    planned_entry = None
+    if candidate_signal is not None:
+        trader = PaperTrader(candidate_signal)
+        planned_entry = trader.execute()
+
+    planned_trades = [*planned_closes, *([planned_entry] if planned_entry else [])]
+    return {
+        'open_positions': open_positions,
+        'signals': signals,
+        'planned_trades': planned_trades,
+        'planned_closes': planned_closes,
+        'planned_entry': planned_entry,
+        'entry_reason': entry_reason,
+    }
+
+
+def persist_trade_records(trades: list[dict]) -> int:
+    """Persist trade records and update authoritative state in append order."""
+    persisted = 0
+    for trade in trades:
+        log_trade(trade)
+        persisted += 1
+    return persisted
+
+
 def main():
     """Main paper trading loop"""
     print("="*80)
@@ -277,9 +399,9 @@ def main():
     print("="*80)
     print()
     
-    # Load current state
-    open_positions = load_open_positions()
-    signals = load_latest_signals()
+    plan = build_execution_plan()
+    open_positions = plan['open_positions']
+    signals = plan['signals']
     
     print(f"📊 Status:")
     print(f"   Open positions: {len(open_positions)}/{MAX_OPEN_POSITIONS}")
@@ -289,51 +411,22 @@ def main():
     # Check exits for open positions
     if open_positions:
         print("🔍 Checking exits...")
-        for position in open_positions:
-            asset = position['symbol']
-            should_exit, reason = check_exit(position)
-            
-            if should_exit:
-                current_price = get_current_price(asset)
-                close_position(position, current_price, reason)
+        for trade in plan['planned_closes']:
+            print(
+                f"  🔴 Closed {trade['direction']} {trade['asset']}: {trade['exit_reason']} | "
+                f"P&L: ${trade['realized_pnl_usd']:+.2f} ({trade['realized_pnl_pct']:+.1f}%)"
+            )
+        if not plan['planned_closes']:
+            print("  No exits triggered")
         print()
-    
-    # Check if we can open new positions
-    open_positions = load_open_positions()  # Reload after closes
-    
-    if len(open_positions) >= MAX_OPEN_POSITIONS:
-        print(f"⚠️  At capacity ({len(open_positions)}/{MAX_OPEN_POSITIONS})")
-        print("   No new entries until positions close")
+
+    print("📈 Evaluating new signals...")
+    if plan['planned_entry'] is not None:
+        persist_trade_records(plan['planned_closes'])
+        persist_trade_records([plan['planned_entry']])
     else:
-        print("📈 Evaluating new signals...")
-        
-        # Filter out already-consumed signals
-        unconsumed = filter_unconsumed_signals(signals)
-        
-        # Filter to high-quality signals
-        good_signals = [s for s in unconsumed 
-                       if s.get('ev_score', 0) >= MIN_EV_SCORE
-                       and s.get('timestamp')]
-        
-        if good_signals:
-            # Take highest EV signal
-            best_signal = max(good_signals, key=lambda x: x.get('ev_score', 0))
-            
-            # Check if we already have a position in this asset
-            open_assets = [p['symbol'] for p in open_positions if p.get('symbol')]
-            signal_asset = best_signal.get('asset')
-            
-            if signal_asset and signal_asset in open_assets:
-                print(f"  ⚠️ Already have open position in {signal_asset}")
-            else:
-                # Execute trade
-                trader = PaperTrader(best_signal)
-                trade = trader.execute()
-                
-                if trade:
-                    log_trade(trade)
-        else:
-            print("  No signals above EV threshold")
+        persist_trade_records(plan['planned_closes'])
+        print(f"  {plan['entry_reason']}")
     
     print()
     
