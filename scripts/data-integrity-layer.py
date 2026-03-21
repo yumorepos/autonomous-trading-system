@@ -7,7 +7,6 @@ Sits between data sources and signal scanner
 
 import json
 import sys
-import requests
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -27,7 +26,9 @@ from config.runtime import (
     mode_includes_hyperliquid,
     mode_includes_polymarket,
 )
+from utils.api_connectivity import fetch_hyperliquid_meta, fetch_polymarket_markets
 from utils.system_health import SystemHealthManager
+from utils.runtime_logging import append_runtime_event
 DATA_STATE = LOGS_DIR / "data-integrity-state.json"
 REJECTED_SIGNALS = LOGS_DIR / "rejected-signals.jsonl"
 SOURCE_METRICS = LOGS_DIR / "source-reliability-metrics.json"
@@ -194,34 +195,18 @@ class DataIntegrityLayer:
             start = time.time()
             
             if source == 'hyperliquid':
-                resp = requests.post(
-                    url,
-                    json={'type': 'metaAndAssetCtxs'},
-                    timeout=5
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                
-                # Validate response structure
-                if not isinstance(data, list) or len(data) < 2:
-                    raise ValueError("Invalid response structure")
-                
-                if not data[0].get('universe'):
-                    raise ValueError("Missing universe data")
+                result, _, _ = fetch_hyperliquid_meta(timeout=5)
+                if not result.ok:
+                    raise ValueError(result.error or "Unknown Hyperliquid connectivity failure")
+                latency_ms = result.latency_ms
             
             elif source == 'polymarket':
-                resp = requests.get(
-                    url,
-                    params={'limit': 5, 'closed': 'false'},
-                    timeout=5
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                
-                if not isinstance(data, list):
-                    raise ValueError("Invalid response structure")
-            
-            latency_ms = (time.time() - start) * 1000
+                result, _ = fetch_polymarket_markets(timeout=5, limit=5, closed=False)
+                if not result.ok:
+                    raise ValueError(result.error or "Unknown Polymarket connectivity failure")
+                latency_ms = result.latency_ms
+            else:
+                latency_ms = (time.time() - start) * 1000
             
             # Update metrics
             self.metrics[source]['total_requests'] += 1
@@ -239,6 +224,7 @@ class DataIntegrityLayer:
         
         except Exception as e:
             error = str(e)
+            latency_ms = (time.time() - start) * 1000
             
             # Update metrics
             self.metrics[source]['total_requests'] += 1
@@ -253,7 +239,7 @@ class DataIntegrityLayer:
             else:
                 self.state['sources'][source]['health'] = 'DEGRADED'
             
-            return False, 0, error
+            return False, latency_ms, error
     
     # === DATA VALIDATION ===
     
@@ -532,8 +518,10 @@ class DataIntegrityLayer:
             elif state['health'] == 'DEGRADED':
                 sources_degraded += 1
         
-        # HALT only when the selected mode still depends on Hyperliquid.
+        # HALT when the active runtime depends on a source that is currently DOWN.
         if trading_mode_requires_hyperliquid() and self.state['sources']['hyperliquid']['health'] == 'DOWN':
+            return DataHealth.HALT
+        if trading_mode_requires_polymarket() and not trading_mode_requires_hyperliquid() and self.state['sources']['polymarket']['health'] == 'DOWN':
             return DataHealth.HALT
         
         # If any source is degraded, DEGRADED
@@ -579,15 +567,9 @@ class DataIntegrityLayer:
 
             if hyperliquid_ok:
                 try:
-                    response = requests.post(
-                        'https://api.hyperliquid.xyz/info',
-                        json={'type': 'metaAndAssetCtxs'},
-                        timeout=5
-                    )
-                    response.raise_for_status()
-                    data = response.json()
-                    universe = data[0].get('universe', []) if isinstance(data, list) and len(data) > 1 else []
-                    contexts = data[1] if isinstance(data, list) and len(data) > 1 else []
+                    connectivity, universe, contexts = fetch_hyperliquid_meta(timeout=5)
+                    if not connectivity.ok:
+                        raise ValueError(connectivity.error)
 
                     self.state['sources']['hyperliquid']['last_data_timestamp'] = now
                     checks.append(self.validate_timestamp_freshness(now))
@@ -641,6 +623,7 @@ class DataIntegrityLayer:
                 'polymarket',
                 'https://gamma-api.polymarket.com/markets',
             )
+            polymarket_severity = 'CRITICAL' if trading_mode_requires_polymarket() and not include_hyperliquid else 'WARNING'
             checks.append(ValidationResult(
                 passed=polymarket_ok,
                 check_name='api_availability',
@@ -648,9 +631,49 @@ class DataIntegrityLayer:
                     f"Polymarket reachable in {pm_latency_ms:.0f}ms"
                     if polymarket_ok else f"Polymarket unavailable: {pm_error}"
                 ),
-                severity='WARNING' if not polymarket_ok else 'INFO',
+                severity=polymarket_severity if not polymarket_ok else 'INFO',
                 data={'source': 'polymarket', 'latency_ms': pm_latency_ms, 'error': pm_error}
             ))
+            if polymarket_ok:
+                try:
+                    connectivity, markets = fetch_polymarket_markets(timeout=5, limit=25, closed=False)
+                    if not connectivity.ok:
+                        raise ValueError(connectivity.error)
+
+                    self.state['sources']['polymarket']['last_data_timestamp'] = now
+                    checks.append(self.validate_timestamp_freshness(now))
+                    market_count_passed = len(markets) >= DATA_QUALITY['min_market_count']
+                    checks.append(ValidationResult(
+                        passed=market_count_passed,
+                        check_name='data_completeness',
+                        reason=f"Polymarket markets: {len(markets)} (min: {DATA_QUALITY['min_market_count']})",
+                        severity='CRITICAL' if trading_mode_requires_polymarket() and not market_count_passed else 'WARNING',
+                        data={'source': 'polymarket', 'market_count': len(markets)},
+                    ))
+
+                    sample_failures = 0
+                    for market in markets[:10]:
+                        if not market.get('question') or not isinstance(market.get('tokens'), list) or len(market.get('tokens')) < 2:
+                            sample_failures += 1
+
+                    checks.append(ValidationResult(
+                        passed=sample_failures == 0,
+                        check_name='required_fields',
+                        reason=(
+                            "Polymarket sample data complete"
+                            if sample_failures == 0 else f"Polymarket sample validation failed for {sample_failures} markets"
+                        ),
+                        severity='CRITICAL' if trading_mode_requires_polymarket() and sample_failures else 'WARNING',
+                        data={'source': 'polymarket', 'sample_failures': sample_failures},
+                    ))
+                except Exception as exc:
+                    checks.append(ValidationResult(
+                        passed=False,
+                        check_name='data_completeness',
+                        reason=f"Polymarket data validation failed: {exc}",
+                        severity='CRITICAL' if trading_mode_requires_polymarket() and not include_hyperliquid else 'WARNING',
+                        data={'source': 'polymarket', 'error': str(exc)},
+                    ))
 
         failed_critical = [check for check in checks if check.severity == 'CRITICAL' and not check.passed]
         warning_failures = [check for check in checks if check.severity == 'WARNING' and not check.passed]
@@ -660,6 +683,19 @@ class DataIntegrityLayer:
         self.state['health'] = self.determine_system_health().value
         self.save_state()
         self.save_metrics()
+        append_runtime_event(
+            stage='data_integrity',
+            exchange='system',
+            lifecycle_stage='pre_scan_gate',
+            status='ERROR' if failed_critical else 'WARN' if warning_failures else 'INFO',
+            message=" | ".join(reasons) if reasons else "Data-integrity pre-scan gate completed",
+            metadata={
+                'health': self.state['health'],
+                'checks': [asdict(check) for check in checks],
+                'failed_critical_count': len(failed_critical),
+                'warning_failure_count': len(warning_failures),
+            },
+        )
 
         if failed_critical:
             self.health_manager.record_incident(
