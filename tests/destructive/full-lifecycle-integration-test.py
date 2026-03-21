@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-DESTRUCTIVE TEST — NEVER RUN AGAINST LIVE STATE
+DESTRUCTIVE TEST -- NEVER RUN AGAINST LIVE STATE
 Full Lifecycle Integration Test
-Tests: Entry → State → Exit → Performance → Validator
+Tests: Entry -> State -> Exit -> Performance -> Validator
 Runs only inside a temporary workspace.
 """
 
@@ -103,7 +103,7 @@ def simulate_exit(position: dict, trades_file: Path, state_file: Path, exit_pric
 if __name__ == '__main__':
     print('=' * 80)
     print('FULL LIFECYCLE INTEGRATION TEST')
-    print('DESTRUCTIVE TEST — NEVER RUN AGAINST LIVE STATE')
+    print('DESTRUCTIVE TEST -- NEVER RUN AGAINST LIVE STATE')
     print('=' * 80)
     print()
 
@@ -123,7 +123,7 @@ if __name__ == '__main__':
         state_after_entry = get_state(trades_file, state_file)
         assert len(state_after_entry['open']) == 1, 'Expected one open position after entry'
         position = state_after_entry['open'][0]
-        print(f"✅ Entry opened: {position['position_id']}")
+        print(f"[OK] Entry opened: {position['position_id']}")
 
         simulate_exit(position, trades_file, state_file, 55000.0, 'take_profit')
         trader.main()
@@ -135,5 +135,5 @@ if __name__ == '__main__':
             perf = json.load(handle)
         assert perf.get('total_trades') == 1, 'Expected one closed trade in performance'
 
-        print('✅ Full lifecycle passed in isolated temp workspace')
+        print('[OK] Full lifecycle passed in isolated temp workspace')
         print(f'Workspace: {workspace_root}')

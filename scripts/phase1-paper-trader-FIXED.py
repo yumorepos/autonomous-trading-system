@@ -50,7 +50,7 @@ class PaperTrader:
         elif signal_type == 'spread_arbitrage':
             return self.execute_polymarket()
         else:
-            print(f"  ⚠️ Unknown strategy type: {signal_type}")
+            print(f"  [WARN] Unknown strategy type: {signal_type}")
             return None
     
     def execute_hyperliquid(self):
@@ -80,7 +80,7 @@ class PaperTrader:
             'timeout_hours': TIMEOUT_HOURS
         }
         
-        print(f"  ✅ Paper trade: {direction} {position_size:.4f} {asset} @ ${entry_price:.4f}")
+        print(f"  [OK] Paper trade: {direction} {position_size:.4f} {asset} @ ${entry_price:.4f}")
         return trade
     
     def execute_polymarket(self):
@@ -91,7 +91,7 @@ class PaperTrader:
         market = self.signal.get('market', 'UNKNOWN')
         spread_pct = self.signal.get('spread_pct', 0)
         
-        print(f"  ⚠️ Polymarket execution not fully implemented")
+        print(f"  [WARN] Polymarket execution not fully implemented")
         print(f"     Market: {market}, Spread: {spread_pct:.2f}%")
         print(f"     Missing: market_id, side fields from scanner")
         
@@ -317,7 +317,7 @@ def close_position(position: dict, exit_price: float, exit_reason: str):
     }
     
     log_trade(closed_trade)
-    print(f"  🔴 Closed {direction} {asset}: {exit_reason} | P&L: ${pnl_usd:+.2f} ({pnl_pct:+.1f}%)")
+    print(f"  [RED] Closed {direction} {asset}: {exit_reason} | P&L: ${pnl_usd:+.2f} ({pnl_pct:+.1f}%)")
 
 
 def main():
@@ -332,14 +332,14 @@ def main():
     open_positions = load_open_positions()
     signals = load_latest_signals()
     
-    print(f"📊 Status:")
+    print(f"[STATS] Status:")
     print(f"   Open positions: {len(open_positions)}/{MAX_OPEN_POSITIONS}")
     print(f"   Latest signals: {len(signals)}")
     print()
     
     # Check exits for open positions
     if open_positions:
-        print("🔍 Checking exits...")
+        print("[SCAN] Checking exits...")
         for position in open_positions:
             asset = position['signal']['asset']
             should_exit, reason = check_exit(position)
@@ -353,10 +353,10 @@ def main():
     open_positions = load_open_positions()  # Reload after closes
     
     if len(open_positions) >= MAX_OPEN_POSITIONS:
-        print(f"⚠️  At capacity ({len(open_positions)}/{MAX_OPEN_POSITIONS})")
+        print(f"[WARN]  At capacity ({len(open_positions)}/{MAX_OPEN_POSITIONS})")
         print("   No new entries until positions close")
     else:
-        print("📈 Evaluating new signals...")
+        print("[TREND] Evaluating new signals...")
         
         # Filter to high-quality signals
         good_signals = [s for s in signals 
@@ -372,7 +372,7 @@ def main():
             signal_asset = best_signal.get('asset')
             
             if signal_asset and signal_asset in open_assets:
-                print(f"  ⚠️ Already have open position in {signal_asset}")
+                print(f"  [WARN] Already have open position in {signal_asset}")
             else:
                 # Execute trade
                 trader = PaperTrader(best_signal)
@@ -389,13 +389,13 @@ def main():
     performance = calculate_performance()
     
     if performance.get('total_trades', 0) > 0:
-        print(f"📊 Performance:")
+        print(f"[STATS] Performance:")
         print(f"   Total trades: {performance['total_trades']}")
         print(f"   Win rate: {performance['win_rate']:.1f}%")
         print(f"   Total P&L: ${performance['total_pnl_usd']:+.2f}")
     
     print()
-    print("✅ Paper trader complete")
+    print("[OK] Paper trader complete")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Complete System Audit & Validation
-Tests entire pipeline: signal generation → routing → execution → logging → state persistence
+Tests entire pipeline: signal generation -> routing -> execution -> logging -> state persistence
 """
 
 import json
@@ -52,7 +52,7 @@ class SystemAuditor:
         try:
             # Initialize executor
             executor = PolymarketExecutor(paper_trading=True)
-            print("✅ Executor initialized")
+            print("[OK] Executor initialized")
             
             # Create test signal
             test_signal = {
@@ -66,25 +66,25 @@ class SystemAuditor:
             }
             
             # Mock market data (since test market doesn't exist)
-            print("📊 Creating test market...")
+            print("[STATS] Creating test market...")
             
             # Test validation
             valid, reason = executor.validate_signal(test_signal)
-            print(f"✅ Signal validation: {valid} ({reason})")
+            print(f"[OK] Signal validation: {valid} ({reason})")
             
             # Test status
             status = executor.get_status()
-            print(f"✅ Status check: Balance=${status['paper_balance']:.2f}, Open={status['open_positions']}")
+            print(f"[OK] Status check: Balance=${status['paper_balance']:.2f}, Open={status['open_positions']}")
             
             # Test state persistence
             executor.save_state()
-            print(f"✅ State saved to {PM_STATE}")
+            print(f"[OK] State saved to {PM_STATE}")
             
             # Verify state file
             if PM_STATE.exists():
                 with open(PM_STATE) as f:
                     state = json.load(f)
-                print(f"✅ State persisted: {len(state)} keys")
+                print(f"[OK] State persisted: {len(state)} keys")
             
             self.results.append(("Polymarket Executor", "PASS"))
             print()
@@ -93,7 +93,7 @@ class SystemAuditor:
         except Exception as e:
             self.errors.append(f"Polymarket Executor: {e}")
             self.results.append(("Polymarket Executor", "FAIL"))
-            print(f"❌ FAILED: {e}")
+            print(f"[FAIL] FAILED: {e}")
             print()
             return False
     
@@ -120,8 +120,8 @@ class SystemAuditor:
             hl_route = route_signal(hl_signal)
             pm_route = route_signal(pm_signal)
             
-            print(f"✅ Hyperliquid signal → {hl_route}")
-            print(f"✅ Polymarket signal → {pm_route}")
+            print(f"[OK] Hyperliquid signal -> {hl_route}")
+            print(f"[OK] Polymarket signal -> {pm_route}")
             
             assert hl_route == 'Hyperliquid', "Hyperliquid routing failed"
             assert pm_route == 'Polymarket', "Polymarket routing failed"
@@ -133,7 +133,7 @@ class SystemAuditor:
         except Exception as e:
             self.errors.append(f"Signal Routing: {e}")
             self.results.append(("Signal Routing", "FAIL"))
-            print(f"❌ FAILED: {e}")
+            print(f"[FAIL] FAILED: {e}")
             print()
             return False
     
@@ -162,11 +162,11 @@ class SystemAuditor:
                     else:
                         with open(log_file) as f:
                             f.read()
-                    print(f"✅ {log_file.name}: Readable")
+                    print(f"[OK] {log_file.name}: Readable")
                 else:
                     # Create parent dir
                     log_file.parent.mkdir(exist_ok=True)
-                    print(f"⚠️  {log_file.name}: Not found (will be created on first use)")
+                    print(f"[WARN]  {log_file.name}: Not found (will be created on first use)")
             
             self.results.append(("Logging & Persistence", "PASS"))
             print()
@@ -175,7 +175,7 @@ class SystemAuditor:
         except Exception as e:
             self.errors.append(f"Logging: {e}")
             self.results.append(("Logging & Persistence", "FAIL"))
-            print(f"❌ FAILED: {e}")
+            print(f"[FAIL] FAILED: {e}")
             print()
             return False
     
@@ -199,7 +199,7 @@ class SystemAuditor:
             
             valid, reason = executor.validate_signal(oversized_signal)
             assert not valid, "Should reject oversized position"
-            print(f"✅ Rejected oversized position: {reason}")
+            print(f"[OK] Rejected oversized position: {reason}")
             
             # Test 2: Missing fields
             incomplete_signal = {
@@ -209,7 +209,7 @@ class SystemAuditor:
             
             valid, reason = executor.validate_signal(incomplete_signal)
             assert not valid, "Should reject incomplete signal"
-            print(f"✅ Rejected incomplete signal: {reason}")
+            print(f"[OK] Rejected incomplete signal: {reason}")
             
             # Test 3: Valid signal
             valid_signal = {
@@ -221,7 +221,7 @@ class SystemAuditor:
             
             valid, reason = executor.validate_signal(valid_signal)
             assert valid, "Should accept valid signal"
-            print(f"✅ Accepted valid signal: {reason}")
+            print(f"[OK] Accepted valid signal: {reason}")
             
             self.results.append(("Safety Integration", "PASS"))
             print()
@@ -230,7 +230,7 @@ class SystemAuditor:
         except Exception as e:
             self.errors.append(f"Safety Integration: {e}")
             self.results.append(("Safety Integration", "FAIL"))
-            print(f"❌ FAILED: {e}")
+            print(f"[FAIL] FAILED: {e}")
             print()
             return False
     
@@ -270,19 +270,19 @@ class SystemAuditor:
                         schedule_map[schedule] = []
                     schedule_map[schedule].append(script_name)
                     
-                    print(f"  {schedule} → {script_name}")
+                    print(f"  {schedule} -> {script_name}")
             
             print()
             
             # Check for duplicates
             duplicates = {k: v for k, v in schedule_map.items() if len(v) > 1}
             if duplicates:
-                print("⚠️  DUPLICATES DETECTED:")
+                print("[WARN]  DUPLICATES DETECTED:")
                 for schedule, scripts in duplicates.items():
                     print(f"   {schedule}: {', '.join(scripts)}")
                 print()
             else:
-                print("✅ No duplicate schedules")
+                print("[OK] No duplicate schedules")
                 print()
             
             # Check for expected jobs
@@ -301,9 +301,9 @@ class SystemAuditor:
             print("Expected jobs:")
             for script in expected_scripts:
                 if any(script in s for s in all_scripts):
-                    print(f"  ✅ {script}")
+                    print(f"  [OK] {script}")
                 else:
-                    print(f"  ⚠️  {script} (not found)")
+                    print(f"  [WARN]  {script} (not found)")
             
             print()
             
@@ -313,7 +313,7 @@ class SystemAuditor:
         except Exception as e:
             self.errors.append(f"Cron Schedule: {e}")
             self.results.append(("Cron Schedule", "FAIL"))
-            print(f"❌ FAILED: {e}")
+            print(f"[FAIL] FAILED: {e}")
             print()
             return False
     
@@ -325,7 +325,7 @@ class SystemAuditor:
         print()
         
         for test, result in self.results:
-            icon = "✅" if result == "PASS" else "⚠️" if result == "WARN" else "❌"
+            icon = "[OK]" if result == "PASS" else "[WARN]" if result == "WARN" else "[FAIL]"
             print(f"{icon} {test}: {result}")
         
         print()
@@ -333,7 +333,7 @@ class SystemAuditor:
         if self.errors:
             print("ERRORS:")
             for error in self.errors:
-                print(f"  ❌ {error}")
+                print(f"  [FAIL] {error}")
             print()
         
         passed = len([r for r in self.results if r[1] == "PASS"])
@@ -345,11 +345,11 @@ class SystemAuditor:
         print()
         
         if failed == 0:
-            print("✅ SYSTEM AUDIT: PASSED")
+            print("[OK] SYSTEM AUDIT: PASSED")
         elif warned > 0 and failed == 0:
-            print("⚠️  SYSTEM AUDIT: PASSED WITH WARNINGS")
+            print("[WARN]  SYSTEM AUDIT: PASSED WITH WARNINGS")
         else:
-            print("❌ SYSTEM AUDIT: FAILED")
+            print("[FAIL] SYSTEM AUDIT: FAILED")
         
         return failed == 0
 

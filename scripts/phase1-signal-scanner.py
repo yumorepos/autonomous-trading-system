@@ -24,7 +24,7 @@ REPORT_FILE = WORKSPACE / "PHASE1_SIGNAL_REPORT.md"
 
 def scan_hyperliquid_funding():
     """Scan Hyperliquid for funding rate arbitrage"""
-    print("📊 Scanning Hyperliquid...")
+    print("[STATS] Scanning Hyperliquid...")
     
     try:
         r = requests.post("https://api.hyperliquid.xyz/info",
@@ -73,7 +73,7 @@ def scan_hyperliquid_funding():
 
 def scan_polymarket_spreads():
     """Scan Polymarket for wide spreads (arbitrage)"""
-    print("🎯 Scanning Polymarket...")
+    print("[TARGET] Scanning Polymarket...")
     
     try:
         cutoff = int(datetime.now().timestamp() - 300)
@@ -155,7 +155,7 @@ def log_signals(signals):
 
 def generate_report(signals):
     """Generate markdown report"""
-    report = f"""# Phase 1 Signal Report — Live Scan
+    report = f"""# Phase 1 Signal Report -- Live Scan
 **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M EDT')}  
 **Mode:** Research Only (No Real Trades)
 
@@ -202,7 +202,7 @@ def generate_report(signals):
     report += f"""
 ## NEXT SCAN: 4 hours from now
 
-**Status:** ✅ Research engine active  
+**Status:** [OK] Research engine active  
 **Signals This Scan:** {len(signals)}  
 **Paper Trade Recommendation:** Top {min(2, len(signals))} signals
 
@@ -214,7 +214,7 @@ def generate_report(signals):
     with open(REPORT_FILE, 'w') as f:
         f.write(report)
     
-    print(f"📄 Report saved: {REPORT_FILE}")
+    print(f"[REPORT] Report saved: {REPORT_FILE}")
 
 
 def main():
@@ -236,8 +236,8 @@ def main():
     top_signals = all_signals[:5]
     
     print()
-    print(f"📊 Total Signals Found: {len(all_signals)}")
-    print(f"🎯 Top Signals Selected: {len(top_signals)}")
+    print(f"[STATS] Total Signals Found: {len(all_signals)}")
+    print(f"[TARGET] Top Signals Selected: {len(top_signals)}")
     print()
     
     if top_signals:
@@ -250,9 +250,9 @@ def main():
         generate_report(top_signals)
         
         print()
-        print("✅ Scan complete")
+        print("[OK] Scan complete")
     else:
-        print("⚠️ No high-quality signals found this scan")
+        print("[WARN] No high-quality signals found this scan")
     
     print("=" * 80)
 

@@ -161,19 +161,19 @@ class PortfolioAllocator:
         # Normalize each metric to 0-1 scale
         normalized = {}
         
-        # Sharpe (0-3 → 0-1)
+        # Sharpe (0-3 -> 0-1)
         normalized['sharpe_ratio'] = min(metrics['sharpe_ratio'] / 3.0, 1.0)
         
-        # Profit factor (0-3 → 0-1)
+        # Profit factor (0-3 -> 0-1)
         normalized['profit_factor'] = min(metrics['profit_factor'] / 3.0, 1.0)
         
-        # Expectancy ($0-1 → 0-1)
+        # Expectancy ($0-1 -> 0-1)
         normalized['expectancy'] = min(max(metrics['expectancy'], 0) / 1.0, 1.0)
         
-        # Win rate (0-100 → 0-1)
+        # Win rate (0-100 -> 0-1)
         normalized['win_rate'] = metrics['win_rate'] / 100.0
         
-        # Max drawdown (inverted, 0-20% → 1-0)
+        # Max drawdown (inverted, 0-20% -> 1-0)
         normalized['max_drawdown'] = max(0, 1.0 - (metrics['max_drawdown'] / 20.0))
         
         # Weighted sum
@@ -273,7 +273,7 @@ class PortfolioAllocator:
         print("=" * 80)
         print()
         
-        print(f"💰 Total Capital: ${self.total_capital:.2f}")
+        print(f"[MONEY] Total Capital: ${self.total_capital:.2f}")
         print()
         
         # Get PROMOTED and LIVE strategies
@@ -289,7 +289,7 @@ class PortfolioAllocator:
             trades = self.trades_by_strategy.get(name, [])
             
             if len(trades) < 10:
-                print(f"⏭️  {name}: Skipped (only {len(trades)} trades)")
+                print(f"[SKIP]  {name}: Skipped (only {len(trades)} trades)")
                 continue
             
             metrics = self.calculate_metrics(trades)
@@ -301,14 +301,14 @@ class PortfolioAllocator:
                 'risk_score': risk_score
             }
             
-            print(f"✅ {name}: Stage={stage} | Score={risk_score:.1f} | Sharpe={metrics['sharpe_ratio']:.2f}")
+            print(f"[OK] {name}: Stage={stage} | Score={risk_score:.1f} | Sharpe={metrics['sharpe_ratio']:.2f}")
         
         print()
-        print(f"📊 Eligible Strategies: {len(eligible_strategies)}")
+        print(f"[STATS] Eligible Strategies: {len(eligible_strategies)}")
         print()
         
         if not eligible_strategies:
-            print("⚠️ No strategies eligible for capital allocation")
+            print("[WARN] No strategies eligible for capital allocation")
             # Return empty allocation
             return {
                 'timestamp': datetime.now(timezone.utc).isoformat(),
@@ -327,7 +327,7 @@ class PortfolioAllocator:
         # Calculate optimal weights
         weights = self.calculate_optimal_weights(eligible_strategies)
         
-        print("🎯 Optimal Weights:")
+        print("[TARGET] Optimal Weights:")
         for name, weight in sorted(weights.items(), key=lambda x: x[1], reverse=True):
             print(f"   {name}: {weight*100:.1f}%")
         print()
@@ -349,8 +349,8 @@ class PortfolioAllocator:
             }
             total_allocated += allocated
         
-        print(f"💵 Total Allocated: ${total_allocated:.2f} ({total_allocated/self.total_capital*100:.1f}%)")
-        print(f"💵 Cash Reserve: ${self.total_capital - total_allocated:.2f}")
+        print(f"[MONEY] Total Allocated: ${total_allocated:.2f} ({total_allocated/self.total_capital*100:.1f}%)")
+        print(f"[MONEY] Cash Reserve: ${self.total_capital - total_allocated:.2f}")
         print()
         
         # Calculate portfolio metrics
@@ -382,7 +382,7 @@ class PortfolioAllocator:
         self.save_allocation()
         
         print("=" * 80)
-        print(f"✅ Allocation saved: {ALLOCATION_CONFIG}")
+        print(f"[OK] Allocation saved: {ALLOCATION_CONFIG}")
         print("=" * 80)
         
         return self.current_allocation
@@ -476,7 +476,7 @@ def main():
         f.write(report)
     
     print()
-    print(f"📄 Report: {ALLOCATION_REPORT}")
+    print(f"[REPORT] Report: {ALLOCATION_REPORT}")
 
 
 if __name__ == "__main__":

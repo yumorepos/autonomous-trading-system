@@ -609,11 +609,11 @@ class ExecutionSafetyLayer:
         
         # Status indicator
         if status == SystemStatus.SAFE:
-            lines.append("🟢 **SAFE** — All systems operational, trading allowed")
+            lines.append("[GREEN] **SAFE** -- All systems operational, trading allowed")
         elif status == SystemStatus.CAUTION:
-            lines.append("🟡 **CAUTION** — Non-critical issues detected, trading restricted")
+            lines.append("[YELLOW] **CAUTION** -- Non-critical issues detected, trading restricted")
         else:
-            lines.append("🔴 **HALT** — Critical issues detected, trading halted")
+            lines.append("[RED] **HALT** -- Critical issues detected, trading halted")
         
         lines.append("")
         lines.append("---")
@@ -639,7 +639,7 @@ class ExecutionSafetyLayer:
         lines.append("## Exchange Health")
         lines.append("")
         for exchange, health in self.state['exchange_health'].items():
-            status_icon = "🟢" if health['status'] == 'UP' else "🟡" if health['status'] == 'SLOW' else "🔴"
+            status_icon = "[GREEN]" if health['status'] == 'UP' else "[YELLOW]" if health['status'] == 'SLOW' else "[RED]"
             lines.append(f"### {status_icon} {exchange}")
             lines.append(f"**Status:** {health['status']}")
             if 'latency_ms' in health:
@@ -658,7 +658,7 @@ class ExecutionSafetyLayer:
             lines.append("## Recent Incidents (Last 5)")
             lines.append("")
             for incident in reversed(recent):
-                severity_icon = "🔴" if incident['severity'] == 'CRITICAL' else "🟡" if incident['severity'] == 'WARNING' else "ℹ️"
+                severity_icon = "[RED]" if incident['severity'] == 'CRITICAL' else "[YELLOW]" if incident['severity'] == 'WARNING' else "[INFO]"
                 lines.append(f"### {severity_icon} {incident['severity']}")
                 lines.append(f"**Time:** {incident['timestamp']}")
                 lines.append(f"**Message:** {incident['message']}")
@@ -670,7 +670,7 @@ class ExecutionSafetyLayer:
         # Kill switch
         lines.append("## Emergency Controls")
         lines.append("")
-        lines.append(f"- **Kill Switch:** {'🔴 ACTIVE' if self.state['kill_switch_active'] else '🟢 OFF'}")
+        lines.append(f"- **Kill Switch:** {'[RED] ACTIVE' if self.state['kill_switch_active'] else '[GREEN] OFF'}")
         lines.append(f"- **Manual Override:** {'YES' if self.state['manual_override'] else 'NO'}")
         lines.append("")
         
@@ -679,7 +679,7 @@ class ExecutionSafetyLayer:
 
 def main():
     print("=" * 80)
-    print("EXECUTION SAFETY LAYER — Operational Risk Monitor")
+    print("EXECUTION SAFETY LAYER -- Operational Risk Monitor")
     print(f"Check Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}")
     print("=" * 80)
     print()
@@ -696,16 +696,16 @@ def main():
     print("Running health checks...")
     
     exchange_health = safety.check_exchange_health()
-    print(f"  Exchange Health: {'✅' if exchange_health.passed else '❌'} {exchange_health.reason}")
+    print(f"  Exchange Health: {'[OK]' if exchange_health.passed else '[FAIL]'} {exchange_health.reason}")
     
     data_integrity = safety.check_data_integrity()
-    print(f"  Data Integrity: {'✅' if data_integrity.passed else '❌'} {data_integrity.reason}")
+    print(f"  Data Integrity: {'[OK]' if data_integrity.passed else '[FAIL]'} {data_integrity.reason}")
     
     circuit_breakers = safety.check_circuit_breakers()
-    print(f"  Circuit Breakers: {'✅' if circuit_breakers.passed else '❌'} {circuit_breakers.reason}")
+    print(f"  Circuit Breakers: {'[OK]' if circuit_breakers.passed else '[FAIL]'} {circuit_breakers.reason}")
     
     kill_switch = safety.check_kill_switch()
-    print(f"  Kill Switch: {'✅' if kill_switch.passed else '❌'} {kill_switch.reason}")
+    print(f"  Kill Switch: {'[OK]' if kill_switch.passed else '[FAIL]'} {kill_switch.reason}")
     
     print()
     
@@ -720,9 +720,9 @@ def main():
         f.write(report)
     
     print("=" * 80)
-    print(f"✅ Safety check complete")
-    print(f"📄 Report: {SAFETY_REPORT}")
-    print(f"📊 State: {SAFETY_STATE}")
+    print(f"[OK] Safety check complete")
+    print(f"[REPORT] Report: {SAFETY_REPORT}")
+    print(f"[STATS] State: {SAFETY_STATE}")
     print("=" * 80)
 
 

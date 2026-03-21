@@ -361,7 +361,7 @@ def main():
     print(f"Closed: {status['closed_positions']}")
     print()
     
-    print("✅ Polymarket executor ready")
+    print("[OK] Polymarket executor ready")
     print("   - Paper trading: ENABLED")
     print("   - Real execution: API-ready (disabled by default)")
     print()
