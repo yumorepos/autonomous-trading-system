@@ -16,7 +16,7 @@ PERFORMANCE_FILE = WORKSPACE / "logs" / "phase1-performance.json"
 SIGNALS_FILE = WORKSPACE / "logs" / "phase1-signals.jsonl"
 
 PAPER_BALANCE = 97.80  # Starting paper balance
-MAX_OPEN_POSITIONS = 3
+MAX_OPEN_POSITIONS = 10  # Do not open new positions if at limit (force exit validation)
 MIN_EV_SCORE = 40  # Only paper trade signals with EV > 40
 
 
