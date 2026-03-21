@@ -248,15 +248,15 @@ class LiveReadinessValidator:
                 'max_consecutive_losses': 0
             }
         
-        # Apply costs
-        pnls_gross = [t['pnl'] for t in closed_trades]
+        # Apply costs (support both new and legacy schema)
+        pnls_gross = [t.get('realized_pnl_usd', t.get('pnl', 0)) for t in closed_trades]
         
         # Estimate costs (0.15% of position size)
         pnls_net = []
         for t in closed_trades:
             position_size = t.get('position_size', 5.0)
             cost = position_size * COSTS['total_cost_pct'] / 100
-            net_pnl = t['pnl'] - cost
+            net_pnl = t.get('realized_pnl_usd', t.get('pnl', 0)) - cost
             pnls_net.append(net_pnl)
         
         # Metrics
