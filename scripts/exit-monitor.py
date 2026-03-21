@@ -46,7 +46,15 @@ class ExitMonitor:
             self.log("No paper trades log found", "WARNING")
             return []
         
-        positions = []
+        # Load authoritative state
+        state = {}
+        state_file = WORKSPACE / "logs" / "position-state.json"
+        if state_file.exists():
+            with open(state_file) as f:
+                state = json.load(f)
+        
+        # Load all positions (latest version)
+        all_positions = {}
         line_num = 0
         
         try:
@@ -62,22 +70,28 @@ class ExitMonitor:
                         self.log(f"Failed to parse line {line_num}: {e}", "ERROR")
                         continue
                     
-                    # Only include OPEN positions
-                    if trade.get('status') == 'OPEN':
-                        # Validate required fields
-                        required_fields = ['signal', 'entry_price', 'position_size', 'entry_time', 'status']
-                        missing = [f for f in required_fields if f not in trade]
-                        
-                        if missing:
-                            self.log(f"Position missing fields {missing}, skipping", "ERROR")
-                            continue
-                        
-                        # Validate signal structure
-                        if 'asset' not in trade['signal']:
-                            self.log(f"Position signal missing 'asset' field, skipping", "ERROR")
-                            continue
-                        
-                        positions.append(trade)
+                    pid = trade.get('position_id')
+                    if pid:
+                        all_positions[pid] = trade
+            
+            # Filter to OPEN only via state file
+            positions = []
+            for pid, trade in all_positions.items():
+                if state.get(pid) == 'OPEN':
+                    # Validate required fields
+                    required_fields = ['signal', 'entry_price', 'position_size', 'entry_time']
+                    missing = [f for f in required_fields if f not in trade]
+                    
+                    if missing:
+                        self.log(f"Position {pid} missing fields {missing}, skipping", "ERROR")
+                        continue
+                    
+                    # Validate signal structure
+                    if 'asset' not in trade.get('signal', {}):
+                        self.log(f"Position {pid} signal missing 'asset' field, skipping", "ERROR")
+                        continue
+                    
+                    positions.append(trade)
         
         except Exception as e:
             self.log(f"Failed to load positions: {e}", "ERROR")
