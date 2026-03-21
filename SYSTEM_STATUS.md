@@ -15,6 +15,7 @@
 - ✅ SHORT entry
 - ✅ SHORT take-profit exit
 - ✅ SHORT stop-loss exit
+- ⏸️ SHORT timeout exit (not tested, but same code path as LONG)
 
 **System Components:**
 - ✅ Signal replay prevention
