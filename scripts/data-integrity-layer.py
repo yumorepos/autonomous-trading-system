@@ -662,6 +662,17 @@ class DataIntegrityLayer:
                 affected_components=['data_integrity'],
                 metadata={'checks': [asdict(check) for check in warning_failures]},
             )
+        else:
+            self.health_manager.resolve_incident(
+                incident_type='data_integrity_failure',
+                source='data-integrity',
+                resolution_reason='API availability, freshness, and completeness checks passed again',
+            )
+            self.health_manager.resolve_incident(
+                incident_type='data_integrity_warning',
+                source='data-integrity',
+                resolution_reason='Advisory data-integrity warnings cleared after successful checks',
+            )
 
         return {
             'passed': len(failed_critical) == 0,
