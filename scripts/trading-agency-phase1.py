@@ -58,6 +58,26 @@ def stage_result(stage: str, status: StageStatus, reason: str, data: dict | None
     return result
 
 
+def safety_snapshot_summary(snapshot: dict | None) -> str:
+    if not snapshot:
+        return "status=UNKNOWN"
+
+    runtime = snapshot.get('runtime_enforcement', {})
+    breakers = snapshot.get('circuit_breakers', {})
+    return (
+        f"status={snapshot.get('status', 'UNKNOWN')} | "
+        f"loss_streak={breakers.get('consecutive_losses', 0)} | "
+        f"daily_loss={breakers.get('daily_loss_usd', 0)} | "
+        f"hourly_loss={breakers.get('hourly_loss_usd', 0)} | "
+        f"transition={runtime.get('last_transition')} | "
+        f"blocked_actions={runtime.get('blocked_actions_count', 0)} | "
+        f"planned={runtime.get('last_planned_trade_count', 0)} | "
+        f"persisted={runtime.get('last_persisted_trade_count', 0)} | "
+        f"breaker_source={runtime.get('breaker_accounting_source', 'advisory_static_defaults')} | "
+        f"cooldown_mode={runtime.get('cooldown_enforcement_mode', 'advisory_config_only')}"
+    )
+
+
 def detect_optional_components() -> dict:
     """Detect optional modules explicitly so missing components are visible."""
     social_scanner = REPO_ROOT / "scripts" / "phase1-social-scanner.py"
@@ -128,40 +148,111 @@ def run_safety_validation() -> StageResult:
             {'candidate_signal': None},
         )
 
+    safety = safety_module.ExecutionSafetyLayer()
+    breaker_refresh = safety.refresh_breaker_state_from_canonical_history()
+    before_snapshot = safety.snapshot_state()
+    pre_validation_snapshot = safety.persist_runtime_state(
+        "BEFORE_VALIDATION",
+        extra={
+            'candidate_signal': candidate_signal,
+            'last_breaker_refresh_changes': breaker_refresh.get('changed_fields', {}),
+        },
+        persist_reason="Safety stage loaded candidate signal for canonical validation",
+    )
+
+    valid_canonical_signal, canonical_reason = trader_module.validate_canonical_signal(candidate_signal)
+    if not valid_canonical_signal:
+        trader_module.log_non_canonical_signal(candidate_signal, canonical_reason)
+        skipped_snapshot = safety.persist_runtime_state(
+            "VALIDATION_SKIPPED_NON_CANONICAL",
+            extra={
+                'candidate_signal': candidate_signal,
+                'last_validation_result': 'SKIPPED_NON_CANONICAL',
+            },
+            persist_reason="Non-canonical signal rejected before safety proposal construction",
+        )
+        return stage_result(
+            "safety_validation",
+            StageStatus.SKIPPED,
+            (
+                f"SKIPPED_NON_CANONICAL_SIGNAL: {canonical_reason}; "
+                f"read {safety_snapshot_summary(before_snapshot)}; "
+                f"persisted {safety_snapshot_summary(skipped_snapshot)}"
+            ),
+            {
+                'candidate_signal': candidate_signal,
+                'canonical_validation': canonical_reason,
+                'safety_state_before': before_snapshot,
+                'safety_state_after': skipped_snapshot,
+                'safety_state_pre_validation': pre_validation_snapshot,
+                'breaker_state_before_validation': breaker_refresh,
+            },
+        )
+
     proposal = safety_module.TradeProposal(
         strategy='funding_arbitrage',
-        asset=candidate_signal['asset'],
-        direction=candidate_signal['direction'],
-        entry_price=float(candidate_signal['entry_price']),
+        asset=candidate_signal.get('asset'),
+        direction=candidate_signal.get('direction'),
+        entry_price=float(candidate_signal.get('entry_price')),
         position_size_usd=trader_module.PAPER_BALANCE * 0.02,
         signal_timestamp=candidate_signal['timestamp'],
         allocation_weight=0.02,
     )
-    safety = safety_module.ExecutionSafetyLayer()
     passed, validations = safety.validate_trade(proposal)
     summary = safety.summarize_validation_results(validations)
+    transition = "VALIDATION_PASSED" if passed else "VALIDATION_BLOCKED"
+    validated_snapshot = safety.persist_runtime_state(
+        transition,
+        proposal=proposal,
+        summary=summary,
+        extra={'candidate_signal': candidate_signal},
+        persist_reason="Canonical safety validation results persisted for orchestrated runtime",
+    )
 
     if passed:
         return stage_result(
             "safety_validation",
             StageStatus.SUCCESS,
-            f"{selection_reason}; {summary['reason']}",
+            (
+                f"{selection_reason}; {summary['reason']}; "
+                f"read {safety_snapshot_summary(before_snapshot)}; "
+                f"persisted {safety_snapshot_summary(validated_snapshot)}"
+            ),
             {
                 'candidate_signal': candidate_signal,
                 'proposal': proposal.to_dict(),
                 'validations': [asdict(result) for result in validations],
+                'safety_state_before': before_snapshot,
+                'safety_state_after': validated_snapshot,
+                'safety_state_pre_validation': pre_validation_snapshot,
+                'breaker_state_before_validation': breaker_refresh,
             },
         )
 
     safety.log_blocked_action(proposal, summary['reason'], validations)
+    blocked_snapshot = safety.persist_runtime_state(
+        "BLOCKED_TRADE",
+        proposal=proposal,
+        summary=summary,
+        extra={'candidate_signal': candidate_signal},
+        persist_reason="Blocked trade decision recorded after canonical safety enforcement",
+    )
     return stage_result(
         "safety_validation",
         StageStatus.FAIL,
-        summary['reason'],
+        (
+            f"{summary['reason']}; "
+            f"read {safety_snapshot_summary(before_snapshot)}; "
+            f"persisted {safety_snapshot_summary(blocked_snapshot)}"
+        ),
         {
             'candidate_signal': candidate_signal,
             'proposal': proposal.to_dict(),
             'validations': [asdict(result) for result in validations],
+            'safety_state_before': before_snapshot,
+            'safety_state_after': blocked_snapshot,
+            'safety_state_pre_validation': pre_validation_snapshot,
+            'breaker_state_before_validation': breaker_refresh,
         },
     )
 
@@ -169,6 +260,7 @@ def run_safety_validation() -> StageResult:
 def run_trader(safety_stage: StageResult, trading_response: dict) -> StageResult:
     """Build the trader execution plan without updating authoritative state yet."""
     trader_module = load_script_module("phase1-paper-trader.py", "phase1_paper_trader")
+    safety_module = load_script_module("execution-safety-layer.py", "phase1_execution_safety")
     try:
         candidate_signal = (safety_stage.data or {}).get('candidate_signal')
         allow_new_entries = (
@@ -194,6 +286,16 @@ def run_trader(safety_stage: StageResult, trading_response: dict) -> StageResult
     if not trading_response.get('allow_new_trades', True):
         planned_entry = plan.get('planned_entry')
         planned_closes = plan.get('planned_closes', [])
+        safety = safety_module.ExecutionSafetyLayer()
+        planning_snapshot = safety.persist_runtime_state(
+            "TRADE_PLANNED",
+            extra={
+                'last_planned_trade_count': len(planned_closes),
+                'last_planned_close_count': len(planned_closes),
+                'last_planned_entry_count': 0,
+            },
+            persist_reason="Trader stage prepared canonical exit records while new entries were halted",
+        )
         return stage_result(
             "trader",
             StageStatus.SUCCESS,
@@ -210,14 +312,28 @@ def run_trader(safety_stage: StageResult, trading_response: dict) -> StageResult
                 'entry_reason': trading_response.get('reason'),
                 'health_action': trading_response,
                 'blocked_entry': planned_entry,
+                'safety_state_after': planning_snapshot,
             },
         )
 
+    safety = safety_module.ExecutionSafetyLayer()
+    planning_snapshot = safety.persist_runtime_state(
+        "TRADE_PLANNED",
+        extra={
+            'last_planned_trade_count': len(planned_trades),
+            'last_planned_close_count': len(plan.get('planned_closes', [])),
+            'last_planned_entry_count': 1 if plan.get('planned_entry') else 0,
+        },
+        persist_reason="Trader stage prepared canonical trade records",
+    )
     return stage_result(
         "trader",
         StageStatus.SUCCESS,
-        f"Prepared {len(planned_trades)} trade record(s) for authoritative state update",
-        {**plan, 'health_action': trading_response},
+        (
+            f"Prepared {len(planned_trades)} trade record(s) for authoritative state update; "
+            f"persisted {safety_snapshot_summary(planning_snapshot)}"
+        ),
+        {**plan, 'health_action': trading_response, 'safety_state_after': planning_snapshot},
     )
 
 
@@ -227,17 +343,40 @@ def run_state_update(trader_stage: StageResult) -> StageResult:
         return stage_result("authoritative_state_update", StageStatus.SKIPPED, "Trader did not succeed; state update blocked")
 
     trader_module = load_script_module("phase1-paper-trader.py", "phase1_paper_trader")
+    safety_module = load_script_module("execution-safety-layer.py", "phase1_execution_safety")
     planned_trades = (trader_stage.data or {}).get('planned_trades', [])
     if not planned_trades:
         return stage_result("authoritative_state_update", StageStatus.SKIPPED, "No trade records to persist")
 
     persisted = trader_module.persist_trade_records(planned_trades)
     performance = trader_module.calculate_performance()
+    safety = safety_module.ExecutionSafetyLayer()
+    breaker_refresh = safety.refresh_breaker_state_from_canonical_history()
+    persisted_snapshot = safety.persist_runtime_state(
+        "TRADE_OUTCOME_RECORDED",
+        extra={
+            'last_persisted_trade_count': persisted,
+            'last_planned_trade_count': len(planned_trades),
+            'last_performance_total_trades': performance.get('total_trades', 0),
+            'last_performance_total_pnl_usd': performance.get('total_pnl_usd', 0),
+            'last_breaker_refresh_changes': breaker_refresh.get('changed_fields', {}),
+        },
+        persist_reason="Authoritative state update persisted trade records and refreshed performance state",
+    )
     return stage_result(
         "authoritative_state_update",
         StageStatus.SUCCESS,
-        f"Persisted {persisted} trade record(s) and refreshed performance state",
-        {'persisted_records': persisted, 'performance': performance},
+        (
+            f"Persisted {persisted} trade record(s) and refreshed performance state; "
+            f"breaker_changes={breaker_refresh.get('changed_fields', {}) or 'none'}; "
+            f"persisted {safety_snapshot_summary(persisted_snapshot)}"
+        ),
+        {
+            'persisted_records': persisted,
+            'performance': performance,
+            'safety_state_after': persisted_snapshot,
+            'breaker_state_after_persistence': breaker_refresh,
+        },
     )
 
 
