@@ -1,13 +1,13 @@
 # Dynamic Capital Allocation System
 **Version:** 1.0  
-**Deployed:** 2026-03-20 19:04 EDT  
-**Status:** ✅ OPERATIONAL
+**Document scope:** research-stage portfolio allocation notes  
+**Status:** ✅ active support documentation for paper-trading research allocation
 
 ---
 
 ## Overview
 
-Automatically allocates capital across PROMOTED and LIVE strategies based on risk-adjusted performance, correlation, and portfolio-level constraints.
+Models paper-trading capital allocation across validated research strategies based on risk-adjusted performance, correlation, and portfolio-level constraints.
 
 **Goal:** Maximize risk-adjusted returns while preserving capital through diversification and strict risk limits.
 
@@ -23,7 +23,7 @@ XX:30 → Portfolio Allocator assigns capital
 ```
 
 **Process:**
-1. Load PROMOTED and LIVE strategies from registry
+1. Load eligible research strategies from registry
 2. Calculate risk-adjusted metrics for each
 3. Compute correlation matrix
 4. Calculate optimal weights (risk-score weighted, correlation-adjusted)
@@ -265,10 +265,10 @@ Diversification = 1 / max(Weight_i)
 | VALIDATE | None (paper trading only) |
 | QUARANTINE | None (monitoring) |
 | PROMOTE | Eligible (awaiting human approval) |
-| LIVE | Eligible (human approved) |
+| FUTURE_ONLY | Theoretical only; not an implemented execution stage |
 | DEMOTE | None (failed) |
 
-**Note:** PROMOTED strategies receive allocation but cannot execute until human approval → LIVE.
+**Note:** allocation outputs are research metadata for paper trading; they do not unlock live execution in this repository.
 
 ---
 
@@ -289,7 +289,7 @@ Diversification = 1 / max(Weight_i)
 ## Strategy Allocations
 
 ### funding_arbitrage
-**Stage:** LIVE
+**Stage:** FUTURE_ONLY (theoretical, not implemented)
 **Allocation:** $22.00 (45%)
 **Risk Score:** 85.2/100
 
@@ -317,7 +317,7 @@ Diversification = 1 / max(Weight_i)
 - Total P&L: $20.80
 
 ### mean_reversion
-**Stage:** LIVE
+**Stage:** FUTURE_ONLY (theoretical, not implemented)
 **Allocation:** $7.34 (15%)
 **Risk Score:** 65.3/100
 

@@ -150,7 +150,7 @@ class EnhancedExitCapture:
         order_send_time = datetime.now(timezone.utc)
         
         # In paper trading, execution always succeeds
-        # In live trading, this would capture real API responses
+        # Live-trading capture is intentionally unimplemented; paper mode simulates a successful response
         execution_status = 'success'
         retry_count = 0
         api_response_status = 200  # HTTP 200 OK
@@ -561,7 +561,7 @@ class EnhancedExitCapture:
 
 def main():
     """Test with current positions (for verification only)"""
-    print("Enhanced Exit Capture Ready")
+    print("Enhanced Exit Capture Ready (paper-trading support)")
     print()
     print("Waiting for first real exit to trigger...")
     print()

@@ -32,7 +32,7 @@
        │
        ▼ YES
 ┌──────────────┐
-│     LIVE     │ Live capital allowed (Phase 3)
+│ FUTURE_ONLY  │ Future/theoretical stage, not implemented
 └──────────────┘
 
        Any critical trigger?
@@ -90,11 +90,11 @@
 
 ## Stage 3: PROMOTE
 
-**Purpose:** Validated, awaiting human approval for live capital
+**Purpose:** Validated, awaiting hypothetical future approval metadata
 
-**Status:** Strategy meets all validation criteria, ready for Phase 3
+**Status:** Strategy meets validation criteria inside the research governance model
 
-**Requirements for LIVE:**
+**Requirements for FUTURE_ONLY theoretical stage:**
 - ✅ All validation criteria met
 - ✅ Performance stable (no warnings)
 - ✅ **Human approval explicitly granted**
@@ -103,23 +103,23 @@
 - Strategy added to `human-approval-queue.json`
 - Supervisor generates approval request
 - Human reviews metrics, approves/rejects
-- Only after approval → LIVE stage
+- Only after approval → FUTURE_ONLY theoretical stage
 
 **Exit:**
-- → LIVE (human approves)
+- → FUTURE_ONLY (theoretical future transition)
 - → QUARANTINE (performance warning)
 - → DEMOTE (critical trigger)
 
 ---
 
-## Stage 4: LIVE
+## Stage 4: FUTURE_ONLY
 
-**Purpose:** Human-approved, live capital eligible
+**Purpose:** Placeholder for a future theoretical stage; not a current repository capability
 
-**Status:** Strategy cleared for Phase 3 micro-execution
+**Status:** Not implemented in this repository
 
 **Constraints:**
-- Max position size: $5 (micro-execution)
+- No execution rights are granted by this metadata state in the current repository
 - Continuous monitoring (same quarantine/demotion logic applies)
 - Human can revoke approval at any time
 
@@ -157,7 +157,7 @@
 | **QUARANTINE** | Warning (enter quarantine) | WR < 50%, PF < 1.2, 3 loss streak, 15% degradation |
 | **QUARANTINE** | Critical (demote) | WR < 45%, PF < 1.0, 5 loss streak, 25% degradation, 3 cycles |
 | **PROMOTE** | Human approval | Manual review + explicit approval |
-| **LIVE** | Monitoring | Same quarantine/demotion logic |
+| **FUTURE_ONLY** | Theoretical only | Not an implemented execution stage |
 
 ---
 
@@ -226,14 +226,14 @@ D = (Peak WR - Current WR) / Peak WR
 - Assess risk tolerance
 
 **4. Human decision**
-- **Approve:** Strategy → LIVE, cleared for Phase 3
+- **Approve:** Strategy → FUTURE_ONLY theoretical stage metadata
 - **Reject:** Strategy → QUARANTINE or DEMOTE
 - **Defer:** Request more data, keep in PROMOTE
 
 **5. Approval logged**
 - Timestamp recorded
 - Approver identified
-- Strategy transitions to LIVE
+- Strategy transitions to FUTURE_ONLY theoretical metadata
 
 ---
 
@@ -356,7 +356,7 @@ D = (Peak WR - Current WR) / Peak WR
 - Reduces false positives
 
 **2. Human Oversight**
-- No strategy goes live without explicit approval
+- No strategy can gain a live-trading claim from this model; future-only metadata would still require explicit approval
 - Human reviews metrics before capital risk
 - Clear approval audit trail
 
@@ -371,7 +371,7 @@ D = (Peak WR - Current WR) / Peak WR
 - Expectancy requirement
 
 **5. Continuous Monitoring**
-- LIVE strategies still monitored
+- FUTURE_ONLY theoretical entries remain metadata only
 - Can be quarantined or demoted
 - Performance degradation detected early
 
@@ -392,6 +392,6 @@ D = (Peak WR - Current WR) / Peak WR
 
 ---
 
-**This governance model enforces conservative, risk-managed strategy validation with human oversight before any live capital deployment.**
+**This governance model enforces conservative, risk-managed strategy validation for paper-trading research oversight only.**
 
-*Model enforced automatically. Human approval required only for PROMOTE → LIVE transition.*
+*Model enforced for research metadata only. Any FUTURE_ONLY transition is theoretical and not an implemented execution path.*

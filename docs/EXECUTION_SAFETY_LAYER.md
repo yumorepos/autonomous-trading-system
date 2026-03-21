@@ -1,7 +1,7 @@
 # Execution Safety & Reliability Layer
 **Version:** 1.0  
-**Deployed:** 2026-03-20 19:13 EDT  
-**Status:** ✅ OPERATIONAL
+**Document scope:** active paper-trading safety notes  
+**Status:** ✅ active support documentation for paper-trading validation
 
 > **Truthfulness note:** in this repository the safety layer protects paper-trading proposals. References to “live execution” in this document describe a future concept, not currently supported repository capability.
 
@@ -9,7 +9,7 @@
 
 ## Purpose
 
-**Critical safety layer between portfolio allocator and live execution.**
+**Critical safety layer between portfolio allocation decisions and paper-trade eligibility.**
 
 Prevents unsafe trades through:
 - Pre-trade validation
@@ -18,7 +18,7 @@ Prevents unsafe trades through:
 - Market condition checks
 - Data integrity validation
 
-**No trade reaches live execution without passing ALL safety checks.**
+**No paper trade becomes execution-eligible without passing all safety checks.**
 
 ---
 
@@ -39,10 +39,10 @@ Portfolio Allocator
 └─────┬──────────────────┘
       ↓ Validated Trades Only
       ↓
-Live Execution (Hyperliquid API)
+Paper Trader + Canonical Persistence
 ```
 
-**Safety Guarantee:** All trades must pass validation before execution eligibility
+**Safety Guarantee:** All paper trades must pass validation before persistence eligibility
 
 ---
 
@@ -398,7 +398,7 @@ XX:35 → Safety Layer (post-validation) ← NEW
 - If HALT → allocator should not propose trades
 - Allocator reads safety state before proceeding
 
-### With Live Execution (Future)
+### Future Theoretical Execution Notes
 - Safety layer validates **every** proposed trade
 - No trade bypasses validation
 - Blocked trades logged with full reason
