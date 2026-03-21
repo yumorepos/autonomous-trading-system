@@ -5,6 +5,7 @@ Tracks: crashes, cron health, API failures, state corruption, anomalies
 """
 
 import json
+import sys
 import time
 import psutil
 import subprocess
@@ -12,9 +13,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-STABILITY_LOG = WORKSPACE / "logs" / "stability-monitor.jsonl"
-STABILITY_STATE = WORKSPACE / "logs" / "stability-state.json"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+STABILITY_LOG = LOGS_DIR / "stability-monitor.jsonl"
+STABILITY_STATE = LOGS_DIR / "stability-state.json"
 STABILITY_REPORT = WORKSPACE / "STABILITY_REPORT.md"
 
 class StabilityMonitor:
@@ -94,7 +99,7 @@ class StabilityMonitor:
             now = datetime.now(timezone.utc)
             
             for script in expected_scripts:
-                log_file = WORKSPACE / "logs" / f"{script.replace('.py', '')}.log"
+                log_file = LOGS_DIR / f"{script.replace('.py', '')}.log"
                 
                 if not log_file.exists():
                     self.log_event('WARNING', 'cron', f'Log file missing: {log_file.name}')
@@ -169,7 +174,7 @@ class StabilityMonitor:
         ]
         
         for file_name in state_files:
-            file_path = WORKSPACE / "logs" / file_name
+            file_path = LOGS_DIR / file_name
             
             if not file_path.exists():
                 continue

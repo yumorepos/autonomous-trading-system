@@ -6,6 +6,7 @@ Sits between portfolio allocator and live execution
 """
 
 import json
+import sys
 import time
 import requests
 from datetime import datetime, timezone, timedelta
@@ -14,13 +15,17 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, asdict
 from enum import Enum
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-SAFETY_STATE = WORKSPACE / "logs" / "execution-safety-state.json"
-BLOCKED_ACTIONS = WORKSPACE / "logs" / "blocked-actions.jsonl"
-INCIDENT_LOG = WORKSPACE / "logs" / "incident-log.jsonl"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+SAFETY_STATE = LOGS_DIR / "execution-safety-state.json"
+BLOCKED_ACTIONS = LOGS_DIR / "blocked-actions.jsonl"
+INCIDENT_LOG = LOGS_DIR / "incident-log.jsonl"
 SAFETY_REPORT = WORKSPACE / "EXECUTION_SAFETY_REPORT.md"
-PORTFOLIO_ALLOCATION = WORKSPACE / "logs" / "portfolio-allocation.json"
-STRATEGY_REGISTRY = WORKSPACE / "logs" / "strategy-registry.json"
+PORTFOLIO_ALLOCATION = LOGS_DIR / "portfolio-allocation.json"
+STRATEGY_REGISTRY = LOGS_DIR / "strategy-registry.json"
 
 # Safety Thresholds
 SAFETY_LIMITS = {
@@ -115,7 +120,7 @@ class ExecutionSafetyLayer:
     
     def load_recent_trades(self) -> List[Dict]:
         """Load recent trades for deduplication and circuit breakers"""
-        trades_file = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
+        trades_file = LOGS_DIR / "phase1-paper-trades.jsonl"
         
         if not trades_file.exists():
             return []
