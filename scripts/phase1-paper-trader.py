@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-Phase 1 Paper Trading Engine
+Phase 1 Paper Trading Engine - FIXED VERSION
 Simulates trades based on signals, tracks performance, ranks strategies
+FIXES: SHORT PnL, position IDs, multi-strategy, performance persistence
 """
 
 import json
 import os
 import requests
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,100 +16,211 @@ WORKSPACE = Path.home() / ".openclaw" / "workspace"
 PAPER_TRADES_FILE = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
 PERFORMANCE_FILE = WORKSPACE / "logs" / "phase1-performance.json"
 SIGNALS_FILE = WORKSPACE / "logs" / "phase1-signals.jsonl"
+POSITION_STATE_FILE = WORKSPACE / "logs" / "position-state.json"
 
 PAPER_BALANCE = 97.80  # Starting paper balance
-MAX_OPEN_POSITIONS = 3  # HARD CAP - block all new entries if at limit (force exit proof)
+MAX_OPEN_POSITIONS = 3  # Hard cap
 MIN_EV_SCORE = 40  # Only paper trade signals with EV > 40
-# Do not increase MAX_OPEN_POSITIONS until 3 real trades are fully closed and validated
+
+# Exit thresholds
+TAKE_PROFIT_PCT = 10.0
+STOP_LOSS_PCT = -10.0
+TIMEOUT_HOURS = 24.0
 
 
-class PaperTrade:
-    def __init__(self, signal, entry_price, position_size):
+class PaperTrader:
+    """Paper trading engine with multi-strategy support"""
+    
+    def __init__(self, signal):
         self.signal = signal
-        self.entry_price = entry_price
-        self.position_size = position_size
-        self.entry_time = datetime.now(timezone.utc)
-        self.exit_price = None
-        self.exit_time = None
-        self.pnl = 0
-        self.status = 'OPEN'
-        self.stop_loss_pct = 15 if signal.get('conviction') == 'HIGH' else 10
+        self.position_id = str(uuid.uuid4())[:8]
         
-    def check_exit(self, current_price):
-        """Check if position should be closed"""
-        pnl_pct = ((current_price - self.entry_price) / self.entry_price) * 100
+    def execute(self):
+        """Execute paper trade for any strategy type"""
+        signal_type = self.signal.get('signal_type')
         
-        # Stop loss
-        if pnl_pct < -self.stop_loss_pct:
-            self.close(current_price, 'STOP_LOSS')
-            return True
-        
-        # Take profit (funding normalized or >10% profit)
-        if self.signal['signal_type'] == 'funding_arbitrage':
-            # Check if funding normalized (for next scan, this is simplified)
-            if pnl_pct > 10:
-                self.close(current_price, 'TAKE_PROFIT')
-                return True
-        
-        # Time-based exit (7 days max)
-        days_open = (datetime.now(timezone.utc) - self.entry_time).days
-        if days_open >= 7:
-            self.close(current_price, 'TIME_EXIT')
-            return True
-        
-        return False
+        # Support all strategy types, not just funding_arbitrage
+        if signal_type == 'funding_arbitrage':
+            return self.execute_hyperliquid()
+        elif signal_type == 'spread_arbitrage':
+            return self.execute_polymarket()
+        else:
+            print(f"  ⚠️ Unknown strategy type: {signal_type}")
+            return None
     
-    def close(self, exit_price, reason):
-        """Close the position"""
-        self.exit_price = exit_price
-        self.exit_time = datetime.now(timezone.utc)
+    def execute_hyperliquid(self):
+        """Execute Hyperliquid funding arbitrage"""
+        asset = self.signal['asset']
+        direction = self.signal['direction']
+        entry_price = self.signal['entry_price']
         
-        # Calculate P&L
-        if self.signal.get('direction') == 'LONG':
-            pnl_pct = ((exit_price - self.entry_price) / self.entry_price)
-        else:  # SHORT
-            pnl_pct = ((self.entry_price - exit_price) / self.entry_price)
+        # Calculate position size (2% of account for MEDIUM conviction)
+        position_size_usd = PAPER_BALANCE * 0.02
+        position_size = position_size_usd / entry_price
         
-        self.pnl = self.position_size * pnl_pct
-        self.status = reason
-    
-    def to_dict(self):
-        return {
+        trade = {
+            'position_id': self.position_id,
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'signal': self.signal,
-            'entry_price': self.entry_price,
-            'exit_price': self.exit_price,
-            'position_size': self.position_size,
-            'entry_time': self.entry_time.isoformat(),
-            'exit_time': self.exit_time.isoformat() if self.exit_time else None,
-            'pnl': round(self.pnl, 2),
-            'pnl_pct': round((self.pnl / self.position_size) * 100, 2) if self.position_size > 0 else 0,
-            'status': self.status,
-            'stop_loss_pct': self.stop_loss_pct
+            'exchange': 'Hyperliquid',
+            'strategy': 'funding_arbitrage',
+            'entry_price': entry_price,
+            'position_size': position_size,
+            'position_size_usd': position_size_usd,
+            'direction': direction,
+            'entry_time': datetime.now(timezone.utc).isoformat(),
+            'status': 'OPEN',
+            'stop_loss_pct': STOP_LOSS_PCT,
+            'take_profit_pct': TAKE_PROFIT_PCT,
+            'timeout_hours': TIMEOUT_HOURS
         }
+        
+        print(f"  ✅ Paper trade: {direction} {position_size:.4f} {asset} @ ${entry_price:.4f}")
+        return trade
+    
+    def execute_polymarket(self):
+        """Execute Polymarket spread arbitrage"""
+        # Note: Polymarket signals from scanner may not have all required fields
+        # This is a known limitation - signals need market_id and side
+        
+        market = self.signal.get('market', 'UNKNOWN')
+        spread_pct = self.signal.get('spread_pct', 0)
+        
+        print(f"  ⚠️ Polymarket execution not fully implemented")
+        print(f"     Market: {market}, Spread: {spread_pct:.2f}%")
+        print(f"     Missing: market_id, side fields from scanner")
+        
+        # Return None to skip execution until scanner is fixed
+        return None
 
 
-def load_open_positions():
-    """Load currently open paper trades"""
+def get_current_price(asset: str) -> float:
+    """Get current Hyperliquid price"""
+    try:
+        r = requests.post("https://api.hyperliquid.xyz/info",
+                         json={'type': 'allMids'}, timeout=5)
+        if r.status_code == 200:
+            prices = r.json()
+            return float(prices.get(asset, 0))
+    except:
+        pass
+    return 0
+
+
+def calculate_pnl(entry_price: float, current_price: float, position_size: float, direction: str) -> tuple:
+    """
+    Calculate P&L correctly for LONG and SHORT positions
+    
+    FIXED: Was using LONG-only formula for all positions
+    """
+    if direction == 'LONG':
+        pnl_usd = (current_price - entry_price) * position_size
+        pnl_pct = ((current_price - entry_price) / entry_price) * 100
+    else:  # SHORT
+        pnl_usd = (entry_price - current_price) * position_size
+        pnl_pct = ((entry_price - current_price) / entry_price) * 100
+    
+    return pnl_usd, pnl_pct
+
+
+def check_exit(position: dict) -> tuple[bool, str]:
+    """
+    Check if position should exit
+    Returns: (should_exit, reason)
+    """
+    asset = position['signal']['asset']
+    entry_price = position['entry_price']
+    direction = position.get('direction', 'LONG')
+    
+    current_price = get_current_price(asset)
+    if not current_price:
+        return False, None
+    
+    # Calculate P&L with correct formula for direction
+    _, pnl_pct = calculate_pnl(entry_price, current_price, position['position_size'], direction)
+    
+    # Check take profit
+    if pnl_pct >= TAKE_PROFIT_PCT:
+        return True, 'take_profit'
+    
+    # Check stop loss
+    if pnl_pct <= STOP_LOSS_PCT:
+        return True, 'stop_loss'
+    
+    # Check time limit
+    entry_time = datetime.fromisoformat(position['entry_time'])
+    now = datetime.now(timezone.utc)
+    age_hours = (now - entry_time).total_seconds() / 3600
+    
+    if age_hours >= TIMEOUT_HOURS:
+        return True, 'timeout'
+    
+    return False, None
+
+
+def load_position_state() -> dict:
+    """
+    Load position state from dedicated state file
+    
+    FIXED: Replaces fragile JSONL append-only reconstruction
+    State file tracks: position_id -> status mapping
+    """
+    if not POSITION_STATE_FILE.exists():
+        return {}
+    
+    try:
+        with open(POSITION_STATE_FILE) as f:
+            return json.load(f)
+    except:
+        return {}
+
+
+def save_position_state(state: dict):
+    """Save position state to file"""
+    POSITION_STATE_FILE.parent.mkdir(exist_ok=True)
+    with open(POSITION_STATE_FILE, 'w') as f:
+        json.dump(state, f, indent=2)
+
+
+def load_open_positions() -> list:
+    """
+    Load open positions with ghost prevention
+    
+    FIXED: Uses position_id and state file to prevent ghost positions
+    """
     if not PAPER_TRADES_FILE.exists():
         return []
     
-    open_positions = []
+    # Load position state
+    state = load_position_state()
+    
+    # Load all positions from log
+    all_positions = []
     with open(PAPER_TRADES_FILE) as f:
         for line in f:
             if line.strip():
                 trade = json.loads(line)
-                if trade['status'] == 'OPEN':
-                    # Reconstruct PaperTrade object
-                    pt = PaperTrade(trade['signal'], trade['entry_price'], trade['position_size'])
-                    pt.entry_time = datetime.fromisoformat(trade['entry_time'])
-                    pt.status = trade['status']
-                    open_positions.append(pt)
+                all_positions.append(trade)
+    
+    # Filter to truly open positions using state file
+    open_positions = []
+    for pos in all_positions:
+        position_id = pos.get('position_id')
+        
+        if not position_id:
+            # Legacy position without ID - check status field
+            if pos.get('status') == 'OPEN':
+                open_positions.append(pos)
+        else:
+            # New position with ID - check state file
+            if state.get(position_id) == 'OPEN':
+                open_positions.append(pos)
     
     return open_positions
 
 
-def load_latest_signals():
-    """Load latest signals from signal scanner"""
+def load_latest_signals(limit: int = 10) -> list:
+    """Load latest signals from log"""
     if not SIGNALS_FILE.exists():
         return []
     
@@ -117,232 +230,167 @@ def load_latest_signals():
             if line.strip():
                 signals.append(json.loads(line))
     
-    # Return only signals from last scan (last 5 hours)
-    recent_signals = []
-    cutoff = datetime.now(timezone.utc).timestamp() - (5 * 3600)
-    
-    for sig in signals:
-        sig_time = datetime.fromisoformat(sig['timestamp']).timestamp()
-        if sig_time > cutoff:
-            recent_signals.append(sig)
-    
-    return recent_signals
+    return signals[-limit:]
 
 
-def get_current_price(asset):
-    """Get current price from Hyperliquid"""
-    try:
-        r = requests.post("https://api.hyperliquid.xyz/info",
-                         json={"type": "metaAndAssetCtxs"}, timeout=10)
-        data = r.json()
-        universe = data[0]['universe']
-        contexts = data[1]
-        
-        for a, ctx in zip(universe, contexts):
-            if a['name'] == asset:
-                return float(ctx.get('markPx', 0))
-        
-        return None
-    except:
-        return None
-
-
-def update_open_positions(open_positions):
-    """Check and update open positions"""
-    print("📊 Checking open positions...")
+def calculate_performance() -> dict:
+    """
+    Calculate strategy performance metrics
     
-    for pos in open_positions:
-        asset = pos.signal.get('asset')
-        if not asset:
-            continue
-        
-        current_price = get_current_price(asset)
-        if not current_price:
-            continue
-        
-        pnl_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100
-        print(f"  {asset}: Entry ${pos.entry_price:.4f} → Now ${current_price:.4f} ({pnl_pct:+.1f}%)")
-        
-        # Check if should exit
-        if pos.check_exit(current_price):
-            print(f"    ✅ CLOSED: {pos.status} | P&L: ${pos.pnl:+.2f}")
-            
-            # Log closed trade
-            PAPER_TRADES_FILE.parent.mkdir(exist_ok=True)
-            with open(PAPER_TRADES_FILE, 'a') as f:
-                f.write(json.dumps(pos.to_dict()) + '\n')
-
-
-def open_new_positions(latest_signals, open_positions, balance):
-    """Open new paper trades from signals"""
-    if len(open_positions) >= MAX_OPEN_POSITIONS:
-        print(f"⚠️ Max positions reached ({MAX_OPEN_POSITIONS})")
-        return
-    
-    # Filter high-quality signals
-    good_signals = [s for s in latest_signals 
-                   if s.get('ev_score', 0) >= MIN_EV_SCORE 
-                   and s.get('signal_type') == 'funding_arbitrage']
-    
-    if not good_signals:
-        print("No high-quality signals to trade")
-        return
-    
-    # Sort by EV
-    good_signals.sort(key=lambda x: x['ev_score'], reverse=True)
-    
-    print(f"📈 Opening new positions from {len(good_signals)} signals...")
-    
-    for sig in good_signals[:MAX_OPEN_POSITIONS - len(open_positions)]:
-        # Calculate position size
-        if sig.get('conviction') == 'HIGH':
-            pct = 0.05
-        elif sig.get('conviction') == 'MEDIUM':
-            pct = 0.03
-        else:
-            pct = 0.02
-        
-        position_size = balance * pct
-        entry_price = sig.get('entry_price', 0)
-        
-        if entry_price == 0:
-            continue
-        
-        # Create paper trade
-        pt = PaperTrade(sig, entry_price, position_size)
-        open_positions.append(pt)
-        
-        print(f"  ✅ OPENED: {sig['asset']} {sig['direction']} @ ${entry_price:.4f}")
-        print(f"     Size: ${position_size:.2f} ({pct*100}%)")
-        
-        # Log
-        PAPER_TRADES_FILE.parent.mkdir(exist_ok=True)
-        with open(PAPER_TRADES_FILE, 'a') as f:
-            f.write(json.dumps(pt.to_dict()) + '\n')
-
-
-def calculate_performance():
-    """Calculate overall performance metrics"""
+    FIXED: Actually writes to file (was missing f.write())
+    """
     if not PAPER_TRADES_FILE.exists():
-        return None
+        return {}
     
-    all_trades = []
+    # Load all closed trades
+    closed_trades = []
     with open(PAPER_TRADES_FILE) as f:
         for line in f:
             if line.strip():
-                all_trades.append(json.loads(line))
-    
-    closed_trades = [t for t in all_trades if t['status'] != 'OPEN']
+                trade = json.loads(line)
+                if trade.get('status') == 'CLOSED':
+                    closed_trades.append(trade)
     
     if not closed_trades:
-        return None
+        return {'total_trades': 0}
     
-    wins = [t for t in closed_trades if t['pnl'] > 0]
-    losses = [t for t in closed_trades if t['pnl'] <= 0]
+    # Calculate metrics
+    winners = [t for t in closed_trades if t.get('realized_pnl_usd', 0) > 0]
+    losers = [t for t in closed_trades if t.get('realized_pnl_usd', 0) <= 0]
     
-    total_pnl = sum(t['pnl'] for t in closed_trades)
-    win_rate = len(wins) / len(closed_trades) * 100 if closed_trades else 0
-    avg_win = sum(t['pnl'] for t in wins) / len(wins) if wins else 0
-    avg_loss = sum(t['pnl'] for t in losses) / len(losses) if losses else 0
-    
-    # Calculate by strategy type
-    by_strategy = {}
-    for t in closed_trades:
-        strategy = t['signal'].get('signal_type', 'unknown')
-        if strategy not in by_strategy:
-            by_strategy[strategy] = {
-                'trades': 0,
-                'wins': 0,
-                'total_pnl': 0,
-                'avg_ev': 0
-            }
-        
-        by_strategy[strategy]['trades'] += 1
-        if t['pnl'] > 0:
-            by_strategy[strategy]['wins'] += 1
-        by_strategy[strategy]['total_pnl'] += t['pnl']
-        by_strategy[strategy]['avg_ev'] = t['signal'].get('ev_score', 0)
-    
-    # Rank strategies
-    strategy_rankings = []
-    for strategy, stats in by_strategy.items():
-        win_rate_strat = (stats['wins'] / stats['trades']) * 100 if stats['trades'] > 0 else 0
-        strategy_rankings.append({
-            'strategy': strategy,
-            'trades': stats['trades'],
-            'win_rate': round(win_rate_strat, 1),
-            'total_pnl': round(stats['total_pnl'], 2),
-            'avg_ev': round(stats['avg_ev'], 2),
-            'score': round(win_rate_strat * (1 + stats['total_pnl']), 2)  # Combined score
-        })
-    
-    strategy_rankings.sort(key=lambda x: x['score'], reverse=True)
+    total_pnl = sum(t.get('realized_pnl_usd', 0) for t in closed_trades)
+    win_rate = len(winners) / len(closed_trades) * 100 if closed_trades else 0
     
     performance = {
-        'timestamp': datetime.now(timezone.utc).isoformat(),
         'total_trades': len(closed_trades),
-        'wins': len(wins),
-        'losses': len(losses),
-        'win_rate_pct': round(win_rate, 1),
-        'total_pnl': round(total_pnl, 2),
-        'avg_win': round(avg_win, 2),
-        'avg_loss': round(avg_loss, 2),
-        'best_trade': round(max(t['pnl'] for t in closed_trades), 2) if closed_trades else 0,
-        'worst_trade': round(min(t['pnl'] for t in closed_trades), 2) if closed_trades else 0,
-        'strategy_rankings': strategy_rankings
+        'winners': len(winners),
+        'losers': len(losers),
+        'win_rate': win_rate,
+        'total_pnl_usd': total_pnl,
+        'last_updated': datetime.now(timezone.utc).isoformat()
     }
     
-    # Save performance
+    # FIXED: Actually write to file
+    PERFORMANCE_FILE.parent.mkdir(exist_ok=True)
     with open(PERFORMANCE_FILE, 'w') as f:
-        json.dumps(performance, indent=2)
+        json.dump(performance, f, indent=2)
     
     return performance
 
 
+def log_trade(trade: dict):
+    """Append trade to log"""
+    PAPER_TRADES_FILE.parent.mkdir(exist_ok=True)
+    with open(PAPER_TRADES_FILE, 'a') as f:
+        f.write(json.dumps(trade) + '\n')
+    
+    # Update position state
+    position_id = trade.get('position_id')
+    if position_id:
+        state = load_position_state()
+        state[position_id] = trade['status']
+        save_position_state(state)
+
+
+def close_position(position: dict, exit_price: float, exit_reason: str):
+    """Close an open position"""
+    asset = position['signal']['asset']
+    entry_price = position['entry_price']
+    direction = position.get('direction', 'LONG')
+    
+    # Calculate final P&L with correct formula
+    pnl_usd, pnl_pct = calculate_pnl(entry_price, exit_price, position['position_size'], direction)
+    
+    closed_trade = {
+        **position,
+        'status': 'CLOSED',
+        'exit_time': datetime.now(timezone.utc).isoformat(),
+        'exit_price': exit_price,
+        'exit_reason': exit_reason,
+        'realized_pnl_usd': pnl_usd,
+        'realized_pnl_pct': pnl_pct
+    }
+    
+    log_trade(closed_trade)
+    print(f"  🔴 Closed {direction} {asset}: {exit_reason} | P&L: ${pnl_usd:+.2f} ({pnl_pct:+.1f}%)")
+
+
 def main():
-    print("=" * 80)
-    print("PHASE 1: PAPER TRADING ENGINE")
-    print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}")
-    print("=" * 80)
+    """Main paper trading loop"""
+    print("="*80)
+    print("PHASE 1 PAPER TRADER (FIXED)")
+    print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M EDT')}")
+    print("="*80)
     print()
     
-    # Load state
+    # Load current state
     open_positions = load_open_positions()
-    latest_signals = load_latest_signals()
+    signals = load_latest_signals()
     
-    print(f"📊 Current State:")
-    print(f"  Open Positions: {len(open_positions)}")
-    print(f"  Latest Signals: {len(latest_signals)}")
+    print(f"📊 Status:")
+    print(f"   Open positions: {len(open_positions)}/{MAX_OPEN_POSITIONS}")
+    print(f"   Latest signals: {len(signals)}")
     print()
     
-    # Update existing positions
-    update_open_positions(open_positions)
-    
-    # Open new positions if needed
-    print()
-    open_new_positions(latest_signals, open_positions, PAPER_BALANCE)
-    
-    # Calculate performance
-    print()
-    perf = calculate_performance()
-    
-    if perf:
-        print("📊 PERFORMANCE SUMMARY:")
-        print(f"  Total Trades: {perf['total_trades']}")
-        print(f"  Win Rate: {perf['win_rate_pct']}%")
-        print(f"  Total P&L: ${perf['total_pnl']:+.2f}")
-        print(f"  Avg Win: ${perf['avg_win']:+.2f}")
-        print(f"  Avg Loss: ${perf['avg_loss']:+.2f}")
+    # Check exits for open positions
+    if open_positions:
+        print("🔍 Checking exits...")
+        for position in open_positions:
+            asset = position['signal']['asset']
+            should_exit, reason = check_exit(position)
+            
+            if should_exit:
+                current_price = get_current_price(asset)
+                close_position(position, current_price, reason)
         print()
-        
-        if perf['strategy_rankings']:
-            print("🏆 STRATEGY RANKINGS:")
-            for i, strat in enumerate(perf['strategy_rankings'], 1):
-                print(f"  {i}. {strat['strategy']}: {strat['win_rate']}% WR, ${strat['total_pnl']:+.2f} PnL (Score: {strat['score']})")
-    else:
-        print("⏳ No closed trades yet")
     
-    print("=" * 80)
+    # Check if we can open new positions
+    open_positions = load_open_positions()  # Reload after closes
+    
+    if len(open_positions) >= MAX_OPEN_POSITIONS:
+        print(f"⚠️  At capacity ({len(open_positions)}/{MAX_OPEN_POSITIONS})")
+        print("   No new entries until positions close")
+    else:
+        print("📈 Evaluating new signals...")
+        
+        # Filter to high-quality signals
+        good_signals = [s for s in signals 
+                       if s.get('ev_score', 0) >= MIN_EV_SCORE
+                       and s.get('timestamp')]
+        
+        if good_signals:
+            # Take highest EV signal
+            best_signal = max(good_signals, key=lambda x: x.get('ev_score', 0))
+            
+            # Check if we already have a position in this asset
+            open_assets = [p['signal']['asset'] for p in open_positions if 'asset' in p['signal']]
+            signal_asset = best_signal.get('asset')
+            
+            if signal_asset and signal_asset in open_assets:
+                print(f"  ⚠️ Already have open position in {signal_asset}")
+            else:
+                # Execute trade
+                trader = PaperTrader(best_signal)
+                trade = trader.execute()
+                
+                if trade:
+                    log_trade(trade)
+        else:
+            print("  No signals above EV threshold")
+    
+    print()
+    
+    # Update performance
+    performance = calculate_performance()
+    
+    if performance.get('total_trades', 0) > 0:
+        print(f"📊 Performance:")
+        print(f"   Total trades: {performance['total_trades']}")
+        print(f"   Win rate: {performance['win_rate']:.1f}%")
+        print(f"   Total P&L: ${performance['total_pnl_usd']:+.2f}")
+    
+    print()
+    print("✅ Paper trader complete")
 
 
 if __name__ == "__main__":
