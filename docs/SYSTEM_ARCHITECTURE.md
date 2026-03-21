@@ -26,8 +26,9 @@ The canonical operator path starts with `scripts/trading-agency-phase1.py`.
 6. **Authoritative state update**
    - Planned trade records are persisted to `workspace/logs/phase1-paper-trades.jsonl`.
    - Canonical open-position state is updated in `workspace/logs/position-state.json`.
-7. **Follow-up monitoring**
-   - Exit and timeout monitors read authoritative state and continue lifecycle tracking.
+7. **Monitor/report stage**
+   - The orchestrator safely runs `scripts/timeout-monitor.py`, which reads authoritative state and writes timeout-tracking artifacts.
+   - The orchestrator does **not** run `scripts/exit-monitor.py` in the canonical loop because that script currently writes exit-proof artifacts without performing the authoritative close-state update.
 
 ## State Model
 
