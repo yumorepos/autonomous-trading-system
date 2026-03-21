@@ -56,7 +56,7 @@ QUALITY_THRESHOLDS = {
     'min_sharpe': 0.5,          # Min Sharpe to keep
     'min_win_rate': 45.0,       # Min 45% WR to keep
     'min_profit_factor': 1.0,   # Min PF to keep
-    'elimination_cycles': 3     # 3 cycles below threshold → eliminate
+    'elimination_cycles': 3     # 3 cycles below threshold -> eliminate
 }
 
 
@@ -598,7 +598,7 @@ class AlphaIntelligenceLayer:
         self.learn_source_weights()
         self.learn_strategy_weights()
         self.learn_regime_weights()
-        print("   ✅ Weights updated")
+        print("   [OK] Weights updated")
         print()
         
         # Identify low performers
@@ -608,7 +608,7 @@ class AlphaIntelligenceLayer:
         
         if candidates:
             for c in candidates:
-                print(f"   ⚠️ {c['name']}: {' | '.join(c['failures'])}")
+                print(f"   [WARN] {c['name']}: {' | '.join(c['failures'])}")
             
             self.eliminate_signal_types(candidates)
         print()
@@ -627,8 +627,8 @@ class AlphaIntelligenceLayer:
             f.write(report)
         
         print("=" * 80)
-        print(f"✅ Learning cycle complete")
-        print(f"📄 Report: {ALPHA_REPORT}")
+        print(f"[OK] Learning cycle complete")
+        print(f"[REPORT] Report: {ALPHA_REPORT}")
         print("=" * 80)
     
     def generate_report(self) -> str:

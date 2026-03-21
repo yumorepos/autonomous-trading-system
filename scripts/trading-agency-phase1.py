@@ -91,7 +91,7 @@ def run_data_integrity_gate(optional_components: dict) -> StageResult:
 
 def run_signal_scanner():
     """Execute signal scanner as the only scanner in the canonical path."""
-    print("🔍 Agency: Running signal scanner...")
+    print("[SCAN] Agency: Running signal scanner...")
     
     result = subprocess.run(
         ["python3", str(REPO_ROOT / "scripts" / "phase1-signal-scanner.py")],
@@ -437,13 +437,13 @@ def main():
     report = generate_agency_report(stage_results, optional_components, final_status_snapshot)
     
     print()
-    print(f"📊 Cycle #{report['cycle_number']} Complete")
-    print("✅ Stage status summary:")
+    print(f"[STATS] Cycle #{report['cycle_number']} Complete")
+    print("[OK] Stage status summary:")
     for result in stage_results:
         print(f"   - {result.stage}: {result.status} ({result.reason})")
-    print(f"📈 State: {report['current_state']['open_positions']} open positions, {report['current_state']['latest_signals_count']} signals")
+    print(f"[TREND] State: {report['current_state']['open_positions']} open positions, {report['current_state']['latest_signals_count']} signals")
     print(
-        f"🩺 Health: {report['current_state']['system_health']['overall_status']} | "
+        f"[HEALTH] Health: {report['current_state']['system_health']['overall_status']} | "
         f"Active: {len(report['current_state']['system_health']['active_incidents'])} | "
         f"Resolved recent: {len(report['current_state']['system_health'].get('resolved_incidents', []))} | "
         f"Cooldown: {report['current_state']['system_health'].get('cooldown_remaining', 0)}s | "
@@ -457,22 +457,22 @@ def main():
     
     if report['performance_summary'].get('total_trades', 0) > 0:
         perf = report['performance_summary']
-        print(f"💰 Performance: {perf['total_trades']} trades, {perf['win_rate']}% WR, ${perf['total_pnl_usd']:+.2f} PnL")
+        print(f"[MONEY] Performance: {perf['total_trades']} trades, {perf['win_rate']}% WR, ${perf['total_pnl_usd']:+.2f} PnL")
     else:
-        print(f"⏳ Performance: No closed trades yet")
+        print(f"[PENDING] Performance: No closed trades yet")
     
     print()
     
     if report['supervisor_action_required']:
-        print("🚨 SUPERVISOR ACTION REQUIRED:")
+        print("[ALERT] SUPERVISOR ACTION REQUIRED:")
         for action in report['supervisor_action_required']:
-            print(f"  • {action['type'].upper()}: {action['reason']}")
-            print(f"    → {action['recommendation']}")
+            print(f"  - {action['type'].upper()}: {action['reason']}")
+            print(f"    -> {action['recommendation']}")
     else:
-        print("✅ No supervisor action required - agency operating normally")
+        print("[OK] No supervisor action required - agency operating normally")
     
     print()
-    print(f"📄 Full report saved: {AGENCY_REPORT}")
+    print(f"[REPORT] Full report saved: {AGENCY_REPORT}")
     print("=" * 80)
 
 

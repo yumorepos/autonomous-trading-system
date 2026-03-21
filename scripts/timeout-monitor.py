@@ -168,11 +168,11 @@ class TimeoutMonitor:
         if pnl_trend['trend'] == 'insufficient_data':
             return 'unknown'
         
-        # If currently at loss and improving → converging
+        # If currently at loss and improving -> converging
         if pnl_pct < 0 and pnl_trend['trend'] == 'improving':
             return 'converging_to_entry'
         
-        # If currently at profit and deteriorating → converging
+        # If currently at profit and deteriorating -> converging
         if pnl_pct > 0 and pnl_trend['trend'] == 'deteriorating':
             return 'converging_to_entry'
         
@@ -325,7 +325,7 @@ class TimeoutMonitor:
 """
         
         for i, track in enumerate(timeout_candidates, 1):
-            priority_emoji = "🔴" if track['priority'] == 'HIGH' else "🟡"
+            priority_emoji = "[RED]" if track['priority'] == 'HIGH' else "[YELLOW]"
             
             report += f"""### {priority_emoji} Position {i}: {track['asset']} (TIMEOUT LIKELY)
 
@@ -368,9 +368,9 @@ class TimeoutMonitor:
                 continue
             
             likely = track['exit_probabilities']['most_likely']
-            emoji = "⏱️" if likely == 'timeout' else "✅" if likely == 'take_profit' else "❌"
+            emoji = "[TIME]" if likely == 'timeout' else "[OK]" if likely == 'take_profit' else "[FAIL]"
             
-            report += f"{emoji} **{track['asset']}** → {likely.upper()} ({track['exit_probabilities'][f'{likely}_pct']}%) in {track['time_to_timeout_minutes']:.0f}min\n"
+            report += f"{emoji} **{track['asset']}** -> {likely.upper()} ({track['exit_probabilities'][f'{likely}_pct']}%) in {track['time_to_timeout_minutes']:.0f}min\n"
         
         report += """
 
@@ -401,7 +401,7 @@ class TimeoutMonitor:
         self.positions = self.load_positions()
         
         if not self.positions:
-            print("⚠️  No open positions")
+            print("[WARN]  No open positions")
             # Generate empty report
             report = f"""# Timeout Monitor Report
 **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}
@@ -430,7 +430,7 @@ No open positions to monitor.
             if track and track['timeout_candidate']:
                 timeout_candidates.append(track)
                 
-                priority_emoji = "🔴" if track['priority'] == 'HIGH' else "🟡"
+                priority_emoji = "[RED]" if track['priority'] == 'HIGH' else "[YELLOW]"
                 print(f"{priority_emoji} {track['asset']}: TIMEOUT CANDIDATE")
                 print(f"   Time remaining: {track['time_to_timeout_minutes']:.0f} minutes")
                 print(f"   Probability: {track['exit_probabilities']['timeout_pct']}%")
@@ -438,12 +438,12 @@ No open positions to monitor.
                 print()
         
         if timeout_candidates:
-            print(f"⏱️  {len(timeout_candidates)} TIMEOUT CANDIDATES identified")
+            print(f"[TIME]  {len(timeout_candidates)} TIMEOUT CANDIDATES identified")
         else:
-            print("ℹ️  No timeout candidates (all positions more likely SL/TP)")
+            print("[INFO]  No timeout candidates (all positions more likely SL/TP)")
         
         print()
-        print(f"📊 Report: {TIMEOUT_REPORT}")
+        print(f"[STATS] Report: {TIMEOUT_REPORT}")
         
         self.generate_report(tracked)
 

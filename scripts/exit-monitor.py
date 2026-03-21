@@ -311,7 +311,7 @@ class ExitMonitor:
         
         if not self.open_positions:
             self.log("No open positions to monitor", "INFO")
-            print("⚠️  No open positions to monitor")
+            print("[WARN]  No open positions to monitor")
             return
         
         self.log(f"Monitoring {len(self.open_positions)} open positions", "INFO")
@@ -329,7 +329,7 @@ class ExitMonitor:
             current_price = self.get_current_price(asset)
             
             if current_price is None:
-                print(f"⚠️  {asset}: Failed to fetch price, skipping")
+                print(f"[WARN]  {asset}: Failed to fetch price, skipping")
                 continue
             
             # Calculate P&L
@@ -346,26 +346,26 @@ class ExitMonitor:
             age_hours = (datetime.now(timezone.utc) - entry_time).total_seconds() / 3600
             
             if should_exit:
-                print(f"🔴 EXIT TRIGGERED: {asset}")
+                print(f"[RED] EXIT TRIGGERED: {asset}")
                 print(f"   Reason: {exit_reason}")
                 print(f"   Entry: ${entry_price:.4f}")
                 print(f"   Exit: ${current_price:.4f}")
                 print(f"   P&L: ${pnl_usd:+.2f} ({pnl_pct:+.1f}%)")
                 print(f"   Hold: {age_hours:.1f}h")
                 print()
-                print("   📝 Capturing complete lifecycle proof...")
+                print("   [NOTE] Capturing complete lifecycle proof...")
                 
                 # Capture proof
                 proof = self.capture_exit_proof(position, exit_reason, current_price)
                 
-                print(f"   ✅ Proof saved to {EXIT_PROOF_LOG}")
+                print(f"   [OK] Proof saved to {EXIT_PROOF_LOG}")
                 print()
                 
                 exits_captured += 1
             else:
                 # Show monitoring status
-                status_emoji = "✅" if pnl_usd > 0 else "❌" if pnl_usd < 0 else "➖"
-                print(f"{status_emoji} {asset}: ${entry_price:.4f} → ${current_price:.4f} (P&L: ${pnl_usd:+.2f}, {pnl_pct:+.1f}%) | {age_hours:.1f}h old")
+                status_emoji = "[OK]" if pnl_usd > 0 else "[FAIL]" if pnl_usd < 0 else "[FLAT]"
+                print(f"{status_emoji} {asset}: ${entry_price:.4f} -> ${current_price:.4f} (P&L: ${pnl_usd:+.2f}, {pnl_pct:+.1f}%) | {age_hours:.1f}h old")
         
         print()
         print(f"Summary: {exits_captured} exits captured this check")
@@ -413,7 +413,7 @@ class ExitMonitor:
                 exit_trigger = proof['exit_trigger']
                 pnl = proof['realized_pnl']
                 
-                profit_emoji = "✅" if pnl['winner'] else "❌"
+                profit_emoji = "[OK]" if pnl['winner'] else "[FAIL]"
                 
                 report += f"""
 ### Exit #{total_proofs - i + 1} - {entry['asset']}

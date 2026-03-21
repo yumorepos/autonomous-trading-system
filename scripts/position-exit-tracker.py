@@ -174,7 +174,7 @@ class ExitTracker:
 
 **Max Open Positions:** 3 (HARD CAP)
 **Current Open:** {len(self.tracking_data)}
-**Status:** {"🔴 AT CAPACITY - NEW ENTRIES BLOCKED" if len(self.tracking_data) >= 3 else "🟢 CAPACITY AVAILABLE"}
+**Status:** {"[RED] AT CAPACITY - NEW ENTRIES BLOCKED" if len(self.tracking_data) >= 3 else "[GREEN] CAPACITY AVAILABLE"}
 
 **Policy:**
 - Do NOT increase max until 3 real trades fully closed and validated
@@ -192,7 +192,7 @@ class ExitTracker:
                 report += f"### Position #{i}: PRICE FETCH FAILED\n\n"
                 continue
             
-            profit_emoji = "✅" if track['pnl_pct'] > 0 else "❌"
+            profit_emoji = "[OK]" if track['pnl_pct'] > 0 else "[FAIL]"
             
             report += f"""### Position #{i}: {track['asset']}
 
@@ -212,7 +212,7 @@ class ExitTracker:
 - Est. time to TP: {track['estimated_hours_to_tp']:.1f}h
 - Est. time to SL: {track['estimated_hours_to_sl']:.1f}h
 
-**⚡ Closest Exit:** {track['closest_exit'].upper().replace('_', ' ')} (est. {track['closest_time_estimate']:.1f}h)
+**[NEXT] Closest Exit:** {track['closest_exit'].upper().replace('_', ' ')} (est. {track['closest_time_estimate']:.1f}h)
 
 ---
 
@@ -220,12 +220,12 @@ class ExitTracker:
         
         report += """## RANKED BY PROXIMITY TO EXIT
 
-(Most likely to exit first → last)
+(Most likely to exit first -> last)
 
 """
         
         for rank, (pos_num, track, score) in enumerate(ranked, 1):
-            report += f"{rank}. **{track['asset']} (Pos #{pos_num})** → {track['closest_label']} in ~{score:.1f}h\n"
+            report += f"{rank}. **{track['asset']} (Pos #{pos_num})** -> {track['closest_label']} in ~{score:.1f}h\n"
         
         report += f"""
 
@@ -277,7 +277,7 @@ class ExitTracker:
         self.positions = self.load_positions()
         
         if not self.positions:
-            print("⚠️  No open positions to track")
+            print("[WARN]  No open positions to track")
             return
         
         print(f"Tracking {len(self.positions)} open positions...")
@@ -308,11 +308,11 @@ class ExitTracker:
         
         if ranked:
             first = ranked[0]
-            print(f"⚡ MOST LIKELY NEXT EXIT: Position #{first[0]} ({first[1]['asset']}) → {first[1]['closest_label']} in ~{first[2]:.1f}h")
+            print(f"[NEXT] MOST LIKELY NEXT EXIT: Position #{first[0]} ({first[1]['asset']}) -> {first[1]['closest_label']} in ~{first[2]:.1f}h")
         
         print()
-        print(f"📊 Report: {EXIT_TRACKER_REPORT}")
-        print(f"📝 Log: {EXIT_TRACKER_LOG}")
+        print(f"[STATS] Report: {EXIT_TRACKER_REPORT}")
+        print(f"[NOTE] Log: {EXIT_TRACKER_LOG}")
         
         self.generate_report()
 

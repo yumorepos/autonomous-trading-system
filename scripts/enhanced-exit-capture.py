@@ -412,13 +412,13 @@ class EnhancedExitCapture:
         # Step 1: Pre-exit snapshot
         print("Step 1/5: Capturing pre-exit snapshot...")
         snapshot = self.capture_pre_exit_snapshot(position)
-        print(f"✅ Snapshot captured: {snapshot['position_state']['asset']} @ ${snapshot['position_state']['current_price']:.4f}")
+        print(f"[OK] Snapshot captured: {snapshot['position_state']['asset']} @ ${snapshot['position_state']['current_price']:.4f}")
         print()
         
         # Step 2: Exit trigger
         print("Step 2/5: Capturing exit trigger...")
         trigger = self.capture_exit_trigger(position, exit_price)
-        print(f"✅ Trigger captured: {trigger['trigger_type']} @ {trigger['trigger_timestamp']}")
+        print(f"[OK] Trigger captured: {trigger['trigger_type']} @ {trigger['trigger_timestamp']}")
         print()
         
         # Step 3: Execution
@@ -428,9 +428,9 @@ class EnhancedExitCapture:
         execution_success = execution['execution_status'] == 'success' and not execution['duplicate_execution_detected']
         
         if execution_success:
-            print(f"✅ Execution captured: Filled ${exit_price:.4f}, size {execution['order_sent']['size']:.4f}")
+            print(f"[OK] Execution captured: Filled ${exit_price:.4f}, size {execution['order_sent']['size']:.4f}")
         else:
-            print(f"⚠️  Execution issues detected:")
+            print(f"[WARN]  Execution issues detected:")
             if execution['duplicate_execution_detected']:
                 print(f"   - Duplicate execution detected")
             if execution['execution_status'] != 'success':
@@ -442,9 +442,9 @@ class EnhancedExitCapture:
         execution_validation = self.capture_execution_validation(position)
         
         if execution_validation['validation_passed']:
-            print(f"✅ Validation passed: Position removed, state consistent")
+            print(f"[OK] Validation passed: Position removed, state consistent")
         else:
-            print(f"⚠️  Validation issues:")
+            print(f"[WARN]  Validation issues:")
             if not execution_validation['position_size_reduced_to_zero']:
                 print(f"   - Position still open")
             if not execution_validation['no_duplicate_open_positions']:
@@ -459,9 +459,9 @@ class EnhancedExitCapture:
         logs_confirmed = post_exit['logs_written']['logs_written_confirmation']
         
         if state_check_passed and logs_confirmed:
-            print(f"✅ Post-exit captured: P&L ${post_exit['realized_pnl']['pnl_usd_absolute']:+.2f} ({post_exit['realized_pnl']['pnl_pct']:+.1f}%)")
+            print(f"[OK] Post-exit captured: P&L ${post_exit['realized_pnl']['pnl_usd_absolute']:+.2f} ({post_exit['realized_pnl']['pnl_pct']:+.1f}%)")
         else:
-            print(f"⚠️  Post-exit issues:")
+            print(f"[WARN]  Post-exit issues:")
             if not state_check_passed:
                 print(f"   - State consistency check failed")
             if not logs_confirmed:
@@ -471,7 +471,7 @@ class EnhancedExitCapture:
         # Step 5: Validator impact
         print("Step 5/6: Capturing validator impact...")
         validator = self.capture_validator_impact()
-        print(f"✅ Validator updated: {validator['readiness_metrics_updated']['current_closed_trades']}/100 trades")
+        print(f"[OK] Validator updated: {validator['readiness_metrics_updated']['current_closed_trades']}/100 trades")
         print()
         
         # Step 6: Determine lifecycle status
@@ -493,9 +493,9 @@ class EnhancedExitCapture:
         lifecycle_status = 'success' if len(failed_checks) == 0 else 'failed'
         
         if lifecycle_status == 'success':
-            print(f"✅ LIFECYCLE STATUS: SUCCESS (all checks passed)")
+            print(f"[OK] LIFECYCLE STATUS: SUCCESS (all checks passed)")
         else:
-            print(f"❌ LIFECYCLE STATUS: FAILED")
+            print(f"[FAIL] LIFECYCLE STATUS: FAILED")
             print(f"   Failed checks: {', '.join(failed_checks)}")
         print()
         
@@ -540,9 +540,9 @@ class EnhancedExitCapture:
         
         print("="*80)
         if lifecycle_status == 'success':
-            print("✅ COMPLETE LIFECYCLE PROOF CAPTURED (VALID)")
+            print("[OK] COMPLETE LIFECYCLE PROOF CAPTURED (VALID)")
         else:
-            print("⚠️  LIFECYCLE PROOF CAPTURED (INVALID - CHECKS FAILED)")
+            print("[WARN]  LIFECYCLE PROOF CAPTURED (INVALID - CHECKS FAILED)")
         print("="*80)
         print()
         print(f"Trade: {lifecycle_record['summary']['asset']}")
@@ -551,9 +551,9 @@ class EnhancedExitCapture:
         print(f"Duration: {lifecycle_record['summary']['hold_duration_hours']:.1f}h")
         print(f"Lifecycle Status: {lifecycle_status.upper()}")
         if lifecycle_status != 'success':
-            print(f"⚠️  This proof is NOT valid until all checks pass")
+            print(f"[WARN]  This proof is NOT valid until all checks pass")
         print()
-        print(f"📝 Full proof: {ENHANCED_EXIT_PROOF}")
+        print(f"[NOTE] Full proof: {ENHANCED_EXIT_PROOF}")
         print()
         
         return lifecycle_record

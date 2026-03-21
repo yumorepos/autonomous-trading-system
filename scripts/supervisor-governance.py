@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Three-Stage Governance Supervisor
-VALIDATE → QUARANTINE → PROMOTE → [Human Approval] → LIVE
+VALIDATE -> QUARANTINE -> PROMOTE -> [Human Approval] -> LIVE
 
 Enforces strict lifecycle management with quarantine buffer and human approval gate
 """
@@ -35,10 +35,10 @@ VALIDATION_CRITERIA = {
 }
 
 QUARANTINE_TRIGGERS = {
-    'win_rate_warning': 50.0,      # Below 50% → quarantine
-    'profit_factor_warning': 1.2,  # Below 1.2 → quarantine
-    'loss_streak_warning': 3,      # 3 losses → quarantine
-    'degradation_warning': 0.15    # 15% degradation → quarantine
+    'win_rate_warning': 50.0,      # Below 50% -> quarantine
+    'profit_factor_warning': 1.2,  # Below 1.2 -> quarantine
+    'loss_streak_warning': 3,      # 3 losses -> quarantine
+    'degradation_warning': 0.15    # 15% degradation -> quarantine
 }
 
 DEMOTION_TRIGGERS = {
@@ -46,7 +46,7 @@ DEMOTION_TRIGGERS = {
     'profit_factor_critical': 1.0,
     'loss_streak_critical': 5,
     'degradation_critical': 0.25,
-    'quarantine_cycles': 3  # 3 cycles in quarantine → demote
+    'quarantine_cycles': 3  # 3 cycles in quarantine -> demote
 }
 
 
@@ -341,7 +341,7 @@ def generate_governance_report(decisions: Dict, gov: StrategyGovernance) -> str:
     lines = []
     lines.append("# SUPERVISOR GOVERNANCE REPORT")
     lines.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M EDT')}")
-    lines.append("**Model:** Three-Stage Governance (VALIDATE → QUARANTINE → PROMOTE → LIVE)")
+    lines.append("**Model:** Three-Stage Governance (VALIDATE -> QUARANTINE -> PROMOTE -> LIVE)")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -380,7 +380,7 @@ def generate_governance_report(decisions: Dict, gov: StrategyGovernance) -> str:
     lines.append("")
     
     # Details by transition
-    for transition in ['VALIDATE→PROMOTE', 'PROMOTE→QUARANTINE', 'QUARANTINE→DEMOTE', 'QUARANTINE→PROMOTE', 'PROMOTE→DEMOTE']:
+    for transition in ['VALIDATE->PROMOTE', 'PROMOTE->QUARANTINE', 'QUARANTINE->DEMOTE', 'QUARANTINE->PROMOTE', 'PROMOTE->DEMOTE']:
         strategies = {name: d for name, d in decisions.items() if d['transition'] == transition}
         
         if not strategies:
@@ -404,12 +404,12 @@ def generate_governance_report(decisions: Dict, gov: StrategyGovernance) -> str:
                 lines.append("")
                 lines.append("**Validation:**")
                 for check, passed in decision['validation_checks'].items():
-                    status = "✅" if passed else "❌"
+                    status = "[OK]" if passed else "[FAIL]"
                     lines.append(f"- {status} {check.replace('_', ' ').title()}")
             
-            if transition == 'VALIDATE→PROMOTE':
+            if transition == 'VALIDATE->PROMOTE':
                 lines.append("")
-                lines.append("**⚠️ REQUIRES HUMAN APPROVAL FOR LIVE CAPITAL**")
+                lines.append("**[WARN] REQUIRES HUMAN APPROVAL FOR LIVE CAPITAL**")
                 lines.append("Review metrics, approve via approval queue if satisfied")
             
             lines.append("")
@@ -425,7 +425,7 @@ def generate_governance_report(decisions: Dict, gov: StrategyGovernance) -> str:
         pending = queue.get('pending', [])
         
         if pending:
-            lines.append("## 🚨 HUMAN APPROVAL REQUIRED")
+            lines.append("## [ALERT] HUMAN APPROVAL REQUIRED")
             lines.append("")
             lines.append(f"**{len(pending)} strategies awaiting approval for live capital**")
             lines.append("")
@@ -453,19 +453,19 @@ def main():
     gov = StrategyGovernance()
     
     if not AGENCY_REPORT.exists():
-        print("⚠️ No agency report available")
+        print("[WARN] No agency report available")
         return
     
     # Load paper trades
     trades_by_strategy = load_paper_trades()
     
-    print(f"📊 Strategies: {len(trades_by_strategy)}")
+    print(f"[STATS] Strategies: {len(trades_by_strategy)}")
     print()
     
     decisions = {}
     
     for strategy_name, trades in trades_by_strategy.items():
-        print(f"🔍 Evaluating: {strategy_name}")
+        print(f"[SCAN] Evaluating: {strategy_name}")
         
         closed_trades = [t for t in trades if t['status'] != 'OPEN']
         
@@ -475,7 +475,7 @@ def main():
                 'reason': 'No closed trades yet',
                 'metrics': {'trades': 0}
             }
-            print(f"   → HOLD (collecting data)")
+            print(f"   -> HOLD (collecting data)")
             continue
         
         # Calculate all metrics
@@ -504,13 +504,13 @@ def main():
                 add_to_approval_queue(strategy_name, metrics)
                 
                 decisions[strategy_name] = {
-                    'transition': 'VALIDATE→PROMOTE',
+                    'transition': 'VALIDATE->PROMOTE',
                     'reason': reason,
                     'metrics': metrics,
                     'validation_checks': checks
                 }
                 
-                print(f"   → ✅ PROMOTED (awaiting human approval)")
+                print(f"   -> [OK] PROMOTED (awaiting human approval)")
             else:
                 decisions[strategy_name] = {
                     'transition': 'HOLD',
@@ -518,7 +518,7 @@ def main():
                     'metrics': metrics,
                     'validation_checks': checks
                 }
-                print(f"   → HOLD (validation incomplete)")
+                print(f"   -> HOLD (validation incomplete)")
         
         elif current_stage in ['PROMOTE', 'QUARANTINE']:
             action, reason = evaluate_quarantine(strategy_name, metrics, gov)
@@ -534,12 +534,12 @@ def main():
                 gov.add_event(strategy_name, 'QUARANTINED', reason, metrics)
                 
                 decisions[strategy_name] = {
-                    'transition': 'PROMOTE→QUARANTINE',
+                    'transition': 'PROMOTE->QUARANTINE',
                     'reason': reason,
                     'metrics': metrics
                 }
                 
-                print(f"   → ⚠️ QUARANTINED ({reason})")
+                print(f"   -> [WARN] QUARANTINED ({reason})")
             
             elif action == 'PROMOTE' and current_stage == 'QUARANTINE':
                 # Recovered from quarantine
@@ -551,12 +551,12 @@ def main():
                 gov.add_event(strategy_name, 'QUARANTINE_RECOVERY', reason, metrics)
                 
                 decisions[strategy_name] = {
-                    'transition': 'QUARANTINE→PROMOTE',
+                    'transition': 'QUARANTINE->PROMOTE',
                     'reason': reason,
                     'metrics': metrics
                 }
                 
-                print(f"   → ✅ RECOVERED (back to PROMOTE)")
+                print(f"   -> [OK] RECOVERED (back to PROMOTE)")
             
             elif action == 'DEMOTE':
                 # Failed, demote
@@ -569,12 +569,12 @@ def main():
                 
                 from_stage = 'QUARANTINE' if current_stage == 'QUARANTINE' else 'PROMOTE'
                 decisions[strategy_name] = {
-                    'transition': f'{from_stage}→DEMOTE',
+                    'transition': f'{from_stage}->DEMOTE',
                     'reason': reason,
                     'metrics': metrics
                 }
                 
-                print(f"   → ❌ DEMOTED ({reason})")
+                print(f"   -> [FAIL] DEMOTED ({reason})")
             
             else:
                 decisions[strategy_name] = {
@@ -582,7 +582,7 @@ def main():
                     'reason': reason,
                     'metrics': metrics
                 }
-                print(f"   → HOLD (stable)")
+                print(f"   -> HOLD (stable)")
                 
                 # Update quarantine cycles if in quarantine
                 if current_stage == 'QUARANTINE':
@@ -610,15 +610,15 @@ def main():
         f.write(report)
     
     print("=" * 80)
-    print(f"📄 Governance report: {DECISION_REPORT}")
-    print(f"📊 Strategy registry: {STRATEGY_REGISTRY}")
+    print(f"[REPORT] Governance report: {DECISION_REPORT}")
+    print(f"[STATS] Strategy registry: {STRATEGY_REGISTRY}")
     
     if HUMAN_APPROVAL_QUEUE.exists():
         with open(HUMAN_APPROVAL_QUEUE) as f:
             queue = json.load(f)
         pending = len([s for s in queue.get('pending', []) if s['status'] == 'AWAITING_APPROVAL'])
         if pending > 0:
-            print(f"🚨 Human approval required: {pending} strategies")
+            print(f"[ALERT] Human approval required: {pending} strategies")
             print(f"   Review: {HUMAN_APPROVAL_QUEUE}")
     
     print("=" * 80)

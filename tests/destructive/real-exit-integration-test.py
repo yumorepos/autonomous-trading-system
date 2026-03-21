@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DESTRUCTIVE TEST — NEVER RUN AGAINST LIVE STATE
+DESTRUCTIVE TEST -- NEVER RUN AGAINST LIVE STATE
 Real Exit Path Integration Test
 Uses actual check_exit() logic inside a temporary workspace only.
 """
@@ -65,7 +65,7 @@ def get_state(trades_file: Path, state_file: Path):
 if __name__ == '__main__':
     print('=' * 80)
     print('REAL EXIT PATH INTEGRATION TEST')
-    print('DESTRUCTIVE TEST — NEVER RUN AGAINST LIVE STATE')
+    print('DESTRUCTIVE TEST -- NEVER RUN AGAINST LIVE STATE')
     print('=' * 80)
     print()
 
@@ -97,5 +97,5 @@ if __name__ == '__main__':
             perf = json.load(handle)
         assert perf.get('total_trades') == 1, 'Expected one trade in performance file'
 
-        print(f"✅ Real exit path passed for {position['position_id']}")
+        print(f"[OK] Real exit path passed for {position['position_id']}")
         print(f'Workspace: {workspace_root}')

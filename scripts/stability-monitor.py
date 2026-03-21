@@ -266,7 +266,7 @@ class StabilityMonitor:
         report = f"""# 24-Hour Stability Report
 **Started:** {self.state['start_time']}
 **Elapsed:** {elapsed_hours:.1f} hours
-**Status:** {"✅ STABLE" if self.state['errors'] < 5 else "⚠️ UNSTABLE" if self.state['errors'] < 10 else "❌ CRITICAL"}
+**Status:** {"[OK] STABLE" if self.state['errors'] < 5 else "[WARN] UNSTABLE" if self.state['errors'] < 10 else "[FAIL] CRITICAL"}
 
 ---
 
@@ -283,10 +283,10 @@ class StabilityMonitor:
 
 | Component | Failures | Status |
 |-----------|----------|--------|
-| API | {self.state['api_failures']} | {"✅" if self.state['api_failures'] < 5 else "⚠️" if self.state['api_failures'] < 10 else "❌"} |
-| Cron | {self.state['cron_misses']} | {"✅" if self.state['cron_misses'] == 0 else "⚠️" if self.state['cron_misses'] < 3 else "❌"} |
-| State | {self.state['crashes']} | {"✅" if self.state['crashes'] == 0 else "❌"} |
-| Memory | {self.state['memory_leaks']} | {"✅" if self.state['memory_leaks'] == 0 else "⚠️"} |
+| API | {self.state['api_failures']} | {"[OK]" if self.state['api_failures'] < 5 else "[WARN]" if self.state['api_failures'] < 10 else "[FAIL]"} |
+| Cron | {self.state['cron_misses']} | {"[OK]" if self.state['cron_misses'] == 0 else "[WARN]" if self.state['cron_misses'] < 3 else "[FAIL]"} |
+| State | {self.state['crashes']} | {"[OK]" if self.state['crashes'] == 0 else "[FAIL]"} |
+| Memory | {self.state['memory_leaks']} | {"[OK]" if self.state['memory_leaks'] == 0 else "[WARN]"} |
 
 ---
 
@@ -324,9 +324,9 @@ def main():
     monitor = StabilityMonitor()
     monitor.run_check()
     
-    print(f"✅ Stability check complete")
-    print(f"📊 Report: {STABILITY_REPORT}")
-    print(f"📝 Log: {STABILITY_LOG}")
+    print(f"[OK] Stability check complete")
+    print(f"[STATS] Report: {STABILITY_REPORT}")
+    print(f"[NOTE] Log: {STABILITY_LOG}")
 
 
 if __name__ == "__main__":

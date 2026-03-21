@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Full Trade Lifecycle Test
-Simulates 10 complete trades: entry → tracking → exit → PnL → logging
+Simulates 10 complete trades: entry -> tracking -> exit -> PnL -> logging
 """
 
 import json
@@ -124,7 +124,7 @@ class LifecycleTester:
             with open(TEST_TRADES, 'a') as f:
                 f.write(json.dumps(trade) + '\n')
             
-            print(f"✅ Created {trade['trade_id']}: {trade['side']} {trade['asset']} @ ${trade['entry_price']:.2f}")
+            print(f"[OK] Created {trade['trade_id']}: {trade['side']} {trade['asset']} @ ${trade['entry_price']:.2f}")
         
         # Create Polymarket trades
         for i in range(pm_trades):
@@ -136,10 +136,10 @@ class LifecycleTester:
             with open(TEST_TRADES, 'a') as f:
                 f.write(json.dumps(trade) + '\n')
             
-            print(f"✅ Created {trade['trade_id']}: {trade['side']} {trade['asset']} @ ${trade['entry_price']:.2f}")
+            print(f"[OK] Created {trade['trade_id']}: {trade['side']} {trade['asset']} @ ${trade['entry_price']:.2f}")
         
         print()
-        print("Simulating trade lifecycle (entry → tracking → exit)...")
+        print("Simulating trade lifecycle (entry -> tracking -> exit)...")
         print()
         
         # Close all trades
@@ -151,7 +151,7 @@ class LifecycleTester:
             with open(TEST_TRADES, 'a') as f:
                 f.write(json.dumps(closed_trade) + '\n')
             
-            profit_emoji = "✅" if closed_trade['pnl'] > 0 else "❌"
+            profit_emoji = "[OK]" if closed_trade['pnl'] > 0 else "[FAIL]"
             print(f"{profit_emoji} Closed {closed_trade['trade_id']}: {closed_trade['exit_reason']} | P&L: ${closed_trade['pnl']:+.2f} ({closed_trade['pnl_pct']:+.1f}%)")
         
         print()
@@ -184,14 +184,14 @@ class LifecycleTester:
         report = f"""# Full Trade Lifecycle Test Report
 **Test Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}
 **Test Type:** Simulated (Mock Trades)
-**Purpose:** Validate entry → tracking → exit → PnL → logging pipeline
+**Purpose:** Validate entry -> tracking -> exit -> PnL -> logging pipeline
 
 ---
 
 ## Test Results
 
 **Total Trades:** {total_trades}
-**Status:** ✅ ALL CLOSED (100% completion)
+**Status:** [OK] ALL CLOSED (100% completion)
 
 ---
 
@@ -252,7 +252,7 @@ class LifecycleTester:
         all_passed = all(check[1] for check in checks)
         
         for check_name, passed, description in checks:
-            icon = "✅" if passed else "❌"
+            icon = "[OK]" if passed else "[FAIL]"
             report += f"{icon} **{check_name}:** {description}\n"
         
         report += f"""
@@ -261,14 +261,14 @@ class LifecycleTester:
 ## Lifecycle Completeness
 
 **Full Pipeline Verified:**
-1. ✅ Entry: Trade created with all required fields
-2. ✅ Tracking: Open trades monitored
-3. ✅ Exit: Trades closed based on conditions
-4. ✅ P&L: Profit/loss calculated correctly
-5. ✅ Logging: All events persisted to storage
-6. ✅ State Updates: Trade status updated (OPEN → CLOSED)
+1. [OK] Entry: Trade created with all required fields
+2. [OK] Tracking: Open trades monitored
+3. [OK] Exit: Trades closed based on conditions
+4. [OK] P&L: Profit/loss calculated correctly
+5. [OK] Logging: All events persisted to storage
+6. [OK] State Updates: Trade status updated (OPEN -> CLOSED)
 
-**Overall Status:** {"✅ COMPLETE" if all_passed else "❌ INCOMPLETE"}
+**Overall Status:** {"[OK] COMPLETE" if all_passed else "[FAIL] INCOMPLETE"}
 
 ---
 
@@ -282,7 +282,7 @@ All {total_trades} trades logged to: `logs/test-lifecycle-trades.jsonl`
         
         # Add 5 sample trades
         for trade in self.closed_trades[:5]:
-            profit_emoji = "✅" if trade['pnl'] > 0 else "❌"
+            profit_emoji = "[OK]" if trade['pnl'] > 0 else "[FAIL]"
             report += f"""
 **{trade['trade_id']}** ({trade['exchange']})
 - Asset: {trade['asset']}
@@ -298,10 +298,10 @@ All {total_trades} trades logged to: `logs/test-lifecycle-trades.jsonl`
 
 ## Next Steps
 
-1. ✅ **Lifecycle validated** (mock trades complete)
-2. ⏳ **Real paper trades** (wait for market conditions)
-3. ⏳ **Readiness validator** (update with test data)
-4. ⏳ **Live deployment** (after 100 real closed trades)
+1. [OK] **Lifecycle validated** (mock trades complete)
+2. [PENDING] **Real paper trades** (wait for market conditions)
+3. [PENDING] **Readiness validator** (update with test data)
+4. [PENDING] **Live deployment** (after 100 real closed trades)
 
 ---
 
@@ -317,10 +317,11 @@ All {total_trades} trades logged to: `logs/test-lifecycle-trades.jsonl`
         print(f"Total Trades: {total_trades}")
         print(f"Win Rate: {win_rate:.1f}%")
         print(f"Total P&L: ${total_pnl:+.2f}")
-        print(f"Lifecycle Status: {"✅ COMPLETE" if all_passed else "❌ INCOMPLETE"}")
+        lifecycle_status = "[OK] COMPLETE" if all_passed else "[FAIL] INCOMPLETE"
+        print(f"Lifecycle Status: {lifecycle_status}")
         print()
-        print(f"📊 Full Report: {TEST_REPORT}")
-        print(f"📝 Trade Log: {TEST_TRADES}")
+        print(f"[STATS] Full Report: {TEST_REPORT}")
+        print(f"[NOTE] Trade Log: {TEST_TRADES}")
 
 
 def main():
