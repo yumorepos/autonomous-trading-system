@@ -1,57 +1,66 @@
 # System Status
 
 **Last Updated:** 2026-03-21 UTC  
-**Verdict:** Hyperliquid paper-trading path only; repository cleaned for truthful review
+**Verdict:** Canonical paper-trading architecture supports Hyperliquid by default plus optional experimental Polymarket paper mode
 
 ---
 
-## Canonical Active Path
+## Canonical Active Architecture
 
-The active path in this repository is limited to the following scripts:
+The active architecture in this repository is the orchestrated Phase 1 paper-trading path:
 
-1. `scripts/trading-agency-phase1.py`
-2. `scripts/data-integrity-layer.py`
-3. `scripts/phase1-signal-scanner.py` in default `hyperliquid_only` mode
-4. `scripts/execution-safety-layer.py`
-5. `scripts/phase1-paper-trader.py`
-6. `scripts/timeout-monitor.py`
+1. `scripts/bootstrap-runtime-check.py`
+2. `scripts/trading-agency-phase1.py`
+3. `scripts/data-integrity-layer.py`
+4. `scripts/phase1-signal-scanner.py`
+5. `scripts/execution-safety-layer.py`
+6. `scripts/phase1-paper-trader.py`
+7. `scripts/timeout-monitor.py`
 
-This is a **paper-trading-only** path. It is the only path that should be described as canonical.
-
----
-
-## Explicitly Non-Canonical or Inactive
-
-- **Polymarket execution:** present only as exploratory/incomplete code and research; not active in the canonical flow.
-- **`scripts/exit-monitor.py`:** useful as a standalone audit artifact generator, but not safe to describe as part of authoritative close-state persistence.
-- **Archived reports:** historical only; retained for review context, not current operational truth.
-- **Simulation-only lifecycle artifacts:** archived so they cannot be mistaken for current integration evidence.
+This architecture is authoritative for paper trading only.
 
 ---
 
-## What Reviewers Should Trust
+## Runtime Modes
 
-Use these files for the current repository description:
+- `hyperliquid_only` — **default canonical mode**
+- `polymarket_only` — optional experimental paper mode
+- `mixed` — optional paper-evaluation mode for both exchanges
 
-- `README.md`
-- `docs/SYSTEM_ARCHITECTURE.md`
-- `SYSTEM_STATUS.md`
-- `docs/REPO_TRUTHFULNESS_AUDIT.md`
-
-Use `docs/archive/` only for historical context.
+The orchestrator, scanner, and data-integrity scope are controlled by the selected runtime mode.
 
 ---
 
 ## Scope Limits
 
 - **Execution mode:** paper trading only
-- **Canonical exchange:** Hyperliquid only
-- **Canonical strategy path:** funding-arbitrage signals accepted by `phase1-paper-trader.py`
-- **Polymarket:** disabled/non-canonical
+- **Default exchange:** Hyperliquid
+- **Optional exchange:** Polymarket
 - **Live deployment claim:** not supported
+- **Real exchange execution:** not implemented
 
 ---
 
-## Cleanup Outcome
+## Explicitly Non-Canonical or Limited
 
-The repository presentation no longer treats stale repair attempts, speculative rebuild plans, or simulation-only test artifacts as active implementation evidence.
+- **`scripts/exit-monitor.py`:** standalone proof/audit script only; not authoritative close-state persistence
+- **`scripts/polymarket-executor.py`:** non-canonical helper/scaffold; not the authoritative Polymarket execution path
+- **`docs/archive/`:** historical only
+- **Supporting analytics/readiness scripts:** useful for review, but not proof of live readiness
+
+---
+
+## What Reviewers Should Trust
+
+Use these files for current repository truth:
+
+- `README.md`
+- `SYSTEM_STATUS.md`
+- `docs/SYSTEM_ARCHITECTURE.md`
+- `docs/REPO_TRUTHFULNESS_AUDIT.md`
+
+---
+
+## Summary
+
+The repository now supports **truthful end-to-end paper trading** for Hyperliquid and optional Polymarket through one canonical architecture. Hyperliquid remains the default and best-supported path. Polymarket is integrated for paper trading but should still be described as optional and experimental until broader runtime evidence exists.

@@ -82,6 +82,7 @@ class PerformanceDashboard:
         hl_stats = self.calculate_stats(self.hl_trades)
         hl_stats['open'] = len([p for p in self.open_positions if p.get('raw', {}).get('exchange', p.get('exchange', 'Hyperliquid')) == 'Hyperliquid' or p.get('exchange') == 'Hyperliquid'])
         pm_stats = self.calculate_stats(self.pm_trades)
+        pm_stats['open'] = len([p for p in self.open_positions if p.get('raw', {}).get('exchange', p.get('exchange')) == 'Polymarket' or p.get('exchange') == 'Polymarket'])
         
         print("="*80)
         print("PERFORMANCE DASHBOARD")
@@ -107,7 +108,7 @@ class PerformanceDashboard:
         print("-" * 80)
         
         print()
-        print("Hyperliquid (Real Paper Trading)")
+        print("Hyperliquid (Default Canonical Paper Path)")
         print(f"  Total:    {hl_stats['total']}")
         print(f"  Open:     {hl_stats['open']}")
         print(f"  Closed:   {hl_stats['closed']}")
@@ -115,7 +116,7 @@ class PerformanceDashboard:
         print(f"  P&L:      ${hl_stats['total_pnl']:+.2f}")
         
         print()
-        print("Polymarket (Real Paper Trading)")
+        print("Polymarket (Optional Experimental Paper Path)")
         print(f"  Total:    {pm_stats['total']}")
         print(f"  Open:     {pm_stats['open']}")
         print(f"  Closed:   {pm_stats['closed']}")
