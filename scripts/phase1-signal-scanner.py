@@ -7,12 +7,18 @@ Research & analysis only - no real trades
 
 import requests
 import json
+import sys
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-SIGNALS_FILE = WORKSPACE / "logs" / "phase1-signals.jsonl"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from utils.json_utils import safe_read_jsonl
+SIGNALS_FILE = LOGS_DIR / "phase1-signals.jsonl"
 REPORT_FILE = WORKSPACE / "PHASE1_SIGNAL_REPORT.md"
 
 
@@ -140,6 +146,7 @@ def calculate_position_sizing(signal, account_balance=97.80):
 def log_signals(signals):
     """Log signals to JSONL file"""
     SIGNALS_FILE.parent.mkdir(exist_ok=True)
+    _ = safe_read_jsonl(SIGNALS_FILE)
     
     with open(SIGNALS_FILE, 'a') as f:
         for signal in signals:

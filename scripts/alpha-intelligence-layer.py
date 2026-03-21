@@ -7,6 +7,7 @@ Evolves toward higher-quality, more predictive trading opportunities
 """
 
 import json
+import sys
 import numpy as np
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -14,12 +15,16 @@ from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 from dataclasses import dataclass, asdict
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-ALPHA_STATE = WORKSPACE / "logs" / "alpha-intelligence-state.json"
-PERFORMANCE_DB = WORKSPACE / "logs" / "alpha-performance-db.json"
-SIGNAL_WEIGHTS = WORKSPACE / "logs" / "dynamic-signal-weights.json"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+ALPHA_STATE = LOGS_DIR / "alpha-intelligence-state.json"
+PERFORMANCE_DB = LOGS_DIR / "alpha-performance-db.json"
+SIGNAL_WEIGHTS = LOGS_DIR / "dynamic-signal-weights.json"
 ALPHA_REPORT = WORKSPACE / "ALPHA_INTELLIGENCE_REPORT.md"
-PAPER_TRADES = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
+PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 
 # Performance Tracking Windows
 WINDOWS = {

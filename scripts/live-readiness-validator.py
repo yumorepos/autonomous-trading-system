@@ -6,6 +6,7 @@ Produces deployment verdict: NOT_READY, LIMITED_LIVE_READY, or LIVE_READY
 """
 
 import json
+import sys
 import numpy as np
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -13,14 +14,18 @@ from typing import Dict, List, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
 
-WORKSPACE = Path.home() / ".openclaw" / "workspace"
-READINESS_STATE = WORKSPACE / "logs" / "live-readiness-state.json"
-VALIDATION_HISTORY = WORKSPACE / "logs" / "validation-history.jsonl"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+READINESS_STATE = LOGS_DIR / "live-readiness-state.json"
+VALIDATION_HISTORY = LOGS_DIR / "validation-history.jsonl"
 READINESS_REPORT = WORKSPACE / "LIVE_READINESS_REPORT.md"
-PAPER_TRADES_HL = WORKSPACE / "logs" / "phase1-paper-trades.jsonl"
-PAPER_TRADES_PM = WORKSPACE / "logs" / "polymarket-trades.jsonl"
-INCIDENT_LOG = WORKSPACE / "logs" / "incident-log.jsonl"
-ALPHA_STATE = WORKSPACE / "logs" / "alpha-intelligence-state.json"
+PAPER_TRADES_HL = LOGS_DIR / "phase1-paper-trades.jsonl"
+PAPER_TRADES_PM = LOGS_DIR / "polymarket-trades.jsonl"
+INCIDENT_LOG = LOGS_DIR / "incident-log.jsonl"
+ALPHA_STATE = LOGS_DIR / "alpha-intelligence-state.json"
 
 # Readiness Criteria
 READINESS_CRITERIA = {
