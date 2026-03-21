@@ -63,12 +63,18 @@ def safety_snapshot_summary(snapshot: dict | None) -> str:
         return "status=UNKNOWN"
 
     runtime = snapshot.get('runtime_enforcement', {})
+    breakers = snapshot.get('circuit_breakers', {})
     return (
         f"status={snapshot.get('status', 'UNKNOWN')} | "
+        f"loss_streak={breakers.get('consecutive_losses', 0)} | "
+        f"daily_loss={breakers.get('daily_loss_usd', 0)} | "
+        f"hourly_loss={breakers.get('hourly_loss_usd', 0)} | "
         f"transition={runtime.get('last_transition')} | "
         f"blocked_actions={runtime.get('blocked_actions_count', 0)} | "
         f"planned={runtime.get('last_planned_trade_count', 0)} | "
-        f"persisted={runtime.get('last_persisted_trade_count', 0)}"
+        f"persisted={runtime.get('last_persisted_trade_count', 0)} | "
+        f"breaker_source={runtime.get('breaker_accounting_source', 'advisory_static_defaults')} | "
+        f"cooldown_mode={runtime.get('cooldown_enforcement_mode', 'advisory_config_only')}"
     )
 
 
@@ -143,10 +149,14 @@ def run_safety_validation() -> StageResult:
         )
 
     safety = safety_module.ExecutionSafetyLayer()
+    breaker_refresh = safety.refresh_breaker_state_from_canonical_history()
     before_snapshot = safety.snapshot_state()
     pre_validation_snapshot = safety.persist_runtime_state(
         "BEFORE_VALIDATION",
-        extra={'candidate_signal': candidate_signal},
+        extra={
+            'candidate_signal': candidate_signal,
+            'last_breaker_refresh_changes': breaker_refresh.get('changed_fields', {}),
+        },
         persist_reason="Safety stage loaded candidate signal for canonical validation",
     )
 
@@ -175,6 +185,7 @@ def run_safety_validation() -> StageResult:
                 'safety_state_before': before_snapshot,
                 'safety_state_after': skipped_snapshot,
                 'safety_state_pre_validation': pre_validation_snapshot,
+                'breaker_state_before_validation': breaker_refresh,
             },
         )
 
@@ -214,6 +225,7 @@ def run_safety_validation() -> StageResult:
                 'safety_state_before': before_snapshot,
                 'safety_state_after': validated_snapshot,
                 'safety_state_pre_validation': pre_validation_snapshot,
+                'breaker_state_before_validation': breaker_refresh,
             },
         )
 
@@ -240,6 +252,7 @@ def run_safety_validation() -> StageResult:
             'safety_state_before': before_snapshot,
             'safety_state_after': blocked_snapshot,
             'safety_state_pre_validation': pre_validation_snapshot,
+            'breaker_state_before_validation': breaker_refresh,
         },
     )
 
@@ -338,6 +351,7 @@ def run_state_update(trader_stage: StageResult) -> StageResult:
     persisted = trader_module.persist_trade_records(planned_trades)
     performance = trader_module.calculate_performance()
     safety = safety_module.ExecutionSafetyLayer()
+    breaker_refresh = safety.refresh_breaker_state_from_canonical_history()
     persisted_snapshot = safety.persist_runtime_state(
         "TRADE_OUTCOME_RECORDED",
         extra={
@@ -345,6 +359,7 @@ def run_state_update(trader_stage: StageResult) -> StageResult:
             'last_planned_trade_count': len(planned_trades),
             'last_performance_total_trades': performance.get('total_trades', 0),
             'last_performance_total_pnl_usd': performance.get('total_pnl_usd', 0),
+            'last_breaker_refresh_changes': breaker_refresh.get('changed_fields', {}),
         },
         persist_reason="Authoritative state update persisted trade records and refreshed performance state",
     )
@@ -353,9 +368,15 @@ def run_state_update(trader_stage: StageResult) -> StageResult:
         StageStatus.SUCCESS,
         (
             f"Persisted {persisted} trade record(s) and refreshed performance state; "
+            f"breaker_changes={breaker_refresh.get('changed_fields', {}) or 'none'}; "
             f"persisted {safety_snapshot_summary(persisted_snapshot)}"
         ),
-        {'persisted_records': persisted, 'performance': performance, 'safety_state_after': persisted_snapshot},
+        {
+            'persisted_records': persisted,
+            'performance': performance,
+            'safety_state_after': persisted_snapshot,
+            'breaker_state_after_persistence': breaker_refresh,
+        },
     )
 
 
