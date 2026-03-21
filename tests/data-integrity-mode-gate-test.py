@@ -5,6 +5,7 @@ import importlib.util
 import os
 import sys
 import tempfile
+from types import SimpleNamespace
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,7 @@ class FakeResponse:
     def __init__(self, payload, status_code=200):
         self._payload = payload
         self.status_code = status_code
+        self.elapsed = SimpleNamespace(total_seconds=lambda: 0.01)
 
     def json(self):
         return self._payload
@@ -43,6 +45,16 @@ class FakeRequests:
                     'conditionId': 'pm-btc-up',
                     'question': 'Will BTC close above 60k?',
                     'tokens': [{'outcome': 'YES'}, {'outcome': 'NO'}],
+                },
+                {
+                    'conditionId': 'pm-eth-up',
+                    'question': 'Will ETH close above 4k?',
+                    'tokens': [{'outcome': 'YES'}, {'outcome': 'NO'}],
+                },
+                {
+                    'conditionId': 'pm-sol-up',
+                    'question': 'Will SOL close above 200?',
+                    'tokens': [{'outcome': 'YES'}, {'outcome': 'NO'}],
                 }
             ]
         )
@@ -67,7 +79,7 @@ if __name__ == '__main__':
         result = layer.run_pre_scan_gate(include_polymarket=True)
 
         assert result['passed'] is True, result
-        sources = {check['data']['source'] for check in result['checks']}
+        sources = {check['data']['source'] for check in result['checks'] if check.get('data', {}).get('source')}
         assert sources == {'polymarket'}, sources
         assert result['health'] in {'HEALTHY', 'DEGRADED'}, result['health']
 
