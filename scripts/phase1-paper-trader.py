@@ -87,7 +87,7 @@ class PaperTrader:
             'timeout_hours': TIMEOUT_HOURS
         }
         
-        print(f"  ✅ Paper trade: {direction} {position_size:.4f} {asset} @ ${entry_price:.4f}")
+        print(f"  [OK] Paper trade: {direction} {position_size:.4f} {asset} @ ${entry_price:.4f}")
         return trade
     
     # Polymarket is NOT ACTIVE here - scanner output lacks the execution fields required
@@ -267,7 +267,7 @@ def close_position(position: dict, exit_price: float, exit_reason: str):
     }
     
     log_trade(closed_trade)
-    print(f"  🔴 Closed {direction} {asset}: {exit_reason} | P&L: ${pnl_usd:+.2f} ({pnl_pct:+.1f}%)")
+    print(f"  [RED] Closed {direction} {asset}: {exit_reason} | P&L: ${pnl_usd:+.2f} ({pnl_pct:+.1f}%)")
 
 
 def evaluate_exit_trades(open_positions: list) -> list[dict]:
@@ -281,7 +281,7 @@ def evaluate_exit_trades(open_positions: list) -> list[dict]:
 
         current_price = get_current_price(asset)
         if not current_price:
-            print(f"  ⚠️ Exit skipped for {asset}: current price unavailable")
+            print(f"  [WARN] Exit skipped for {asset}: current price unavailable")
             continue
 
         entry_price = position['entry_price']
@@ -403,24 +403,24 @@ def main():
     open_positions = plan['open_positions']
     signals = plan['signals']
     
-    print(f"📊 Status:")
+    print(f"[STATS] Status:")
     print(f"   Open positions: {len(open_positions)}/{MAX_OPEN_POSITIONS}")
     print(f"   Latest signals: {len(signals)}")
     print()
     
     # Check exits for open positions
     if open_positions:
-        print("🔍 Checking exits...")
+        print("[SCAN] Checking exits...")
         for trade in plan['planned_closes']:
             print(
-                f"  🔴 Closed {trade['direction']} {trade['asset']}: {trade['exit_reason']} | "
+                f"  [RED] Closed {trade['direction']} {trade['asset']}: {trade['exit_reason']} | "
                 f"P&L: ${trade['realized_pnl_usd']:+.2f} ({trade['realized_pnl_pct']:+.1f}%)"
             )
         if not plan['planned_closes']:
             print("  No exits triggered")
         print()
 
-    print("📈 Evaluating new signals...")
+    print("[TREND] Evaluating new signals...")
     if plan['planned_entry'] is not None:
         persist_trade_records(plan['planned_closes'])
         persist_trade_records([plan['planned_entry']])
@@ -434,13 +434,13 @@ def main():
     performance = calculate_performance()
     
     if performance.get('total_trades', 0) > 0:
-        print(f"📊 Performance:")
+        print(f"[STATS] Performance:")
         print(f"   Total trades: {performance['total_trades']}")
         print(f"   Win rate: {performance['win_rate']:.1f}%")
         print(f"   Total P&L: ${performance['total_pnl_usd']:+.2f}")
     
     print()
-    print("✅ Paper trader complete")
+    print("[OK] Paper trader complete")
 
 
 if __name__ == "__main__":

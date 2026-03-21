@@ -35,14 +35,14 @@ def test_pnl_calculation():
     
     assert pnl_usd == 10.0, f"LONG P&L USD wrong: {pnl_usd} != 10.0"
     assert pnl_pct == 10.0, f"LONG P&L % wrong: {pnl_pct} != 10.0"
-    print("  ✅ LONG P&L: +$10.00 (+10.0%) - CORRECT")
+    print("  [OK] LONG P&L: +$10.00 (+10.0%) - CORRECT")
     
     # Test SHORT position with profit
     pnl_usd, pnl_pct = trader.calculate_pnl(entry, current, size, 'SHORT')
     
     assert pnl_usd == -10.0, f"SHORT P&L USD wrong: {pnl_usd} != -10.0"
     assert pnl_pct == -10.0, f"SHORT P&L % wrong: {pnl_pct} != -10.0"
-    print("  ✅ SHORT P&L: -$10.00 (-10.0%) - CORRECT (price went up, short loses)")
+    print("  [OK] SHORT P&L: -$10.00 (-10.0%) - CORRECT (price went up, short loses)")
     
     # Test SHORT position with loss (price goes down)
     current = 90.0
@@ -50,9 +50,9 @@ def test_pnl_calculation():
     
     assert pnl_usd == 10.0, f"SHORT profit USD wrong: {pnl_usd} != 10.0"
     assert pnl_pct == 10.0, f"SHORT profit % wrong: {pnl_pct} != 10.0"
-    print("  ✅ SHORT P&L: +$10.00 (+10.0%) - CORRECT (price went down, short wins)")
+    print("  [OK] SHORT P&L: +$10.00 (+10.0%) - CORRECT (price went down, short wins)")
     
-    print("  ✅ ALL P&L TESTS PASSED")
+    print("  [OK] ALL P&L TESTS PASSED")
     print()
     return True
 
@@ -87,9 +87,9 @@ def test_position_id_generation():
     assert trader1.position_id != trader2.position_id, "Position IDs should be unique"
     assert len(trader1.position_id) == 8, f"Position ID wrong length: {len(trader1.position_id)}"
     
-    print(f"  ✅ Position ID 1: {trader1.position_id}")
-    print(f"  ✅ Position ID 2: {trader2.position_id}")
-    print("  ✅ IDs are unique (prevents ghosts)")
+    print(f"  [OK] Position ID 1: {trader1.position_id}")
+    print(f"  [OK] Position ID 2: {trader2.position_id}")
+    print("  [OK] IDs are unique (prevents ghosts)")
     print()
     return True
 
@@ -121,7 +121,7 @@ def test_multi_strategy_support():
     
     assert trade1 is not None, "Funding arbitrage should execute"
     assert trade1['strategy'] == 'funding_arbitrage'
-    print("  ✅ funding_arbitrage: Supported")
+    print("  [OK] funding_arbitrage: Supported")
     
     # Test spread_arbitrage (Polymarket)
     signal2 = {
@@ -136,7 +136,7 @@ def test_multi_strategy_support():
     
     # Note: Returns None because scanner doesn't provide required fields yet
     assert trade2 is None, "Polymarket execution should return None (scanner incomplete)"
-    print("  ⚠️  spread_arbitrage: Recognized but disabled (scanner needs fix)")
+    print("  [WARN]  spread_arbitrage: Recognized but disabled (scanner needs fix)")
     print("      Missing: market_id, side fields")
     
     print()
@@ -191,8 +191,8 @@ def test_performance_persistence():
     assert saved_perf['total_trades'] == 1, "Wrong trade count in file"
     assert saved_perf['total_pnl_usd'] == 10.50, "Wrong P&L in file"
     
-    print(f"  ✅ Performance file created: {trader_module.PERFORMANCE_FILE.name}")
-    print(f"  ✅ Content verified: {saved_perf}")
+    print(f"  [OK] Performance file created: {trader_module.PERFORMANCE_FILE.name}")
+    print(f"  [OK] Content verified: {saved_perf}")
     
     # Cleanup
     import shutil
@@ -237,7 +237,7 @@ def test_position_state_management():
     # Verify state file created
     state = trader_module.load_position_state()
     assert state['test123'] == 'OPEN', "State not saved"
-    print("  ✅ Position opened, state saved")
+    print("  [OK] Position opened, state saved")
     
     # Close position
     closed_position = {**position, 'status': 'CLOSED'}
@@ -246,12 +246,12 @@ def test_position_state_management():
     # Verify state updated
     state = trader_module.load_position_state()
     assert state['test123'] == 'CLOSED', "State not updated"
-    print("  ✅ Position closed, state updated")
+    print("  [OK] Position closed, state updated")
     
     # Load open positions (should be empty)
     open_positions = trader_module.load_open_positions()
     assert len(open_positions) == 0, f"Ghost position! Found {len(open_positions)} open"
-    print("  ✅ No ghost positions after reload")
+    print("  [OK] No ghost positions after reload")
     
     # Cleanup
     import shutil
@@ -284,7 +284,7 @@ def main():
             if test():
                 passed += 1
         except Exception as e:
-            print(f"  ❌ FAILED: {e}")
+            print(f"  [FAIL] FAILED: {e}")
             print()
             failed += 1
     
@@ -292,10 +292,10 @@ def main():
     print(f"RESULTS: {passed}/{len(tests)} tests passed")
     
     if failed > 0:
-        print(f"⚠️  {failed} test(s) failed")
+        print(f"[WARN]  {failed} test(s) failed")
         sys.exit(1)
     else:
-        print("✅ ALL TESTS PASSED")
+        print("[OK] ALL TESTS PASSED")
         sys.exit(0)
 
 

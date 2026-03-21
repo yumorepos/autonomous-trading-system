@@ -67,7 +67,7 @@ class ExitSafeguards:
                 positions.append(trade)
             return positions
         except Exception as e:
-            print(f"❌ Failed to load positions: {e}")
+            print(f"[FAIL] Failed to load positions: {e}")
             return []
     
     def check_api_health(self) -> bool:
@@ -90,11 +90,11 @@ class ExitSafeguards:
             return False
             
         except requests.Timeout:
-            print(f"⚠️  API timeout after {API_TIMEOUT_SECONDS}s")
+            print(f"[WARN]  API timeout after {API_TIMEOUT_SECONDS}s")
             self.api_failure_count += 1
             return False
         except Exception as e:
-            print(f"⚠️  API check failed: {e}")
+            print(f"[WARN]  API check failed: {e}")
             self.api_failure_count += 1
             return False
     
@@ -105,7 +105,7 @@ class ExitSafeguards:
         entry_price = position['entry_price']
         position_size = position['position_size']
         
-        print(f"🔴 FORCE CLOSING: {asset}")
+        print(f"[RED] FORCE CLOSING: {asset}")
         print(f"   Reason: {reason}")
         print(f"   Entry: ${entry_price:.4f} @ {entry_time}")
         print(f"   Size: {position_size:.4f}")
@@ -122,8 +122,8 @@ class ExitSafeguards:
         # In paper trading: mark for closure
         # In live trading: execute actual close order
         
-        print(f"   ✅ Position marked for forced closure")
-        print(f"   📝 Decision logged to {SAFEGUARD_LOG}")
+        print(f"   [OK] Position marked for forced closure")
+        print(f"   [NOTE] Decision logged to {SAFEGUARD_LOG}")
         
         return True
     
@@ -132,11 +132,11 @@ class ExitSafeguards:
         positions = self.load_open_positions()
         
         if not positions:
-            print("ℹ️  No open positions to close")
+            print("[INFO]  No open positions to close")
             return True
         
         print("="*80)
-        print("🚨 MANUAL CLOSE-ALL REQUESTED")
+        print("[ALERT] MANUAL CLOSE-ALL REQUESTED")
         print("="*80)
         print()
         print(f"This will close {len(positions)} open positions:")
@@ -151,14 +151,14 @@ class ExitSafeguards:
             print(f"{i}. {asset} @ ${entry_price:.4f} ({age_hours:.1f}h old)")
         
         print()
-        print("⚠️  This action is IRREVERSIBLE in live trading")
+        print("[WARN]  This action is IRREVERSIBLE in live trading")
         print()
         
         # Safety confirmation (skipped in automated runs)
         if sys.stdin.isatty():
             confirm = input("Type 'CLOSE ALL' to confirm: ")
             if confirm != 'CLOSE ALL':
-                print("❌ Aborted - confirmation failed")
+                print("[FAIL] Aborted - confirmation failed")
                 return False
         
         print()
@@ -171,8 +171,8 @@ class ExitSafeguards:
                 closed_count += 1
         
         print()
-        print(f"✅ {closed_count}/{len(positions)} positions marked for closure")
-        print(f"📝 All decisions logged to {SAFEGUARD_LOG}")
+        print(f"[OK] {closed_count}/{len(positions)} positions marked for closure")
+        print(f"[NOTE] All decisions logged to {SAFEGUARD_LOG}")
         
         return True
     
@@ -189,14 +189,14 @@ class ExitSafeguards:
         api_healthy = self.check_api_health()
         
         if api_healthy:
-            print(f"   ✅ Hyperliquid API: HEALTHY")
-            print(f"   📊 Consecutive failures: {self.api_failure_count}")
+            print(f"   [OK] Hyperliquid API: HEALTHY")
+            print(f"   [STATS] Consecutive failures: {self.api_failure_count}")
         else:
-            print(f"   ❌ Hyperliquid API: FAILED")
-            print(f"   📊 Consecutive failures: {self.api_failure_count}/{MAX_CONSECUTIVE_API_FAILURES}")
+            print(f"   [FAIL] Hyperliquid API: FAILED")
+            print(f"   [STATS] Consecutive failures: {self.api_failure_count}/{MAX_CONSECUTIVE_API_FAILURES}")
             
             if self.api_failure_count >= MAX_CONSECUTIVE_API_FAILURES:
-                print(f"   🚨 MAX FAILURES REACHED - logging critical alert")
+                print(f"   [ALERT] MAX FAILURES REACHED - logging critical alert")
                 self.log_decision('api_critical_failure', 
                                 f'API failed {self.api_failure_count} consecutive times', 
                                 {'max_allowed': MAX_CONSECUTIVE_API_FAILURES})
@@ -208,7 +208,7 @@ class ExitSafeguards:
         positions = self.load_open_positions()
         
         if not positions:
-            print("   ℹ️  No open positions")
+            print("   [INFO]  No open positions")
             return
         
         print(f"   Found {len(positions)} open positions")
@@ -225,21 +225,21 @@ class ExitSafeguards:
             
             # Check max hold time
             if age_hours > MAX_HOLD_HOURS:
-                print(f"   🔴 {asset}: EXCEEDED max hold time")
+                print(f"   [RED] {asset}: EXCEEDED max hold time")
                 print(f"      Age: {age_hours:.1f}h (max: {MAX_HOLD_HOURS}h)")
                 self.force_close_position(position, f'max_hold_time_exceeded_{MAX_HOLD_HOURS}h')
                 forced_closes += 1
             else:
                 # Calculate remaining time
                 remaining_hours = MAX_HOLD_HOURS - age_hours
-                status_emoji = "✅" if remaining_hours > 24 else "⚠️"
+                status_emoji = "[OK]" if remaining_hours > 24 else "[WARN]"
                 print(f"   {status_emoji} {asset}: {age_hours:.1f}h old (limit: {MAX_HOLD_HOURS}h, remaining: {remaining_hours:.1f}h)")
         
         print()
         print(f"Summary: {forced_closes} positions force-closed")
         
         if forced_closes > 0:
-            print(f"📝 Decisions logged to {SAFEGUARD_LOG}")
+            print(f"[NOTE] Decisions logged to {SAFEGUARD_LOG}")
 
 
 def main():

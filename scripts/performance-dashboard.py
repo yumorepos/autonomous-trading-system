@@ -90,7 +90,7 @@ class PerformanceDashboard:
         print()
         
         # Overall stats
-        print("📊 OVERALL PERFORMANCE")
+        print("[STATS] OVERALL PERFORMANCE")
         print("-" * 80)
         print(f"Total Trades:     {combined_stats['total']}")
         print(f"Open Positions:   {combined_stats['open']}")
@@ -103,7 +103,7 @@ class PerformanceDashboard:
         print()
         
         # Per-exchange stats
-        print("🏪 PER-EXCHANGE BREAKDOWN")
+        print("[EXCHANGE] PER-EXCHANGE BREAKDOWN")
         print("-" * 80)
         
         print()
@@ -128,7 +128,7 @@ class PerformanceDashboard:
         # Open positions detail
         if combined_stats['open'] > 0:
             print()
-            print("📈 OPEN POSITIONS")
+            print("[TREND] OPEN POSITIONS")
             print("-" * 80)
             
             for trade in self.open_positions[:10]:  # Show max 10
