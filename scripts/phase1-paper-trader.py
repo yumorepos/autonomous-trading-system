@@ -39,13 +39,11 @@ class PaperTrader:
         """Execute paper trade for any strategy type"""
         signal_type = self.signal.get('signal_type')
         
-        # Support all strategy types, not just funding_arbitrage
+        # ONLY funding_arbitrage supported (Polymarket disabled - schema incomplete)
         if signal_type == 'funding_arbitrage':
             return self.execute_hyperliquid()
-        elif signal_type == 'spread_arbitrage':
-            return self.execute_polymarket()
         else:
-            print(f"  ⚠️ Unknown strategy type: {signal_type}")
+            # Polymarket explicitly disabled (scanner missing required fields)
             return None
     
     def execute_hyperliquid(self):
@@ -78,20 +76,7 @@ class PaperTrader:
         print(f"  ✅ Paper trade: {direction} {position_size:.4f} {asset} @ ${entry_price:.4f}")
         return trade
     
-    def execute_polymarket(self):
-        """Execute Polymarket spread arbitrage"""
-        # Note: Polymarket signals from scanner may not have all required fields
-        # This is a known limitation - signals need market_id and side
-        
-        market = self.signal.get('market', 'UNKNOWN')
-        spread_pct = self.signal.get('spread_pct', 0)
-        
-        print(f"  ⚠️ Polymarket execution not fully implemented")
-        print(f"     Market: {market}, Spread: {spread_pct:.2f}%")
-        print(f"     Missing: market_id, side fields from scanner")
-        
-        # Return None to skip execution until scanner is fixed
-        return None
+    # Polymarket DISABLED - scanner schema incomplete (missing market_id, side)
 
 
 def get_current_price(asset: str) -> float:
