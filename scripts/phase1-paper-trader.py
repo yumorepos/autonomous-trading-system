@@ -233,6 +233,30 @@ def load_latest_signals(limit: int = 10) -> list:
     return signals[-limit:]
 
 
+def filter_unconsumed_signals(signals: list) -> list:
+    """
+    Filter out signals that have already been consumed
+    A signal is consumed if a position (open or closed) exists with matching signal timestamp
+    """
+    if not PAPER_TRADES_FILE.exists():
+        return signals
+    
+    # Collect all consumed signal timestamps
+    consumed_timestamps = set()
+    with open(PAPER_TRADES_FILE) as f:
+        for line in f:
+            if line.strip():
+                trade = json.loads(line)
+                sig_timestamp = trade.get('signal', {}).get('timestamp')
+                if sig_timestamp:
+                    consumed_timestamps.add(sig_timestamp)
+    
+    # Filter to unconsumed only
+    unconsumed = [s for s in signals if s.get('timestamp') not in consumed_timestamps]
+    
+    return unconsumed
+
+
 def calculate_performance() -> dict:
     """
     Calculate strategy performance metrics
@@ -353,8 +377,11 @@ def main():
     else:
         print("📈 Evaluating new signals...")
         
+        # Filter out already-consumed signals
+        unconsumed = filter_unconsumed_signals(signals)
+        
         # Filter to high-quality signals
-        good_signals = [s for s in signals 
+        good_signals = [s for s in unconsumed 
                        if s.get('ev_score', 0) >= MIN_EV_SCORE
                        and s.get('timestamp')]
         
