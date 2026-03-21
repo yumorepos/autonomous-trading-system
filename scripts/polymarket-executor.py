@@ -3,8 +3,8 @@
 Polymarket execution scaffold.
 
 This script is not part of the active Phase 1 orchestration path. It remains in the
-repository as exploratory work only; canonical execution is Hyperliquid paper trading,
-and real Polymarket execution is incomplete/disabled.
+repository as exploratory work only; the canonical paper-trading path now runs through
+`scripts/phase1-paper-trader.py`, and real Polymarket execution remains incomplete/disabled.
 """
 
 import json

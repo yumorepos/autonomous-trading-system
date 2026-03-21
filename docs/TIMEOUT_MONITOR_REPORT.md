@@ -102,10 +102,10 @@
 
 ## MONITORING SCHEDULE
 
-- Runs: Every 15 minutes (exit-monitor)
-- Timeout threshold: 24 hours
+- Runs: Every 15 minutes (timeout-monitor)
+- Timeout threshold: exchange-specific (currently 24 hours in both paper modes)
 - High priority: < 2 hours remaining
 
 ---
 
-*Enhanced timeout monitoring active. Rigorous lifecycle capture ready for timeout exits.*
+*Monitoring only: this report does not authoritatively close positions or prove that an exit was executed.*

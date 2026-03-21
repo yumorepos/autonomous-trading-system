@@ -23,8 +23,15 @@ class PerformanceDashboard:
     """CLI performance dashboard"""
     
     def __init__(self):
-        self.hl_trades = self.load_trades(LOGS_DIR / "phase1-paper-trades.jsonl")
-        self.pm_trades = self.load_trades(LOGS_DIR / "polymarket-trades.jsonl")
+        self.canonical_trades = self.load_trades(LOGS_DIR / "phase1-paper-trades.jsonl")
+        self.hl_trades = [
+            trade for trade in self.canonical_trades
+            if trade.get('raw', {}).get('exchange', trade.get('exchange')) == 'Hyperliquid'
+        ]
+        self.pm_trades = [
+            trade for trade in self.canonical_trades
+            if trade.get('raw', {}).get('exchange', trade.get('exchange')) == 'Polymarket'
+        ]
         self.open_positions = get_open_positions(LOGS_DIR / "position-state.json")
     
     def load_trades(self, file_path: Path) -> List[Dict]:

@@ -28,6 +28,18 @@ TIMEOUT_REPORT = WORKSPACE / "TIMEOUT_MONITOR_REPORT.md"
 TIMEOUT_HOURS = 24.0
 TAKE_PROFIT_PCT = 10.0
 STOP_LOSS_PCT = -10.0
+EXCHANGE_THRESHOLDS = {
+    'Hyperliquid': {
+        'timeout_hours': 24.0,
+        'take_profit_pct': 10.0,
+        'stop_loss_pct': -10.0,
+    },
+    'Polymarket': {
+        'timeout_hours': 24.0,
+        'take_profit_pct': 8.0,
+        'stop_loss_pct': -8.0,
+    },
+}
 
 class TimeoutMonitor:
     """Enhanced monitoring for timeout-driven exits"""
@@ -210,11 +222,30 @@ class TimeoutMonitor:
     
     def calculate_exit_probabilities(self, pnl_pct: float, age_hours: float, pnl_trend: Dict) -> Dict:
         """Calculate probability of each exit type"""
-        time_remaining = TIMEOUT_HOURS - age_hours
-        
+        return self.calculate_exit_probabilities_with_thresholds(
+            pnl_pct=pnl_pct,
+            age_hours=age_hours,
+            pnl_trend=pnl_trend,
+            timeout_hours=TIMEOUT_HOURS,
+            take_profit_pct=TAKE_PROFIT_PCT,
+            stop_loss_pct=STOP_LOSS_PCT,
+        )
+
+    def calculate_exit_probabilities_with_thresholds(
+        self,
+        pnl_pct: float,
+        age_hours: float,
+        pnl_trend: Dict,
+        timeout_hours: float,
+        take_profit_pct: float,
+        stop_loss_pct: float,
+    ) -> Dict:
+        """Calculate exit probabilities using exchange-specific thresholds."""
+        time_remaining = timeout_hours - age_hours
+
         # Distance to exits
-        distance_to_tp = abs(TAKE_PROFIT_PCT - pnl_pct)
-        distance_to_sl = abs(STOP_LOSS_PCT - pnl_pct)
+        distance_to_tp = abs(take_profit_pct - pnl_pct)
+        distance_to_sl = abs(stop_loss_pct - pnl_pct)
         
         # Volatility-adjusted time estimates
         if pnl_trend['volatility'] > 0:
@@ -288,7 +319,9 @@ class TimeoutMonitor:
         now = datetime.now(timezone.utc)
         age_hours = (now - entry_dt).total_seconds() / 3600
         age_minutes = age_hours * 60
-        time_to_timeout_minutes = (TIMEOUT_HOURS - age_hours) * 60
+        exchange = position.get('exchange', position.get('signal', {}).get('exchange', 'Hyperliquid'))
+        thresholds = EXCHANGE_THRESHOLDS.get(exchange, EXCHANGE_THRESHOLDS['Hyperliquid'])
+        time_to_timeout_minutes = (thresholds['timeout_hours'] - age_hours) * 60
         
         # Calculate P&L
         side = position.get('side', position.get('direction', 'LONG'))
@@ -304,7 +337,14 @@ class TimeoutMonitor:
         convergence = self.calculate_convergence(entry_price, current_price, pnl_trend, side=side)
         
         # Calculate exit probabilities
-        exit_probs = self.calculate_exit_probabilities(pnl_pct, age_hours, pnl_trend)
+        exit_probs = self.calculate_exit_probabilities_with_thresholds(
+            pnl_pct=pnl_pct,
+            age_hours=age_hours,
+            pnl_trend=pnl_trend,
+            timeout_hours=thresholds['timeout_hours'],
+            take_profit_pct=thresholds['take_profit_pct'],
+            stop_loss_pct=thresholds['stop_loss_pct'],
+        )
         
         # Determine if timeout candidate
         timeout_candidate = exit_probs['timeout_pct'] >= 60
@@ -313,6 +353,7 @@ class TimeoutMonitor:
         tracking = {
             'timestamp': now.isoformat(),
             'asset': asset,
+            'exchange': exchange,
             'entry_time': entry_time,
             'entry_price': entry_price,
             'current_price': current_price,
@@ -339,7 +380,7 @@ class TimeoutMonitor:
         
         report = f"""# Timeout Monitor Report
 **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}
-**Purpose:** Enhanced monitoring for timeout-driven exits
+**Purpose:** Non-authoritative monitoring for timeout-driven paper exits
 
 ---
 
@@ -350,7 +391,7 @@ class TimeoutMonitor:
         for i, track in enumerate(timeout_candidates, 1):
             priority_emoji = "[RED]" if track['priority'] == 'HIGH' else "[YELLOW]"
             
-            report += f"""### {priority_emoji} Position {i}: {track['asset']} (TIMEOUT LIKELY)
+            report += f"""### {priority_emoji} Position {i}: [{track['exchange']}] {track['asset']} (TIMEOUT LIKELY)
 
 **Time to Timeout:** {track['time_to_timeout_minutes']:.0f} minutes ({track['time_to_timeout_minutes']/60:.1f} hours)
 
@@ -401,13 +442,13 @@ class TimeoutMonitor:
 
 ## MONITORING SCHEDULE
 
-- Runs: Every 15 minutes (exit-monitor)
-- Timeout threshold: 24 hours
+- Runs: Every 15 minutes (timeout-monitor)
+- Timeout threshold: exchange-specific (currently 24 hours in both paper modes)
 - High priority: < 2 hours remaining
 
 ---
 
-*Enhanced timeout monitoring active. Rigorous lifecycle capture ready for timeout exits.*
+*Monitoring only: this report does not authoritatively close positions or prove that an exit was executed.*
 """
         
         with open(TIMEOUT_REPORT, 'w') as f:
