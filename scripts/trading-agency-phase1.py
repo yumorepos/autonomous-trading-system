@@ -284,6 +284,12 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
             'latest_signals_count': len(latest_signals),
             'top_signal_ev': latest_signals[0]['ev_score'] if latest_signals else 0,
             'system_health': health_state,
+            'health_visibility': {
+                'active_incidents': len(health_state.get('active_incidents', [])),
+                'resolved_incidents_recent': len(health_state.get('resolved_incidents', [])),
+                'cooldown_remaining': health_state.get('cooldown_remaining', 0),
+                'recovery_state': health_state.get('recovery_state', 'NORMAL'),
+            },
             'action_taken': trading_response,
         },
         
@@ -388,16 +394,20 @@ def main():
             stage_results.append(state_stage)
 
     final_response = health_manager.trading_response()
+    final_health_state = health_manager.refresh_state()
     monitors_stage = stage_result(
         "monitors",
         StageStatus.SUCCESS,
         (
             f"Health {final_response['overall_status']} | "
-            f"active_incidents={len(health_manager.refresh_state().get('active_incidents', []))} | "
+            f"active_incidents={len(final_health_state.get('active_incidents', []))} | "
+            f"resolved_recent={len(final_health_state.get('resolved_incidents', []))} | "
+            f"cooldown_remaining={final_health_state.get('cooldown_remaining', 0)}s | "
+            f"recovery_state={final_health_state.get('recovery_state', 'NORMAL')} | "
             f"action={final_response['action']}"
         ),
         {
-            'system_health': health_manager.refresh_state(),
+            'system_health': final_health_state,
             'action_taken': final_response,
         },
     )
@@ -419,7 +429,10 @@ def main():
     print(f"📈 State: {report['current_state']['open_positions']} open positions, {report['current_state']['latest_signals_count']} signals")
     print(
         f"🩺 Health: {report['current_state']['system_health']['overall_status']} | "
-        f"Incidents: {len(report['current_state']['system_health']['active_incidents'])} | "
+        f"Active: {len(report['current_state']['system_health']['active_incidents'])} | "
+        f"Resolved recent: {len(report['current_state']['system_health'].get('resolved_incidents', []))} | "
+        f"Cooldown: {report['current_state']['system_health'].get('cooldown_remaining', 0)}s | "
+        f"Recovery: {report['current_state']['system_health'].get('recovery_state', 'NORMAL')} | "
         f"Action: {report['current_state']['action_taken']['action']}"
     )
     

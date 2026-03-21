@@ -530,6 +530,21 @@ class ExecutionSafetyLayer:
                     "checks": [asdict(result) for result in warnings],
                 },
             )
+        else:
+            self.health_manager.resolve_incident(
+                incident_type="safety_failure",
+                source="execution-safety",
+                affected_trade=proposal.asset,
+                metadata_match={"strategy": proposal.strategy},
+                resolution_reason="All enforced safety conditions passed again for the candidate trade",
+            )
+            self.health_manager.resolve_incident(
+                incident_type="safety_warning",
+                source="execution-safety",
+                affected_trade=proposal.asset,
+                metadata_match={"strategy": proposal.strategy},
+                resolution_reason="Safety advisory conditions cleared for the candidate trade",
+            )
 
         return passed, results
 
