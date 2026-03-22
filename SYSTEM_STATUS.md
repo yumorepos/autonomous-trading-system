@@ -36,7 +36,7 @@
 - live trading is not implemented
 - no production deployment claim is justified
 - external API reachability is environment-dependent and not guaranteed by CI
-- Polymarket support remains experimental even though the paper-runtime path now has offline agency proof
+- Polymarket support remains experimental even though the paper-runtime path now has deterministic offline agency proof and canonical persistence compatibility
 - mixed mode remains limited and should not be presented as a fully proven side-by-side runtime
 - some retained support scripts model future or helper workflows and are **not** canonical execution
 
@@ -58,7 +58,7 @@
 
 ### Non-Canonical / Support Only
 
-- `scripts/polymarket-executor.py` — helper/scaffold only
+- `scripts/polymarket-executor.py` — standalone experimental helper for canonical-schema paper signals
 - `scripts/exit-monitor.py` — proof/audit only
 - `scripts/live-readiness-validator.py` — future-scope research model only
 - `scripts/exit-safeguards.py` — support utility; not part of the canonical loop
@@ -103,7 +103,7 @@ Use these files to review what is actually proven:
 ## Future Work
 
 Future work, if pursued, should remain clearly separated from the current paper-only claim:
-- decide whether Polymarket should remain experimental after more than offline paper-runtime evidence exists
+- decide whether Polymarket should remain experimental after code, monitors, persistence, and CI prove more than offline paper-runtime behavior
 - decide whether mixed mode should remain limited or be upgraded with explicit multi-entry semantics
 - continue improving operator reporting and paper-trading analytics
 

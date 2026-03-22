@@ -9,7 +9,7 @@ This repository implements a **Phase 1 paper-trading execution path** for truthf
 
 Current repo truth:
 - **canonical paper-trading path:** Hyperliquid via `scripts/trading-agency-phase1.py`
-- **experimental paper-trading path:** Polymarket in `polymarket_only`
+- **experimental paper-trading path:** Polymarket in `polymarket_only`, with deterministic offline agency proof only
 - **limited evaluation mode:** `mixed`
 - **live trading:** not implemented
 - **real-money execution:** not supported
@@ -65,7 +65,7 @@ Canonical state files:
 - `workspace/AGENCY_CYCLE_SUMMARY.md` — human-readable per-cycle summary
 
 Non-canonical/support-only artifacts:
-- `scripts/polymarket-executor.py` — helper/scaffold only; not part of canonical execution
+- `scripts/polymarket-executor.py` — standalone experimental helper for canonical-schema Polymarket paper signals; not part of canonical execution
 - `scripts/exit-monitor.py` — proof/audit generator only; not authoritative close persistence
 - `scripts/live-readiness-validator.py` — future-scope research model only
 - `docs/archive/` and `scripts/archive/` — historical context only
@@ -96,7 +96,7 @@ Run the same suite locally with:
 - no live trading support exists
 - no real-money execution path exists
 - `mixed` is not proven as a simultaneous dual-entry runtime; it is a limited experimental evaluation mode
-- Polymarket remains experimental, but the agency entrypoint now has deterministic offline proof coverage
+- Polymarket remains experimental even though the agency entrypoint has deterministic offline proof coverage and canonical persistence compatibility
 
 ## Operator Quickstart
 
@@ -177,7 +177,7 @@ workspace/   Runtime state, operator controls, logs, and generated artifacts.
 
 - **Execution mode:** paper trading only
 - **Canonical exchange path:** Hyperliquid
-- **Experimental exchange path:** Polymarket paper trading with offline agency-level proof
+- **Experimental exchange path:** Polymarket paper trading with deterministic offline agency-level proof and canonical persistence compatibility
 - **Mixed mode:** limited experimental evaluation mode
 - **Live trading:** not implemented
 - **Production deployment claim:** unsupported

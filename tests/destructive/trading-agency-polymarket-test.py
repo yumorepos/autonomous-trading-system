@@ -115,5 +115,6 @@ if __name__ == '__main__':
         assert agency_report_exit['performance_summary']['total_trades'] == 1, agency_report_exit
         assert agency_report_exit['current_state']['open_positions'] == 0, agency_report_exit
 
-        print('[OK] Canonical Polymarket agency path proven offline (experimental but orchestrator-backed)')
+        assert 'Truthful mode status: experimental paper-trading path' in cycle_one.stdout, cycle_one.stdout
+        print('[OK] Experimental Polymarket agency path proven offline with canonical persistence compatibility')
         print(f'[OK] Workspace artifact root: {workspace_root}')
