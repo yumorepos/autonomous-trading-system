@@ -79,7 +79,6 @@ Why:
 - `utils/system_health.py`
 
 ### Support-only / non-canonical / historical
-- `scripts/polymarket-executor.py`
 - `scripts/exit-monitor.py`
 - `scripts/enhanced-exit-capture.py`
 - `scripts/exit-safeguards.py`
@@ -102,7 +101,7 @@ Why:
 ### `polymarket_only`
 - real canonical paper mode
 - scanner, safety, trader, persistence, and timeout monitor all have explicit Polymarket handling
-- still experimental because there is no live execution path and the repo still has non-canonical Polymarket leftovers
+- still paper-only because there is no live execution path, even though Polymarket is canonical within the paper-trading architecture
 
 ### `mixed`
 - real mode, not fake

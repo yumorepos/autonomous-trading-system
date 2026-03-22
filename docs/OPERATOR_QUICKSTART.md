@@ -47,7 +47,7 @@ OPENCLAW_TRADING_MODE=polymarket_only python3 scripts/trading-agency-phase1.py
 OPENCLAW_TRADING_MODE=mixed python3 scripts/trading-agency-phase1.py
 ```
 
-Use mixed mode only as a limited experimental evaluation mode. It is not the canonical proof path.
+Use mixed mode only as a limited deterministic evaluation mode. It is not a dual-entry proof path.
 
 ## 5) Optional support scripts
 
@@ -83,5 +83,5 @@ Canonical files to know:
 ## Notes
 
 - Hyperliquid is the default and best-supported paper-trading path.
-- Polymarket is optional, paper-only, experimental, and not fully proven end-to-end.
+- Polymarket is a canonical paper-trading path, but the repository remains paper-only and not live-ready.
 - Live trading is not implemented anywhere in this repository.
