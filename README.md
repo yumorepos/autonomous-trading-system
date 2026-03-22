@@ -14,6 +14,11 @@ Current repo truth:
 - **live trading:** not implemented
 - **real-money execution:** not supported
 
+Phase 4 adds:
+- cycle-level runtime summaries for the canonical path
+- deterministic repeat-cycle Hyperliquid validation in CI-safe verification
+- operator-facing proof packaging that maps claims to exact tests/scripts
+
 ## What the Repository Actually Does
 
 The real canonical operator entrypoint is:
@@ -56,6 +61,8 @@ Canonical state files:
 - `workspace/logs/phase1-paper-trades.jsonl` — append-only canonical paper trade history
 - `workspace/logs/position-state.json` — authoritative open-position state only
 - `workspace/logs/phase1-performance.json` — normalized closed-trade performance summary
+- `workspace/logs/agency-cycle-summary.json` — structured per-cycle operator summary
+- `workspace/AGENCY_CYCLE_SUMMARY.md` — human-readable per-cycle summary
 
 Non-canonical/support-only artifacts:
 - `scripts/polymarket-executor.py` — helper/scaffold only; not part of canonical execution
@@ -72,6 +79,7 @@ The safe verification suite proves:
 - Hyperliquid and Polymarket paper signal schemas normalize into the expected structure
 - isolated paper-trader lifecycle flows persist and clear canonical state correctly
 - offline agency-entrypoint proofs now cover Hyperliquid success, Polymarket success, mixed-mode limitation, and orchestrator negative-path blocking
+- deterministic repeat-cycle Hyperliquid validation confirms stable offline trade/performance/state behavior across multiple cycles
 - the performance dashboard can read canonical mixed-mode trade history
 - timeout monitoring exposes Polymarket-specific paper thresholds
 
@@ -133,8 +141,25 @@ Key output locations:
 - `workspace/logs/` — runtime JSON/JSONL logs and reports
 - `workspace/operator_control.json` — operator overrides
 - `workspace/system_status.json` — latest computed health/recovery status
+- `workspace/logs/agency-cycle-summary.json` — structured cycle verdict
+- `workspace/AGENCY_CYCLE_SUMMARY.md` — human-readable cycle verdict
 
 For a copy-paste operator guide, see `docs/OPERATOR_QUICKSTART.md`.
+
+## Proof Surface
+
+Start here if you need evidence instead of feature descriptions:
+
+- `PROOF_MATRIX.md` — claim-to-test mapping
+- `docs/OPERATOR_EVIDENCE_GUIDE.md` — concise operator review path
+- `docs/RUNTIME_OBSERVABILITY.md` — runtime summary artifact guide
+- `SYSTEM_STATUS.md` — current truthful status and limitations
+
+Longer offline validation outside default CI:
+
+```bash
+python3 scripts/hyperliquid-offline-soak.py --cycles 12
+```
 
 ## Repository Layout
 
