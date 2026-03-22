@@ -4,8 +4,8 @@ Polymarket execution scaffold.
 
 This script is not part of the active Phase 1 orchestration path. It remains in the
 repository as exploratory work only; the canonical paper-trading path now runs through
-`scripts/phase1-paper-trader.py`, and real Polymarket execution remains incomplete/disabled.
-The state files written here are helper-only legacy artifacts and are not authoritative.
+`scripts/phase1-paper-trader.py`. This helper remains a standalone experimental utility for offline paper-signal checks only.
+Any state files written here are helper-only legacy artifacts and are not authoritative.
 """
 
 import json
@@ -31,7 +31,7 @@ CLOB_API = "https://clob.polymarket.com"
 
 # Execution settings
 EXECUTION_SETTINGS = {
-    'paper_trading': True,          # Paper trading only; real path remains incomplete/disabled
+    'paper_trading': True,          # Paper trading only; live execution is intentionally not implemented
     'max_position_size': 20.0,      # Max $20 per position
     'min_liquidity': 1000.0,        # Min $1K liquidity
     'max_slippage': 0.02,           # Max 2% slippage
@@ -40,7 +40,7 @@ EXECUTION_SETTINGS = {
 
 
 class PolymarketExecutor:
-    """Executes trades on Polymarket (paper or real)"""
+    """Standalone experimental Polymarket paper helper; not the canonical runtime trader."""
     
     def __init__(self, paper_trading: bool = True):
         self.paper_trading = paper_trading
@@ -306,7 +306,7 @@ class PolymarketExecutor:
     # === VALIDATION ===
     
     def validate_signal(self, signal: Dict) -> Tuple[bool, str]:
-        """Validate canonical Polymarket paper signal before standalone execution."""
+        """Validate experimental Polymarket paper signals that already match the canonical schema."""
         if signal.get('signal_type') not in {'polymarket_binary_market', None}:
             return False, f"Unsupported signal_type={signal.get('signal_type')}"
         
@@ -366,7 +366,7 @@ def main():
     
     print("[OK] Polymarket executor helper available")
     print("   - Scope: standalone / non-canonical helper")
-    print("   - Paper trading: supported for canonical signal schema")
+    print("   - Paper trading: experimental helper for canonical-schema signals")
     print("   - Real execution: NOT IMPLEMENTED")
     print()
 

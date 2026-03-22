@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.exchange_metadata import paper_exchange_thresholds
 from models.position_state import get_open_positions
 from models.trade_schema import validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl
@@ -27,10 +28,10 @@ EXIT_PROOF_LOG = LOGS_DIR / "exit-proof.jsonl"
 EXIT_MONITOR_LOG = LOGS_DIR / "exit-monitor.log"
 EXIT_MONITOR_REPORT = WORKSPACE / "EXIT_MONITOR_REPORT.md"
 
-# Exit conditions
-TAKE_PROFIT_PCT = 10.0
-STOP_LOSS_PCT = -10.0
-TIME_LIMIT_HOURS = 24.0
+EXCHANGE_THRESHOLDS = {
+    exchange: paper_exchange_thresholds(exchange)
+    for exchange in ('Hyperliquid', 'Polymarket')
+}
 
 
 class ExitMonitor:
@@ -163,42 +164,42 @@ class ExitMonitor:
             )
             return None
     
-    def calculate_pnl(self, entry_price: float, current_price: float, position_size: float, direction: str) -> Tuple[float, float]:
-        """Calculate P&L in USD and percentage"""
-        if direction == 'LONG':
+    def calculate_pnl(self, entry_price: float, current_price: float, position_size: float, direction: str, exchange: str) -> Tuple[float, float]:
+        """Calculate P&L in USD and percentage using exchange-specific paper semantics."""
+        if exchange == 'Hyperliquid':
+            if direction == 'LONG':
+                pnl_usd = (current_price - entry_price) * position_size
+            else:
+                pnl_usd = (entry_price - current_price) * position_size
+        else:
             pnl_usd = (current_price - entry_price) * position_size
-        else:  # SHORT
-            pnl_usd = (entry_price - current_price) * position_size
-        
+
         entry_value = entry_price * position_size
         pnl_pct = (pnl_usd / entry_value) * 100 if entry_value > 0 else 0
-        
+
         return pnl_usd, pnl_pct
-    
+
     def check_exit_conditions(self, position: Dict, current_price: float) -> Tuple[bool, Optional[str]]:
-        """Check if position should exit - returns (should_exit, reason)"""
+        """Check if position should exit using exchange-specific paper thresholds."""
         entry_price = position['entry_price']
+        exchange = position.get('exchange', position.get('signal', {}).get('exchange', 'Hyperliquid'))
+        thresholds = EXCHANGE_THRESHOLDS.get(exchange, EXCHANGE_THRESHOLDS['Hyperliquid'])
         direction = position.get('side', position.get('direction', 'LONG'))
-        
-        # Calculate P&L
-        _, pnl_pct = self.calculate_pnl(entry_price, current_price, position['position_size'], direction)
-        
-        # Check take profit
-        if pnl_pct >= TAKE_PROFIT_PCT:
+
+        _, pnl_pct = self.calculate_pnl(entry_price, current_price, position['position_size'], direction, exchange)
+
+        if pnl_pct >= thresholds['take_profit_pct']:
             return True, 'take_profit'
-        
-        # Check stop loss
-        if pnl_pct <= STOP_LOSS_PCT:
+        if pnl_pct <= thresholds['stop_loss_pct']:
             return True, 'stop_loss'
-        
-        # Check time limit
+
         entry_time = datetime.fromisoformat(position['entry_timestamp'])
         now = datetime.now(timezone.utc)
         age_hours = (now - entry_time).total_seconds() / 3600
-        
-        if age_hours >= TIME_LIMIT_HOURS:
+
+        if age_hours >= thresholds['timeout_hours']:
             return True, 'time_limit'
-        
+
         return False, None
     
     def create_monitoring_checkpoint(self, position: Dict, current_price: float, pnl_pct: float) -> Dict:
@@ -226,7 +227,8 @@ class ExitMonitor:
         direction = position.get('side', position.get('direction', 'LONG'))
         
         # Calculate final P&L
-        pnl_usd, pnl_pct = self.calculate_pnl(entry_price, exit_price, position_size, direction)
+        exchange = position.get('exchange', position.get('signal', {}).get('exchange', 'Hyperliquid'))
+        pnl_usd, pnl_pct = self.calculate_pnl(entry_price, exit_price, position_size, direction, exchange)
         
         hold_duration_seconds = (exit_time - entry_time).total_seconds()
         
