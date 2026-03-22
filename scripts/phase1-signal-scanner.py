@@ -3,7 +3,7 @@
 Phase 1 signal generation engine.
 Produces canonical paper-trading signals for Hyperliquid by default and can
 optionally include exploratory Polymarket paper signals when the selected
-runtime mode requires them.
+runtime mode requires them. Mixed mode is limited experimental evaluation only.
 """
 
 from __future__ import annotations
@@ -324,7 +324,7 @@ def generate_report(signals: list[dict]) -> None:
 
 - Hyperliquid remains the default canonical paper-trading path.
 - Polymarket signals are optional, paper-only, and experimental.
-- Mixed mode is intended for side-by-side paper evaluation only.
+- Mixed mode is limited experimental evaluation only and is not a fully proven side-by-side runtime.
 """
 
     with open(REPORT_FILE, 'w') as f:

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 Position Exit Distance Tracker
-Compute and rank all open positions by proximity to ANY exit condition
+Support-only analytics script.
+Compute and rank all open positions by proximity to any exit condition.
+This script is not part of the canonical paper-trading execution path.
 """
 
 import json

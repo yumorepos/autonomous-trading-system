@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Enhanced Exit Capture
-Complete 5-step lifecycle proof for first real exit
+Support-only lifecycle proof workflow.
+Not part of the canonical paper-trading execution path.
 """
 
 import json
