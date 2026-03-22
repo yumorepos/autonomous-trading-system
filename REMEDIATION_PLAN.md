@@ -1,129 +1,133 @@
 # Remediation Plan
 
-Date: 2026-03-21 UTC
-Goal: make the repo’s claims match what is actually implemented and proven, then close the highest-value integration gaps in priority order.
+Date: 2026-03-22 UTC
+
+Goal:
+- clean up stale truth surfaces
+- remove ambiguity around Polymarket status
+- finish canonicalization of multi-exchange paper state
+- keep claims aligned with what code and tests actually prove
 
 ## Phase 0: truth cleanup
 
-### Task 0.1 — tighten the top-line claim language
-- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, `docs/SYSTEM_ARCHITECTURE.md`, `docs/REPO_TRUTHFULNESS_AUDIT.md`, `docs/OPERATOR_QUICKSTART.md`
-- **Why:** current wording still overstates CI-backed proof and mixed-mode strength.
+### Task 0.1 — fix stale architecture proof statements
+- **Files to edit:** `docs/SYSTEM_ARCHITECTURE.md`, `docs/OPERATOR_QUICKSTART.md`, `docs/REPO_TRUTHFULNESS_AUDIT.md`
+- **Why:** these files still understate or mismatch the current agency test coverage and Polymarket paper-path proof level.
 - **Dependency/order:** first.
 - **Risk:** low.
-- **Done criteria:** docs say “paper-trading path,” not “integrated” or “orchestrated” without clarifying proof limits; mixed mode is described as experimental and single-entry-per-cycle unless architecture changes.
+- **Done criteria:** docs state that CI proves the offline agency entrypoint for Hyperliquid, Polymarket, mixed-mode limitation, and negative-path behavior.
 
-### Task 0.2 — quarantine active-tree live/future readiness language
-- **Files to edit:** `scripts/live-readiness-validator.py`, `scripts/supervisor-governance.py`, `SYSTEM_STATUS.md`
-- **Why:** future/live concepts in active files weaken truthfulness.
+### Task 0.2 — fix stale data-integrity narrative
+- **Files to edit:** `docs/DATA_INTEGRITY_LAYER.md`
+- **Why:** the doc still describes Hyperliquid as a universal primary source that halts all signal generation; `polymarket_only` no longer behaves that way.
 - **Dependency/order:** after 0.1.
 - **Risk:** low.
-- **Done criteria:** active-tree wording cannot be read as present-day live readiness; future-scope files are clearly marked non-canonical research.
+- **Done criteria:** docs describe mode-aware gating exactly as implemented.
 
-### Task 0.3 — fix misleading optional-component reporting
-- **Files to edit:** `scripts/trading-agency-phase1.py`
-- **Why:** `polymarket_execution` is reported as enabled based on helper file presence even though it is not in the canonical flow.
+### Task 0.3 — quarantine live-readiness framing
+- **Files to edit:** `scripts/live-readiness-validator.py`, `scripts/supervisor-governance.py`, `SYSTEM_STATUS.md`, `README.md`
+- **Why:** even with caveats, active-tree live-readiness framing creates avoidable ambiguity in a paper-only repo.
 - **Dependency/order:** parallel with 0.1/0.2.
 - **Risk:** low.
-- **Done criteria:** orchestrator reports canonical Polymarket paper path status separately from non-canonical helper presence.
+- **Done criteria:** no active top-level text can be read as present-day live readiness.
 
 ## Phase 1: fix canonical architecture
 
-### Task 1.1 — formalize the multi-exchange canonical trade schema
-- **Files to edit:** `models/trade_schema.py`, `models/position_state.py`, `scripts/performance-dashboard.py`, `scripts/phase1-paper-trader.py`, `scripts/timeout-monitor.py`, `scripts/supervisor-governance.py`, `scripts/portfolio-allocator.py`, `scripts/alpha-intelligence-layer.py`
-- **Why:** exchange identity and Polymarket-specific fields are not first-class canonical fields today.
+### Task 1.1 — eliminate the second Polymarket state model
+- **Files to edit:** `scripts/polymarket-executor.py`, `scripts/stability-monitor.py`, `scripts/live-readiness-validator.py`, any docs that mention `polymarket-state.json` or `polymarket-trades.jsonl`
+- **Why:** the repo currently has both a canonical Polymarket paper path and a helper-specific Polymarket state model.
 - **Dependency/order:** after Phase 0.
 - **Risk:** medium.
-- **Done criteria:** normalized trades include at minimum `exchange`, `strategy`, and exchange-specific identity fields in a documented canonical schema; downstream readers stop depending on `raw` for exchange routing.
+- **Done criteria:** either archive the helper or make every active reader use canonical `phase1-paper-trades.jsonl` and `position-state.json` only.
 
-### Task 1.2 — remove alternate Polymarket persistence from active support paths
-- **Files to edit:** `scripts/polymarket-executor.py`, `scripts/live-readiness-validator.py`, `scripts/stability-monitor.py`, any docs referencing `polymarket-state.json` or `polymarket-trades.jsonl`
-- **Why:** one repo cannot honestly claim one canonical state model while active files still read/write separate Polymarket state.
+### Task 1.2 — formalize one documented cross-exchange state contract
+- **Files to edit:** `models/trade_schema.py`, `models/position_state.py`, `scripts/phase1-paper-trader.py`, `scripts/performance-dashboard.py`, `scripts/timeout-monitor.py`
+- **Why:** the current contract works, but the authoritative schema should be explicitly documented as the only supported multi-exchange state model.
 - **Dependency/order:** after 1.1.
 - **Risk:** medium.
-- **Done criteria:** active-tree support scripts either use canonical `phase1-paper-trades.jsonl` / `position-state.json` or are explicitly archived/non-executable.
+- **Done criteria:** one documented schema definition covers both trade history and open-position persistence, including Polymarket-specific identity fields.
 
-### Task 1.3 — decide what mixed mode is supposed to mean
+### Task 1.3 — make mixed-mode semantics explicit in code and docs
 - **Files to edit:** `scripts/phase1-paper-trader.py`, `scripts/trading-agency-phase1.py`, `README.md`, `docs/SYSTEM_ARCHITECTURE.md`
-- **Why:** current docs imply side-by-side evaluation, but implementation admits only one new entry per cycle.
-- **Dependency/order:** after 1.1.
+- **Why:** current behavior is single-entry-per-cycle; docs should either keep that limitation or architecture should be changed intentionally.
+- **Dependency/order:** after 1.2.
 - **Risk:** medium.
-- **Done criteria:** either (a) mixed mode docs are reduced to “shared-mode accumulation over multiple cycles,” or (b) the planner is updated to support explicit multi-entry mixed-mode behavior with tests.
+- **Done criteria:** mixed mode is either explicitly single-entry-per-cycle everywhere, or upgraded with matching tests.
 
 ## Phase 2: repair/add tests
 
-### Task 2.1 — add orchestrator integration tests for all three modes
-- **Files to edit:** add `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-polymarket-test.py`, `tests/destructive/trading-agency-mixed-test.py`; update `scripts/ci-safe-verification.sh`
-- **Why:** the canonical entrypoint is currently untested.
-- **Dependency/order:** after Phase 1 decisions.
-- **Risk:** medium.
-- **Done criteria:** CI exercises `scripts/trading-agency-phase1.py` in isolated temp workspaces with mocked API responses and validates final agency/state artifacts.
+### Task 2.1 — add a dedicated doc-truth regression check
+- **Files to edit:** add a test or lint script under `tests/` or `scripts/`; wire it into `scripts/ci-safe-verification.sh`
+- **Why:** stale docs are now one of the main truth risks.
+- **Dependency/order:** after Phase 0.
+- **Risk:** low.
+- **Done criteria:** CI fails when known truth anchors drift from current claims.
 
-### Task 2.2 — add schema contract tests
-- **Files to edit:** add `tests/trade-schema-contract-test.py`, `tests/position-state-contract-test.py`
-- **Why:** schema drift is the highest structural risk in the repo.
+### Task 2.2 — add direct tests for non-canonical file quarantine
+- **Files to edit:** add tests covering `scripts/polymarket-executor.py`, `scripts/stability-monitor.py`, and any remaining helper readers
+- **Why:** prevent reintroduction of alternate Polymarket state paths.
 - **Dependency/order:** after 1.1.
 - **Risk:** low.
-- **Done criteria:** any new consumer or producer that drops required canonical exchange fields fails CI.
+- **Done criteria:** CI proves that active support scripts do not read/write deprecated Polymarket helper state.
 
-### Task 2.3 — add negative-path tests for safety and mixed mode
-- **Files to edit:** add targeted tests under `tests/`
-- **Why:** current suite proves happy-path persistence better than it proves halts/blocks/skips.
-- **Dependency/order:** after 2.1.
-- **Risk:** low.
-- **Done criteria:** CI proves duplicate-order rejection, breaker halts, stale signal rejection, and mixed-mode semantics.
+### Task 2.3 — add live-connectivity checks only as non-blocking evidence jobs
+- **Files to edit:** `.github/workflows/basic.yml` or a separate non-required workflow; `scripts/runtime-connectivity-check.py`
+- **Why:** keep merge-blocking CI stable while preserving optional fresh evidence.
+- **Dependency/order:** after canonical cleanup.
+- **Risk:** medium.
+- **Done criteria:** optional scheduled/manual job records read-only API reachability without affecting required CI.
 
 ## Phase 3: Polymarket integration completion
 
-### Task 3.1 — make canonical Polymarket support the only active Polymarket path
-- **Files to edit:** `scripts/phase1-signal-scanner.py`, `scripts/execution-safety-layer.py`, `scripts/phase1-paper-trader.py`, `scripts/polymarket-executor.py`, `README.md`
-- **Why:** Polymarket currently exists as both canonical paper support and separate helper/scaffold logic.
-- **Dependency/order:** after Phase 1 schema cleanup.
+### Task 3.1 — choose one Polymarket runtime story
+- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, `docs/POLYMARKET_TESTNET_RESEARCH.md`, `scripts/polymarket-executor.py`
+- **Why:** the repo currently says Polymarket is experimental but keeps both canonical and helper-style paths.
+- **Dependency/order:** after Phase 1.
 - **Risk:** medium.
-- **Done criteria:** there is one Polymarket paper path, one state model, one source of truth, and one documented runtime story.
+- **Done criteria:** repo clearly presents either (a) one canonical experimental paper path only, or (b) an archived helper outside the active runtime surface.
 
-### Task 3.2 — harden Polymarket price/market identity handling
-- **Files to edit:** `scripts/phase1-signal-scanner.py`, `scripts/phase1-paper-trader.py`, `scripts/timeout-monitor.py`, `models/trade_schema.py`
-- **Why:** Polymarket entry/exit logic currently depends on heuristic token/market lookups over Gamma responses.
+### Task 3.2 — harden Polymarket price identity and exit assumptions
+- **Files to edit:** `scripts/phase1-signal-scanner.py`, `scripts/phase1-paper-trader.py`, `scripts/execution-safety-layer.py`, `scripts/timeout-monitor.py`, `models/trade_schema.py`
+- **Why:** Polymarket entry/exit logic currently relies on read-only market snapshots and token/outcome matching heuristics.
 - **Dependency/order:** after 3.1.
 - **Risk:** medium.
-- **Done criteria:** token identity, market identity, and exit pricing are explicit in the canonical schema and tested with realistic fixtures.
+- **Done criteria:** token identity, side, and market identity are explicit and consistently used across scan, safety, entry, exit, and monitoring.
 
-### Task 3.3 — add real canonical Polymarket orchestrator test coverage
-- **Files to edit:** new tests plus `scripts/ci-safe-verification.sh`
-- **Why:** current proof is isolated to the trader.
-- **Dependency/order:** after 3.1 and 3.2.
+### Task 3.3 — keep Polymarket scoped correctly unless live execution is actually built
+- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, docs under `docs/`
+- **Why:** offline paper-runtime proof is real, but it is not the same thing as execution-grade integration.
+- **Dependency/order:** after 3.2.
 - **Risk:** low.
-- **Done criteria:** CI proves full Polymarket paper path through the agency entrypoint in `polymarket_only` and `mixed` modes.
+- **Done criteria:** Polymarket remains labeled experimental until real authenticated execution, fills, and settlement handling exist and are tested.
 
 ## Phase 4: observability and docs cleanup
 
-### Task 4.1 — label every support script as canonical or non-canonical in-code and in docs
-- **Files to edit:** headers in `scripts/*.py`, `README.md`, `docs/SYSTEM_ARCHITECTURE.md`
-- **Why:** the repo still makes reviewers work too hard to separate runtime truth from support tooling.
+### Task 4.1 — label every script as canonical or non-canonical at the top of the file
+- **Files to edit:** active scripts under `scripts/`
+- **Why:** current repo still requires a reviewer to infer what is runtime-critical versus support-only.
 - **Dependency/order:** after architecture cleanup.
 - **Risk:** low.
-- **Done criteria:** every active-tree script advertises its status in the first docstring block and docs match it.
+- **Done criteria:** every active script self-identifies its status in the opening docstring.
 
-### Task 4.2 — reduce runtime report sprawl
-- **Files to edit:** `scripts/trading-agency-phase1.py`, `scripts/timeout-monitor.py`, docs covering outputs
-- **Why:** many support artifacts are written, but only a few are authoritative.
+### Task 4.2 — publish one machine-readable truth manifest
+- **Files to edit:** add `TRUTH_MANIFEST.json` or `TRUTH_MANIFEST.md`; reference it from `README.md` and `SYSTEM_STATUS.md`
+- **Why:** canonical vs support-only status is currently repeated across prose docs.
 - **Dependency/order:** after 4.1.
 - **Risk:** low.
-- **Done criteria:** docs clearly separate authoritative state from support reports, and operator quickstart highlights only the authoritative files first.
+- **Done criteria:** one file lists each script, whether it is canonical, what it reads/writes, and whether CI proves it.
 
-### Task 4.3 — add a machine-readable truth manifest
-- **Files to edit:** add `TRUTH_MANIFEST.json` or `TRUTH_MANIFEST.md`; update docs to reference it
-- **Why:** the repo repeatedly re-documents canonical vs non-canonical status in prose.
-- **Dependency/order:** last.
+### Task 4.3 — reduce report sprawl in operator docs
+- **Files to edit:** `README.md`, `docs/OPERATOR_QUICKSTART.md`, `docs/RUNTIME_OBSERVABILITY.md`
+- **Why:** there are many generated artifacts, but only a few are authoritative.
+- **Dependency/order:** after 4.2.
 - **Risk:** low.
-- **Done criteria:** one manifest lists each script’s status, state files used, and whether CI proves it.
+- **Done criteria:** operator docs always list authoritative files first and monitoring/report files second.
 
 ## Priority order summary
 
-1. Tighten claims.
-2. Remove alternate Polymarket state from active code.
-3. Formalize one multi-exchange canonical schema.
-4. Add orchestrator integration tests.
-5. Decide and enforce real mixed-mode semantics.
-6. Finish Polymarket canonicalization.
-7. Clean up observability/docs labeling.
+1. Correct stale docs and remove ambiguity.
+2. Eliminate the alternate Polymarket state model.
+3. Formalize the single canonical cross-exchange state contract.
+4. Lock mixed-mode semantics down explicitly.
+5. Add CI checks that keep docs/support surfaces truthful.
+6. Keep Polymarket experimental until execution-grade functionality actually exists.
