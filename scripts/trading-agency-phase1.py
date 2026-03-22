@@ -88,30 +88,15 @@ def safety_snapshot_summary(snapshot: dict | None) -> str:
 
 
 def detect_optional_components(trading_mode: str = TRADING_MODE) -> dict:
-    """Report non-canonical/support modules without implying they are active runtime paths."""
+    """Report support modules without implying they are active runtime paths."""
     social_scanner = REPO_ROOT / "scripts" / "phase1-social-scanner.py"
-    polymarket_executor = REPO_ROOT / "scripts" / "polymarket-executor.py"
     return {
         'social_scanner': {
-            'status': 'NON_CANONICAL_HELPER_PRESENT' if social_scanner.exists() else 'ABSENT',
+            'status': 'SUPPORT_ONLY_PRESENT' if social_scanner.exists() else 'ABSENT',
             'reason': (
-                'phase1-social-scanner.py exists but is not part of the canonical paper-trading path'
+                f'phase1-social-scanner.py exists as support-only research tooling outside the canonical trader flow for trading_mode={trading_mode}'
                 if social_scanner.exists()
                 else 'phase1-social-scanner.py not present'
-            ),
-        },
-        'polymarket_helper': {
-            'status': (
-                'NON_CANONICAL_HELPER_PRESENT'
-                if polymarket_executor.exists()
-                else 'ABSENT'
-            ),
-            'reason': (
-                (
-                    f"polymarket-executor.py exists but is helper-only and non-canonical for trading_mode={trading_mode}"
-                )
-                if polymarket_executor.exists()
-                else 'polymarket-executor.py not present'
             ),
         },
     }
@@ -920,7 +905,7 @@ def main():
     if TRADING_MODE == 'hyperliquid_only':
         print("  - Truthful mode status: canonical paper-trading path")
     elif TRADING_MODE == 'polymarket_only':
-        print("  - Truthful mode status: experimental paper-trading path")
+        print("  - Truthful mode status: canonical paper-trading path")
     else:
         print("  - Truthful mode status: experimental mixed-mode evaluation; not the canonical proof path")
     print()

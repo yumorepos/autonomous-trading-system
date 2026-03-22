@@ -6,8 +6,8 @@ This document describes the **current canonical Phase 1 paper-trading system** i
 
 Supported runtime modes:
 - **`hyperliquid_only`** — default canonical mode
-- **`polymarket_only`** — experimental paper mode
-- **`mixed`** — limited experimental evaluation mode
+- **`polymarket_only`** — canonical Polymarket paper mode
+- **`mixed`** — limited deterministic evaluation mode
 
 The architecture is strictly **paper trading only**. No live exchange execution path is implemented.
 
@@ -18,7 +18,7 @@ The canonical operator entrypoint is `scripts/trading-agency-phase1.py`.
 1. **Bootstrap/runtime verification**
    - `scripts/bootstrap-runtime-check.py` verifies local runtime dependencies before the orchestrator loads networked scripts.
 2. **Support-component visibility**
-   - The orchestrator reports non-canonical helper/support scripts separately from the canonical path.
+   - The orchestrator reports support scripts separately from the canonical path.
 3. **Data integrity gate**
    - `scripts/data-integrity-layer.py` validates source health only for exchanges enabled by the current mode.
 4. **Signal scanning**
@@ -59,13 +59,13 @@ The canonical operator entrypoint is `scripts/trading-agency-phase1.py`.
 ### `polymarket_only`
 - scans Polymarket only
 - validates Polymarket only
-- experimental paper-only mode; not fully proven end-to-end
+- canonical paper-only mode using the shared execution architecture
 
 ### `mixed`
 - scans both exchanges
 - persists both exchanges into the same canonical state model
 - currently selects at most one new entry per cycle
-- should be treated as a limited experimental evaluation mode, not a fully proven side-by-side runtime
+- should be treated as a limited deterministic evaluation mode, not a fully proven side-by-side runtime
 
 ## What Is Proven
 
@@ -88,7 +88,6 @@ The verification suite currently proves:
 ## Non-Canonical Artifacts
 
 The repository still contains supporting scripts useful for review, but they should not be mistaken for authoritative execution:
-- `scripts/polymarket-executor.py` — standalone helper/scaffold with non-authoritative helper state
 - `scripts/exit-monitor.py` — proof/audit generator, not authoritative close persistence
 - `scripts/live-readiness-validator.py` — future-scope research model only
 - `scripts/stability-monitor.py` — support-only observability

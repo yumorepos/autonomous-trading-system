@@ -24,20 +24,19 @@ if __name__ == '__main__':
     agency = read(ACTIVE_FILES['scripts/trading-agency-phase1.py'])
 
     assert 'canonical paper-trading path:** Hyperliquid' in readme, readme
-    assert 'experimental paper-trading path:** Polymarket' in readme, readme
+    assert 'canonical paper-trading path:** Polymarket' in readme, readme
     assert 'not live-ready' not in readme.lower(), 'README should avoid ambiguous live-ready phrasing and state exact paper-only truth'
     assert 'real-money execution:** not supported' in readme, readme
 
-    assert 'Experimental but offline-proven' in proof, proof
-    assert 'does not prove live readiness or canonical promotion' in proof, proof
-    assert 'Mixed mode exists as a limited evaluation path with Hyperliquid preferred' in proof, proof
+    assert 'Proven at the paper-trading level' in proof, proof
+    assert 'does not prove live readiness' in proof, proof
+    assert 'deterministic single-entry selection and Hyperliquid preferred' in proof, proof
 
-    assert 'Polymarket support remains experimental' in system_status, system_status
+    assert 'canonical Hyperliquid and Polymarket paths' in system_status, system_status
     assert 'live trading is not implemented' in system_status, system_status
     assert 'real-money execution' not in system_status.lower() or 'not supported' in readme.lower()
 
-    assert 'Truthful mode status: canonical paper-trading path' in agency, agency
-    assert 'Truthful mode status: experimental paper-trading path' in agency, agency
+    assert agency.count('Truthful mode status: canonical paper-trading path') >= 2, agency
     assert 'experimental mixed-mode evaluation; not the canonical proof path' in agency, agency
 
-    print('[OK] Active truth surfaces preserve canonical Hyperliquid and experimental Polymarket wording')
+    print('[OK] Active truth surfaces preserve canonical paper-trading wording for Hyperliquid and Polymarket')

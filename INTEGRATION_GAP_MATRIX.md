@@ -17,19 +17,18 @@ Legend:
 | safety validation | present | present | present | yes | yes | Polymarket safety is still market-data-based, not execution-grade. |
 | paper entry planning | present | present | present | yes | yes | Planner creates at most one new entry per cycle. |
 | paper exit planning | present | present | present | yes | yes | Exit pricing for Polymarket is still heuristic/read-only lookup. |
-| canonical trade history | present | present | present | yes | yes | Clean for canonical flow. Polymarket also has extra helper logs elsewhere. |
-| authoritative open-position state | present | present | present | yes | yes | Canonical state is shared, but helper scripts still introduce alternative Polymarket files. |
+| canonical trade history | present | present | present | yes | yes | Clean shared paper-trading flow across both exchanges. |
+| authoritative open-position state | present | present | present | yes | yes | Canonical state is shared across both exchanges. |
 | performance summary | present | present | present | yes | yes | Derived from canonical closed trades only. |
 | timeout monitor | present | present | present | yes | yes | Monitoring only; not authoritative close persistence. |
 | agency/orchestrator runtime | present | present | present | yes | yes | Offline-only proof. No live API proof in CI. |
-| non-canonical executor helper | n/a | present | n/a | no | no | `scripts/polymarket-executor.py` duplicates Polymarket state handling. |
 | live execution | absent | absent | absent | no | no | Repo is paper-trading only. |
 | external connectivity proof | weak | weak | weak | optional | no | Connectivity checks failed in this audit environment due proxy/tunnel errors. |
 | truthfulness consistency across docs | strong | partial | partial | mixed | no | Some docs remain stale relative to code/tests. |
 
 ## Blocking gaps for a “both fully integrated” claim
 
-1. `scripts/polymarket-executor.py` still exists as a second Polymarket implementation surface.
+1. Polymarket now executes through the same canonical trader/orchestrator path as Hyperliquid.
 2. Real Polymarket execution is explicitly not implemented.
 3. Mixed mode is single-entry-per-cycle, not dual-entry-per-cycle.
 4. Live API reachability is not part of CI proof and was not successful from this audit environment.
@@ -39,7 +38,7 @@ Legend:
 
 ### Safe
 - Hyperliquid is the canonical integrated paper-trading path.
-- Polymarket is integrated into the canonical paper-trading path, but experimental.
+- Polymarket is integrated into the canonical paper-trading path as a first-class exchange.
 - Mixed mode is a limited evaluation mode.
 - The repository is paper-trading only.
 

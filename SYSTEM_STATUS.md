@@ -1,7 +1,7 @@
 # System Status
 
 **Last Updated:** 2026-03-22 UTC  
-**Verdict:** Paper-trading research system with one canonical Hyperliquid path, stronger offline runtime observability, and experimental Polymarket support
+**Verdict:** Paper-trading research system with canonical Hyperliquid and Polymarket paths, stronger offline runtime observability, and limited mixed-mode semantics
 
 ---
 
@@ -12,7 +12,7 @@
 | Core capability | Phase 1 paper-trading execution |
 | Canonical entrypoint | `scripts/trading-agency-phase1.py` |
 | Canonical default | `hyperliquid_only` |
-| Experimental modes | `polymarket_only`, `mixed` |
+| Limited modes | `mixed` |
 | Live trading | **Not implemented** |
 | Real-money execution | **Not supported** |
 | CI | Safe verification runs on every push and pull request |
@@ -24,7 +24,7 @@
 
 - canonical Phase 1 paper-trading execution through `scripts/trading-agency-phase1.py`
 - mode-aware scanning and data-integrity validation
-- normalized paper-trade persistence across Hyperliquid and experimental Polymarket paper records
+- normalized paper-trade persistence across Hyperliquid and Polymarket paper records
 - authoritative open-position state in one canonical file
 - monitoring and support reporting for paper-trading operations
 - cycle-level operator summaries in JSON and Markdown for the canonical path
@@ -36,9 +36,9 @@
 - live trading is not implemented
 - no production deployment claim is justified
 - external API reachability is environment-dependent and not guaranteed by CI
-- Polymarket support remains experimental even though the paper-runtime path now has deterministic offline agency proof and canonical persistence compatibility
+- Polymarket now uses the same canonical paper-trading runtime stages, persistence, and monitors as Hyperliquid
 - mixed mode remains limited and should not be presented as a fully proven side-by-side runtime
-- some retained support scripts model future or helper workflows and are **not** canonical execution
+- some retained support scripts model future workflows and are **not** canonical execution
 
 ---
 
@@ -58,7 +58,6 @@
 
 ### Non-Canonical / Support Only
 
-- `scripts/polymarket-executor.py` — standalone experimental helper for canonical-schema paper signals
 - `scripts/exit-monitor.py` — proof/audit only
 - `scripts/live-readiness-validator.py` — future-scope research model only
 - `scripts/exit-safeguards.py` — support utility; not part of the canonical loop
@@ -103,7 +102,7 @@ Use these files to review what is actually proven:
 ## Future Work
 
 Future work, if pursued, should remain clearly separated from the current paper-only claim:
-- decide whether Polymarket should remain experimental after code, monitors, persistence, and CI prove more than offline paper-runtime behavior
+- continue improving proof coverage without overstating live readiness
 - decide whether mixed mode should remain limited or be upgraded with explicit multi-entry semantics
 - continue improving operator reporting and paper-trading analytics
 

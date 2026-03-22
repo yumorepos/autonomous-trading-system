@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline end-to-end proof for the experimental Polymarket agency runtime."""
+"""Offline end-to-end proof for the canonical Polymarket agency runtime."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ if __name__ == '__main__':
         assert entry_trade['token_id'] == 'pm-btc-up-YES', entry_trade
         assert entry_trade['side'] == 'YES', entry_trade
         assert entry_trade['paper_only'] is True, entry_trade
-        assert entry_trade['experimental'] is True, entry_trade
+        assert entry_trade['experimental'] is False, entry_trade
 
         position_state = load_json(positions_path)
         open_positions = list(position_state['positions'].values())
@@ -115,6 +115,9 @@ if __name__ == '__main__':
         assert agency_report_exit['performance_summary']['total_trades'] == 1, agency_report_exit
         assert agency_report_exit['current_state']['open_positions'] == 0, agency_report_exit
 
-        assert 'Truthful mode status: experimental paper-trading path' in cycle_one.stdout, cycle_one.stdout
-        print('[OK] Experimental Polymarket agency path proven offline with canonical persistence compatibility')
+        assert 'Truthful mode status: canonical paper-trading path' in cycle_one.stdout, cycle_one.stdout
+        monitor_summary = agency_report_exit['monitoring_summary']
+        assert monitor_summary['executed_scripts'] == ['timeout-monitor.py'], monitor_summary
+        assert monitor_summary['skipped_scripts'] == ['exit-monitor.py'], monitor_summary
+        print('[OK] Canonical Polymarket agency path proven offline with canonical persistence and monitor compatibility')
         print(f'[OK] Workspace artifact root: {workspace_root}')

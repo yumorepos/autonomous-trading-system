@@ -85,7 +85,7 @@ if __name__ == '__main__':
         assert len(open_positions) == 1, 'Expected one open position after entry'
         position = open_positions[0]
 
-        trader.get_current_price = lambda asset: 57500.0 if asset == 'BTC' else 0
+        trader.get_position_current_price = lambda position: 57500.0 if position.get('symbol') == 'BTC' else 0
         should_exit, exit_reason = trader.check_exit(position)
         assert should_exit is True and exit_reason == 'take_profit', 'Expected take_profit exit trigger'
 
