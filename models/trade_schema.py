@@ -4,6 +4,8 @@ from copy import deepcopy
 from typing import Any
 import warnings
 
+from models.exchange_metadata import SUPPORTED_PAPER_EXCHANGES
+
 CANONICAL_CLOSED_TRADE_FIELDS = [
     "trade_id",
     "exchange",
@@ -194,7 +196,7 @@ def validate_trade_record(record: dict[str, Any] | None, context: str = "trade")
         _warn(f"{context}: missing required fields {missing}, skipping")
         return False
 
-    if normalized.get("exchange") not in {"Hyperliquid", "Polymarket"}:
+    if normalized.get("exchange") not in SUPPORTED_PAPER_EXCHANGES:
         _warn(f"{context}: unsupported exchange {normalized.get('exchange')!r}, skipping")
         return False
 

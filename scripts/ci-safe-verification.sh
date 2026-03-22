@@ -22,6 +22,7 @@ run_step '3/4 script regression tests' bash -lc '
     tests/data-integrity-mode-gate-test.py \
     tests/paper-mode-schema-test.py \
     tests/trade-schema-contract-test.py \
+    tests/repo-truth-guard-test.py \
     tests/performance-dashboard-canonical-test.py \
     tests/timeout-monitor-polymarket-threshold-test.py
   do

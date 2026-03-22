@@ -75,6 +75,24 @@ if __name__ == "__main__":
         assert open_positions[0]["market_question"] == "Will BTC close above 60k?"
         assert open_positions[0]["token_id"] == "yes-token"
 
+        hyperliquid_open = {
+            "trade_id": "hl-open-1",
+            "exchange": "Hyperliquid",
+            "strategy": "funding_arbitrage",
+            "symbol": "BTC",
+            "side": "LONG",
+            "entry_price": 50000.0,
+            "position_size": 0.001,
+            "position_size_usd": 50.0,
+            "status": "OPEN",
+            "entry_timestamp": "2026-01-01T00:05:00+00:00",
+        }
+        apply_trade_to_position_state(position_state, hyperliquid_open)
+        open_positions = sorted(get_open_positions(position_state), key=lambda position: position["exchange"])
+        assert [position["exchange"] for position in open_positions] == ["Hyperliquid", "Polymarket"], open_positions
+        assert open_positions[0]["symbol"] == "BTC"
+        assert open_positions[1]["market_id"] == "pm-btc-up"
+
         records = [
             {
                 "trade_id": "hl-closed-1",

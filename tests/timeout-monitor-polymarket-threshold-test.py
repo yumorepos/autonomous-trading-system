@@ -37,5 +37,7 @@ if __name__ == '__main__':
             stop_loss_pct=-8.0,
         )
 
+        assert module.EXCHANGE_THRESHOLDS['Polymarket']['take_profit_pct'] == 8.0, module.EXCHANGE_THRESHOLDS
+        assert module.EXCHANGE_THRESHOLDS['Hyperliquid']['take_profit_pct'] == 10.0, module.EXCHANGE_THRESHOLDS
         assert probabilities['most_likely'] == 'take_profit', probabilities
-        print('[OK] Timeout monitor exposes Polymarket-specific threshold support')
+        print('[OK] Timeout monitor exposes consistent exchange-specific threshold support')

@@ -21,6 +21,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import LOGS_DIR, TRADING_MODE, mode_includes_hyperliquid, mode_includes_polymarket
+from models.exchange_metadata import (
+    CANONICAL_PAPER_EXCHANGE,
+    paper_exchange_priority,
+    paper_exchange_status,
+    paper_exchange_thresholds,
+)
 from models.position_state import apply_trade_to_position_state, get_open_positions
 from models.trade_schema import normalize_trade_record, validate_trade_record
 from utils.json_utils import safe_read_jsonl, write_json_atomic
@@ -36,8 +42,8 @@ MAX_OPEN_POSITIONS = 3
 MIN_EV_SCORE = 4
 
 EXIT_THRESHOLDS = {
-    'Hyperliquid': {'take_profit_pct': 10.0, 'stop_loss_pct': -10.0, 'timeout_hours': 24.0},
-    'Polymarket': {'take_profit_pct': 8.0, 'stop_loss_pct': -8.0, 'timeout_hours': 24.0},
+    exchange: paper_exchange_thresholds(exchange)
+    for exchange in ('Hyperliquid', 'Polymarket')
 }
 
 
@@ -71,11 +77,11 @@ def validate_canonical_signal(signal: dict | None) -> tuple[bool, str]:
 
     if exchange == 'Polymarket':
         if signal.get('signal_type') != 'polymarket_binary_market':
-            return False, f"signal_type={signal.get('signal_type')!r} is not canonical Polymarket paper signal"
+            return False, f"signal_type={signal.get('signal_type')!r} is not an experimental Polymarket paper signal on the canonical schema"
         missing = [field for field in ('market_id', 'market_question', 'side', 'entry_price') if signal.get(field) is None]
         if missing:
             return False, f"missing required Polymarket fields: {missing}"
-        return True, 'canonical Polymarket paper signal'
+        return True, 'experimental Polymarket paper signal on canonical schema'
 
     return False, f"unsupported exchange={exchange!r}"
 
@@ -432,8 +438,26 @@ def select_trade_candidate(signals: list[dict], open_positions: list[dict], allo
     if not good_signals:
         return None, 'No signals above EV threshold'
 
-    best_signal = max(good_signals, key=lambda signal: signal.get('ev_score', 0))
-    return best_signal, f"Selected {_position_identifier(best_signal) or 'unknown'} on {best_signal.get('exchange')} @ EV {best_signal.get('ev_score', 0):.2f}"
+    ranked_signals = sorted(
+        good_signals,
+        key=lambda signal: (
+            paper_exchange_priority(signal.get('exchange', signal.get('source'))),
+            -(signal.get('ev_score', 0)),
+            signal.get('timestamp', ''),
+        ),
+    )
+    best_signal = ranked_signals[0]
+    exchange = best_signal.get('exchange', best_signal.get('source'))
+    status = paper_exchange_status(exchange).replace('_', ' ')
+    canonical_note = (
+        'preferred canonical mixed-mode exchange'
+        if TRADING_MODE == 'mixed' and exchange == CANONICAL_PAPER_EXCHANGE
+        else status
+    )
+    return best_signal, (
+        f"Selected {_position_identifier(best_signal) or 'unknown'} on {exchange} @ EV {best_signal.get('ev_score', 0):.2f} "
+        f"({canonical_note})"
+    )
 
 
 

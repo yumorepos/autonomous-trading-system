@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.exchange_metadata import paper_exchange_thresholds
 from models.position_state import get_open_positions
 from models.trade_schema import validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl
@@ -30,16 +31,8 @@ TIMEOUT_HOURS = 24.0
 TAKE_PROFIT_PCT = 10.0
 STOP_LOSS_PCT = -10.0
 EXCHANGE_THRESHOLDS = {
-    'Hyperliquid': {
-        'timeout_hours': 24.0,
-        'take_profit_pct': 10.0,
-        'stop_loss_pct': -10.0,
-    },
-    'Polymarket': {
-        'timeout_hours': 24.0,
-        'take_profit_pct': 8.0,
-        'stop_loss_pct': -8.0,
-    },
+    exchange: paper_exchange_thresholds(exchange)
+    for exchange in ('Hyperliquid', 'Polymarket')
 }
 
 class TimeoutMonitor:
