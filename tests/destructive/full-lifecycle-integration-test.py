@@ -100,7 +100,7 @@ if __name__ == '__main__':
         assert position['exchange'] == 'Hyperliquid'
         print(f"[OK] Entry opened: {position['trade_id']}")
 
-        trader.get_current_price = lambda asset: 55000.0 if asset == 'BTC' else 0
+        trader.get_position_current_price = lambda position: 55000.0 if position.get('symbol') == 'BTC' else 0
         trader.main()
 
         open_after = trader.load_open_positions()

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Phase 1 signal generation engine.
-Produces canonical paper-trading signals for Hyperliquid by default and can
-optionally include exploratory Polymarket paper signals when the selected
-runtime mode requires them. Mixed mode is limited experimental evaluation only.
+Produces canonical paper-trading signals for Hyperliquid and Polymarket within
+one shared scanner architecture. Mixed mode remains a limited deterministic
+one-entry-per-cycle evaluation path.
 """
 
 from __future__ import annotations
@@ -212,7 +212,7 @@ def scan_polymarket_markets() -> list[dict]:
             'conviction': conviction,
             'recommended_position_size_usd': CANONICAL_POSITION_SIZES['Polymarket'],
             'paper_only': True,
-            'experimental': True,
+            'experimental': False,
         })
 
     opportunities.sort(key=lambda x: x['ev_score'], reverse=True)
@@ -323,8 +323,8 @@ def generate_report(signals: list[dict]) -> None:
 ## Notes
 
 - Hyperliquid remains the default canonical paper-trading path.
-- Polymarket signals are optional, paper-only, and experimental.
-- Mixed mode is limited experimental evaluation only and is not a fully proven side-by-side runtime.
+- Polymarket signals are canonical paper-trading signals when the mode includes Polymarket.
+- Mixed mode remains a limited deterministic one-entry-per-cycle evaluation path and is not a dual-entry runtime.
 """
 
     with open(REPORT_FILE, 'w') as f:
