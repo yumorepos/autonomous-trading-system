@@ -3,6 +3,7 @@
 Future-scope readiness research framework.
 This script models hypothetical future criteria for research purposes only.
 It does not imply that the repository currently supports live trading, and it is not part of the canonical paper-trading path.
+It reads canonical paper-trading history only and should not be treated as an execution or deployment approval tool.
 """
 
 import json
@@ -23,8 +24,7 @@ from models.trade_schema import normalize_trade_record, validate_trade_record
 READINESS_STATE = LOGS_DIR / "live-readiness-state.json"
 VALIDATION_HISTORY = LOGS_DIR / "validation-history.jsonl"
 READINESS_REPORT = WORKSPACE / "LIVE_READINESS_REPORT.md"
-PAPER_TRADES_HL = LOGS_DIR / "phase1-paper-trades.jsonl"
-PAPER_TRADES_PM = LOGS_DIR / "polymarket-trades.jsonl"
+CANONICAL_PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
 INCIDENT_LOG = LOGS_DIR / "incident-log.jsonl"
 ALPHA_STATE = LOGS_DIR / "alpha-intelligence-state.json"
 
@@ -54,8 +54,8 @@ COSTS = {
 
 class DeploymentVerdict(Enum):
     NOT_READY = "NOT_READY"
-    LIMITED_LIVE_READY = "LIMITED_LIVE_READY"
-    LIVE_READY = "LIVE_READY"
+    RESEARCH_READY_WITH_WARNINGS = "RESEARCH_READY_WITH_WARNINGS"
+    RESEARCH_READY_THRESHOLD_MET = "RESEARCH_READY_THRESHOLD_MET"
 
 
 @dataclass
@@ -77,7 +77,7 @@ class BaselineComparison:
 
 
 class LiveReadinessValidator:
-    """Research-only validator for hypothetical future live-capital criteria."""
+    """Research-only validator for hypothetical future deployment criteria."""
     
     def __init__(self):
         self.state = self.load_state()
@@ -108,29 +108,16 @@ class LiveReadinessValidator:
             json.dump(self.state, f, indent=2)
     
     def load_trades(self) -> List[Dict]:
-        """Load all paper trades from both exchanges"""
+        """Load canonical paper trades from the shared phase1 trade history only."""
         trades = []
-        
-        # Load Hyperliquid trades
-        if PAPER_TRADES_HL.exists():
-            with open(PAPER_TRADES_HL) as f:
+
+        if CANONICAL_PAPER_TRADES.exists():
+            with open(CANONICAL_PAPER_TRADES) as f:
                 for line in f:
                     if line.strip():
                         trade = normalize_trade_record(json.loads(line))
-                        if not validate_trade_record(trade, context='live-readiness-validator.hyperliquid'):
+                        if not validate_trade_record(trade, context='live-readiness-validator.canonical'):
                             continue
-                        trade['exchange'] = 'Hyperliquid'
-                        trades.append(trade)
-        
-        # Load Polymarket trades
-        if PAPER_TRADES_PM.exists():
-            with open(PAPER_TRADES_PM) as f:
-                for line in f:
-                    if line.strip():
-                        trade = normalize_trade_record(json.loads(line))
-                        if not validate_trade_record(trade, context='live-readiness-validator.polymarket'):
-                            continue
-                        trade['exchange'] = 'Polymarket'
                         trades.append(trade)
         
         return trades
@@ -532,12 +519,12 @@ class LiveReadinessValidator:
         if critical_failures:
             return DeploymentVerdict.NOT_READY
         
-        # LIMITED_LIVE_READY: All critical pass, but some warnings
+        # RESEARCH_READY_WITH_WARNINGS: All critical pass, but some warnings
         if warning_failures:
-            return DeploymentVerdict.LIMITED_LIVE_READY
+            return DeploymentVerdict.RESEARCH_READY_WITH_WARNINGS
         
-        # LIVE_READY: All pass
-        return DeploymentVerdict.LIVE_READY
+        # RESEARCH_READY_THRESHOLD_MET: All modeled thresholds pass
+        return DeploymentVerdict.RESEARCH_READY_THRESHOLD_MET
     
     # === ORCHESTRATION ===
     
@@ -545,7 +532,7 @@ class LiveReadinessValidator:
         """Execute full validation"""
         
         print("=" * 80)
-        print("LIVE-READINESS VALIDATION")
+        print("RESEARCH READINESS MODEL")
         print(f"Validation Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}")
         print("=" * 80)
         print()
@@ -585,7 +572,7 @@ class LiveReadinessValidator:
         print()
         
         # Determine verdict
-        print("3. Determining deployment verdict...")
+        print("3. Determining research-model verdict...")
         verdict = self.determine_verdict(all_results)
         
         print(f"   Verdict: {verdict.value}")
@@ -640,13 +627,14 @@ class LiveReadinessValidator:
         lines.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M EDT')}")
         lines.append(f"**Validation #:** {self.state['validation_count']}")
         lines.append("**Truthfulness note:** this repository currently supports paper trading only.")
+        lines.append("**Truthfulness note:** this file is a research model, not a deployment approval artifact.")
         lines.append("")
         
         # Verdict
-        if verdict == DeploymentVerdict.LIVE_READY:
+        if verdict == DeploymentVerdict.RESEARCH_READY_THRESHOLD_MET:
             lines.append(f"## [GREEN] VERDICT: {verdict.value}")
             lines.append("")
-            lines.append("**Research model outcome: criteria for future live-capital consideration are satisfied.**")
+            lines.append("**Research model outcome: modeled paper-trading thresholds are satisfied.**")
             lines.append("")
             lines.append("All critical criteria met:")
             lines.append("- [OK] Minimum data requirements satisfied")
@@ -655,12 +643,12 @@ class LiveReadinessValidator:
             lines.append("- [OK] Tested across multiple market regimes")
             lines.append("- [OK] Operational robustness confirmed")
             lines.append("")
-            lines.append("**Recommendation:** research-only milestone reached; do not treat this as implemented live support")
+            lines.append("**Recommendation:** research-only milestone reached; do not treat this as live deployment approval")
         
-        elif verdict == DeploymentVerdict.LIMITED_LIVE_READY:
+        elif verdict == DeploymentVerdict.RESEARCH_READY_WITH_WARNINGS:
             lines.append(f"## [YELLOW] VERDICT: {verdict.value}")
             lines.append("")
-            lines.append("**Research model outcome: critical criteria pass but warnings remain.**")
+            lines.append("**Research model outcome: critical modeled thresholds pass but warnings remain.**")
             lines.append("")
             lines.append("**Recommendation:** remain in paper trading until warnings are resolved")
             lines.append("- Max $2 per trade (reduced from $5)")
@@ -670,7 +658,7 @@ class LiveReadinessValidator:
         else:
             lines.append(f"## [RED] VERDICT: {verdict.value}")
             lines.append("")
-            lines.append("**Research model outcome: criteria for future live-capital consideration are not met.**")
+            lines.append("**Research model outcome: modeled paper-trading thresholds are not met.**")
             lines.append("")
             lines.append("**Critical failures detected. Remain in paper trading.**")
         

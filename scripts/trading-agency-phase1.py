@@ -84,30 +84,30 @@ def safety_snapshot_summary(snapshot: dict | None) -> str:
 
 
 def detect_optional_components(trading_mode: str = TRADING_MODE) -> dict:
-    """Detect optional modules explicitly so missing components are visible."""
+    """Report non-canonical/support modules without implying they are active runtime paths."""
     social_scanner = REPO_ROOT / "scripts" / "phase1-social-scanner.py"
     polymarket_executor = REPO_ROOT / "scripts" / "polymarket-executor.py"
     return {
         'social_scanner': {
-            'status': 'ENABLED' if social_scanner.exists() else 'MISSING',
-            'reason': 'Script detected' if social_scanner.exists() else 'phase1-social-scanner.py not present',
+            'status': 'NON_CANONICAL_HELPER_PRESENT' if social_scanner.exists() else 'ABSENT',
+            'reason': (
+                'phase1-social-scanner.py exists but is not part of the canonical paper-trading path'
+                if social_scanner.exists()
+                else 'phase1-social-scanner.py not present'
+            ),
         },
-        'polymarket_execution': {
+        'polymarket_helper': {
             'status': (
-                'ENABLED'
-                if polymarket_executor.exists() and mode_includes_polymarket(trading_mode)
-                else 'DISABLED'
+                'NON_CANONICAL_HELPER_PRESENT'
                 if polymarket_executor.exists()
-                else 'MISSING'
+                else 'ABSENT'
             ),
             'reason': (
-                f"Polymarket executor active for trading_mode={trading_mode}"
-                if polymarket_executor.exists() and mode_includes_polymarket(trading_mode)
-                else (
-                    f"Polymarket executor exists but is not active for trading_mode={trading_mode}"
-                    if polymarket_executor.exists()
-                    else 'polymarket-executor.py not present'
+                (
+                    f"polymarket-executor.py exists but is helper-only and non-canonical for trading_mode={trading_mode}"
                 )
+                if polymarket_executor.exists()
+                else 'polymarket-executor.py not present'
             ),
         },
     }
@@ -132,13 +132,11 @@ def run_bootstrap_check() -> StageResult:
     )
 
 
-def run_data_integrity_gate(optional_components: dict) -> StageResult:
+def run_data_integrity_gate() -> StageResult:
     """Run the enforced pre-scan data integrity gate."""
     integrity_module = load_script_module("data-integrity-layer.py", "phase1_data_integrity")
     integrity = integrity_module.DataIntegrityLayer()
-    gate = integrity.run_pre_scan_gate(
-        include_polymarket=optional_components['polymarket_execution']['status'] == 'ENABLED'
-    )
+    gate = integrity.run_pre_scan_gate(include_polymarket=mode_includes_polymarket(TRADING_MODE))
     status = StageStatus.SUCCESS if gate['passed'] else StageStatus.FAIL
     return stage_result("data_integrity", status, gate['reason'], gate)
 
@@ -666,13 +664,20 @@ def main():
 
     optional_components = detect_optional_components(TRADING_MODE)
     health_manager = SystemHealthManager()
-    print("Optional components:")
+    print("Non-canonical/support components:")
     for component_name, component_state in optional_components.items():
         print(f"  - {component_name}: {component_state['status']} ({component_state['reason']})")
     print()
+    print(f"Canonical entrypoint: scripts/trading-agency-phase1.py")
     print(f"Trading mode: {TRADING_MODE}")
     print(f"  - Hyperliquid enabled: {mode_includes_hyperliquid(TRADING_MODE)}")
     print(f"  - Polymarket enabled: {mode_includes_polymarket(TRADING_MODE)}")
+    if TRADING_MODE == 'hyperliquid_only':
+        print("  - Truthful mode status: canonical paper-trading path")
+    elif TRADING_MODE == 'polymarket_only':
+        print("  - Truthful mode status: experimental paper-trading path")
+    else:
+        print("  - Truthful mode status: experimental mixed-mode evaluation; not the canonical proof path")
     print()
 
     stage_results: list[StageResult] = []
@@ -697,7 +702,7 @@ def main():
     )
     print()
 
-    data_stage = run_data_integrity_gate(optional_components)
+    data_stage = run_data_integrity_gate()
     stage_results.append(data_stage)
 
     if data_stage.status == StageStatus.FAIL.value:
