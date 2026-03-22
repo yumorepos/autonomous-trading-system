@@ -95,8 +95,10 @@ if __name__ == "__main__":
         performance_path = logs_dir / "phase1-performance.json"
         safety_path = logs_dir / "execution-safety-state.json"
         report_path = logs_dir / "agency-phase1-report.json"
+        cycle_summary_path = logs_dir / "agency-cycle-summary.json"
         runtime_events_path = logs_dir / "runtime-events.jsonl"
         timeout_report_path = workspace_root / "TIMEOUT_MONITOR_REPORT.md"
+        cycle_summary_markdown_path = workspace_root / "AGENCY_CYCLE_SUMMARY.md"
 
         trades_after_entry = load_jsonl(trades_path)
         assert len(trades_after_entry) == 1, trades_after_entry
@@ -128,6 +130,7 @@ if __name__ == "__main__":
         assert safety_state_after_entry["runtime_enforcement"]["last_persisted_trade_count"] == 1
 
         agency_report_entry = load_json(report_path)
+        cycle_summary_entry = load_json(cycle_summary_path)
         assert agency_report_entry["execution_results"]["bootstrap"] == "SUCCESS"
         assert agency_report_entry["execution_results"]["data_integrity"] == "SUCCESS"
         assert agency_report_entry["execution_results"]["signal_scanner"] == "SUCCESS"
@@ -135,6 +138,11 @@ if __name__ == "__main__":
         assert agency_report_entry["execution_results"]["trader"] == "SUCCESS"
         assert agency_report_entry["execution_results"]["authoritative_state_update"] == "SUCCESS"
         assert agency_report_entry["execution_results"]["monitors"] == "SUCCESS"
+        assert agency_report_entry["runtime_summary"] == cycle_summary_entry
+        assert cycle_summary_entry["cycle_result"] == "ENTRY_EXECUTED"
+        assert cycle_summary_entry["entry_outcome"]["status"] == "executed"
+        assert cycle_summary_entry["exit_outcome"]["status"] == "no_open_positions"
+        assert cycle_summary_markdown_path.exists(), "AGENCY_CYCLE_SUMMARY.md missing after entry cycle"
         assert timeout_report_path.exists(), "timeout monitor report missing after entry cycle"
         assert runtime_events_path.exists(), "runtime-events.jsonl missing after entry cycle"
 
@@ -167,11 +175,16 @@ if __name__ == "__main__":
         assert safety_state_after_exit["runtime_enforcement"]["last_persisted_trade_count"] == 1
 
         agency_report_exit = load_json(report_path)
+        cycle_summary_exit = load_json(cycle_summary_path)
         assert agency_report_exit["execution_results"]["safety_validation"] == "SKIPPED"
         assert agency_report_exit["execution_results"]["trader"] == "SUCCESS"
         assert agency_report_exit["execution_results"]["authoritative_state_update"] == "SUCCESS"
         assert agency_report_exit["performance_summary"]["total_trades"] == 1
         assert agency_report_exit["current_state"]["open_positions"] == 0
+        assert agency_report_exit["runtime_summary"] == cycle_summary_exit
+        assert cycle_summary_exit["cycle_result"] == "EXIT_EXECUTED"
+        assert cycle_summary_exit["entry_outcome"]["status"] == "skipped"
+        assert cycle_summary_exit["exit_outcome"]["status"] == "executed"
 
         os.environ["OPENCLAW_WORKSPACE"] = str(workspace_root)
         os.environ["OPENCLAW_TRADING_MODE"] = "hyperliquid_only"
