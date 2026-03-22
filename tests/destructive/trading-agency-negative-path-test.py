@@ -113,8 +113,12 @@ def assert_no_new_trade(workspace_root: Path, *, reason_fragment: str, safety_st
     logs_dir = workspace_root / 'logs'
     trades = load_jsonl(logs_dir / 'phase1-paper-trades.jsonl')
     report = load_json(logs_dir / 'agency-phase1-report.json')
+    cycle_summary = load_json(logs_dir / 'agency-cycle-summary.json')
     assert report['execution_results']['safety_validation'] == safety_status, report
     assert reason_fragment in report['execution_reasons']['safety_validation'], report['execution_reasons']['safety_validation']
+    assert report['runtime_summary'] == cycle_summary, (report['runtime_summary'], cycle_summary)
+    assert cycle_summary['cycle_result'] == 'ENTRY_BLOCKED', cycle_summary
+    assert cycle_summary['entry_outcome']['status'] == 'blocked', cycle_summary
     if expected_transition is not None:
         safety_state = load_json(logs_dir / 'execution-safety-state.json')
         assert safety_state['runtime_enforcement']['last_transition'] == expected_transition, safety_state
