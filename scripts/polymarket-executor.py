@@ -5,6 +5,7 @@ Polymarket execution scaffold.
 This script is not part of the active Phase 1 orchestration path. It remains in the
 repository as exploratory work only; the canonical paper-trading path now runs through
 `scripts/phase1-paper-trader.py`, and real Polymarket execution remains incomplete/disabled.
+The state files written here are helper-only legacy artifacts and are not authoritative.
 """
 
 import json

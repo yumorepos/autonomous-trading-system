@@ -3,6 +3,7 @@
 Phase 1 paper trading engine.
 Supports canonical Hyperliquid paper trades and optional/experimental Polymarket
 paper trades while persisting both through the same canonical trade/state model.
+Mixed mode remains experimental and currently admits at most one new entry per cycle.
 """
 
 from __future__ import annotations
@@ -311,7 +312,7 @@ def calculate_performance() -> dict:
         if normalized.get('status') != 'CLOSED':
             continue
         closed_trades.append(normalized)
-        exchange = trade.get('exchange', 'Unknown')
+        exchange = normalized.get('exchange', 'Unknown')
         breakdown = exchange_breakdown.setdefault(exchange, {'total_trades': 0, 'total_pnl_usd': 0.0})
         breakdown['total_trades'] += 1
         breakdown['total_pnl_usd'] += float(normalized.get('realized_pnl_usd') or 0)

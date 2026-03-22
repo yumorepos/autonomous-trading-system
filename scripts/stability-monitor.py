@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 24-Hour Stability Monitor
-Tracks: crashes, cron health, API failures, state corruption, anomalies
+Support-only observability script for paper-trading operations.
+Tracks: crashes, cron health, API failures, canonical state corruption, anomalies.
 """
 
 import json
@@ -179,9 +180,6 @@ class StabilityMonitor:
             'portfolio-allocation.json',
             'strategy-registry.json',
         ]
-        if mode_includes_polymarket(TRADING_MODE):
-            state_files.append('polymarket-state.json')
-        
         for file_name in state_files:
             file_path = LOGS_DIR / file_name
             
