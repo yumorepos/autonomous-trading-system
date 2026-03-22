@@ -71,6 +71,7 @@ The safe verification suite proves:
 - mode-aware data-integrity gating respects the selected runtime mode
 - Hyperliquid and Polymarket paper signal schemas normalize into the expected structure
 - isolated paper-trader lifecycle flows persist and clear canonical state correctly
+- offline agency-entrypoint proofs now cover Hyperliquid success, Polymarket success, mixed-mode limitation, and orchestrator negative-path blocking
 - the performance dashboard can read canonical mixed-mode trade history
 - timeout monitoring exposes Polymarket-specific paper thresholds
 
@@ -82,12 +83,12 @@ Run the same suite locally with:
 
 ## What CI Does Not Prove
 
-- the full orchestrator path in `scripts/trading-agency-phase1.py` is not exercised end-to-end in CI
+- the agency entrypoint in `scripts/trading-agency-phase1.py` is exercised offline in CI for Hyperliquid, Polymarket, mixed-mode limitation confirmation, and orchestrator negative-path blocking
 - runtime connectivity to external APIs is not a blocking CI guarantee
 - no live trading support exists
 - no real-money execution path exists
 - `mixed` is not proven as a simultaneous dual-entry runtime; it is a limited experimental evaluation mode
-- Polymarket remains experimental until more canonical runtime evidence exists
+- Polymarket remains experimental, but the agency entrypoint now has deterministic offline proof coverage
 
 ## Operator Quickstart
 
@@ -151,7 +152,7 @@ workspace/   Runtime state, operator controls, logs, and generated artifacts.
 
 - **Execution mode:** paper trading only
 - **Canonical exchange path:** Hyperliquid
-- **Experimental exchange path:** Polymarket paper trading
+- **Experimental exchange path:** Polymarket paper trading with offline agency-level proof
 - **Mixed mode:** limited experimental evaluation mode
 - **Live trading:** not implemented
 - **Production deployment claim:** unsupported

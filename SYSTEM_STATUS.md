@@ -72,14 +72,15 @@ The required CI workflow verifies:
 - Python compile/syntax validation
 - script-style regression tests
 - isolated lifecycle integrity for canonical paper-trader flows
+- offline agency-entrypoint coverage for Hyperliquid, Polymarket, mixed-mode limitation, and negative-path reliability checks
 - canonical dashboard and timeout-monitor reader behavior
 
-CI intentionally avoids making flaky network access a merge blocker and does **not** prove the full orchestrator end-to-end.
+CI intentionally avoids making flaky network access a merge blocker while now proving the agency entrypoint offline for success-path and negative-path execution.
 
 ## What Remains Unverified in CI
 
 - current external API reachability from the runner
-- full runtime execution of `scripts/trading-agency-phase1.py`
+- live external API reachability during `scripts/trading-agency-phase1.py` execution
 - long-duration forward performance characteristics
 - any live execution behavior, because none is implemented
 
@@ -88,7 +89,7 @@ CI intentionally avoids making flaky network access a merge blocker and does **n
 ## Future Work
 
 Future work, if pursued, should remain clearly separated from the current paper-only claim:
-- accumulate more canonical paper-trading runtime evidence for Polymarket
+- decide whether Polymarket should remain experimental after more than offline paper-runtime evidence exists
 - decide whether mixed mode should remain limited or be upgraded with explicit multi-entry semantics
 - continue improving operator reporting and paper-trading analytics
 
