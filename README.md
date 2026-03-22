@@ -9,7 +9,7 @@ This repository implements a **Phase 1 paper-trading execution path** for truthf
 
 Current repo truth:
 - **canonical paper-trading path:** Hyperliquid via `scripts/trading-agency-phase1.py`
-- **experimental paper-trading path:** Polymarket in `polymarket_only`, with deterministic offline agency proof only
+- **canonical paper-trading path:** Polymarket in `polymarket_only`, using the same shared architecture and deterministic offline agency proof
 - **limited evaluation mode:** `mixed`
 - **live trading:** not implemented
 - **real-money execution:** not supported
@@ -42,7 +42,7 @@ That script runs this Phase 1 paper-trading flow:
 | Mode | Purpose | Truthful status |
 |---|---|---|
 | `hyperliquid_only` | Default paper-trading run | canonical and best-supported |
-| `polymarket_only` | Polymarket paper-trading run | experimental and not fully proven end-to-end |
+| `polymarket_only` | Polymarket paper-trading run | canonical paper-trading path with offline proof |
 | `mixed` | Shared-state evaluation across both exchanges | limited experimental mode; not the canonical proof path |
 
 ## Canonical Architecture
@@ -65,7 +65,6 @@ Canonical state files:
 - `workspace/AGENCY_CYCLE_SUMMARY.md` — human-readable per-cycle summary
 
 Non-canonical/support-only artifacts:
-- `scripts/polymarket-executor.py` — standalone experimental helper for canonical-schema Polymarket paper signals; not part of canonical execution
 - `scripts/exit-monitor.py` — proof/audit generator only; not authoritative close persistence
 - `scripts/live-readiness-validator.py` — future-scope research model only
 - `docs/archive/` and `scripts/archive/` — historical context only
@@ -95,8 +94,8 @@ Run the same suite locally with:
 - runtime connectivity to external APIs is not a blocking CI guarantee
 - no live trading support exists
 - no real-money execution path exists
-- `mixed` is not proven as a simultaneous dual-entry runtime; it is a limited experimental evaluation mode
-- Polymarket remains experimental even though the agency entrypoint has deterministic offline proof coverage and canonical persistence compatibility
+- `mixed` is not proven as a simultaneous dual-entry runtime; it remains a limited deterministic evaluation mode
+- Polymarket is canonical at the paper-trading level but does not imply live readiness
 
 ## Operator Quickstart
 

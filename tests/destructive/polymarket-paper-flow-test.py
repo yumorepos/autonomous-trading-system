@@ -62,7 +62,7 @@ if __name__ == '__main__':
             'conviction': 'MEDIUM',
             'recommended_position_size_usd': 5.0,
             'paper_only': True,
-            'experimental': True,
+            'experimental': False,
         }
         signals_file.parent.mkdir(parents=True, exist_ok=True)
         with open(signals_file, 'a') as handle:
@@ -74,7 +74,7 @@ if __name__ == '__main__':
         assert open_positions[0]['exchange'] == 'Polymarket'
         assert open_positions[0]['market_id'] == 'pm-btc-up'
 
-        trader.get_polymarket_current_price = lambda position: 0.48
+        trader.get_position_current_price = lambda position: 0.48
         plan = trader.build_execution_plan(allow_new_entries=False)
         assert len(plan['planned_closes']) == 1, 'Expected one Polymarket planned close'
         trader.persist_trade_records(plan['planned_closes'])
@@ -82,4 +82,5 @@ if __name__ == '__main__':
 
         assert len(trader.load_open_positions()) == 0, 'Expected Polymarket open state cleared after close'
         assert perf.get('exchange_breakdown', {}).get('Polymarket', {}).get('total_trades') == 1
+        assert not (REPO_ROOT / 'scripts' / 'polymarket-executor.py').exists(), 'Legacy helper path should be removed'
         print('[OK] Polymarket paper flow passed')

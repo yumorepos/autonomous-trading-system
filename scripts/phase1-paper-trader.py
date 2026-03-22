@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Phase 1 paper trading engine.
-Supports canonical Hyperliquid paper trades and optional/experimental Polymarket
-paper trades while persisting both through the same canonical trade/state model.
-Mixed mode remains experimental and currently admits at most one new entry per cycle.
+Supports canonical Hyperliquid and Polymarket paper trades through the same
+shared execution architecture. Mixed mode remains a limited deterministic
+one-entry-per-cycle evaluation path.
 """
 
 from __future__ import annotations
@@ -22,11 +22,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from config.runtime import LOGS_DIR, TRADING_MODE, mode_includes_hyperliquid, mode_includes_polymarket
 from models.exchange_metadata import (
-    CANONICAL_PAPER_EXCHANGE,
+    PRIMARY_MIXED_MODE_EXCHANGE,
     paper_exchange_priority,
     paper_exchange_status,
-    paper_exchange_thresholds,
 )
+from utils.paper_exchange_adapters import get_paper_exchange_adapter, paper_position_identifier
 from models.position_state import apply_trade_to_position_state, get_open_positions
 from models.trade_schema import normalize_trade_record, validate_trade_record
 from utils.json_utils import safe_read_jsonl, write_json_atomic
@@ -40,12 +40,6 @@ POSITION_STATE_FILE = LOGS_DIR / "position-state.json"
 PAPER_BALANCE = 97.80
 MAX_OPEN_POSITIONS = 3
 MIN_EV_SCORE = 4
-
-EXIT_THRESHOLDS = {
-    exchange: paper_exchange_thresholds(exchange)
-    for exchange in ('Hyperliquid', 'Polymarket')
-}
-
 
 def log_non_canonical_signal(signal: dict | None, reason: str) -> None:
     signal_type = (signal or {}).get('signal_type', 'unknown')
@@ -67,31 +61,15 @@ def validate_canonical_signal(signal: dict | None) -> tuple[bool, str]:
         return False, "signal payload is not a dict"
 
     exchange = signal.get('exchange', signal.get('source'))
-    if exchange == 'Hyperliquid':
-        if signal.get('signal_type') != 'funding_arbitrage':
-            return False, f"signal_type={signal.get('signal_type')!r} is not canonical Hyperliquid funding_arbitrage"
-        missing = [field for field in ('asset', 'direction', 'entry_price') if signal.get(field) is None]
-        if missing:
-            return False, f"missing required Hyperliquid fields: {missing}"
-        return True, 'canonical Hyperliquid signal'
-
-    if exchange == 'Polymarket':
-        if signal.get('signal_type') != 'polymarket_binary_market':
-            return False, f"signal_type={signal.get('signal_type')!r} is not an experimental Polymarket paper signal on the canonical schema"
-        missing = [field for field in ('market_id', 'market_question', 'side', 'entry_price') if signal.get(field) is None]
-        if missing:
-            return False, f"missing required Polymarket fields: {missing}"
-        return True, 'experimental Polymarket paper signal on canonical schema'
-
-    return False, f"unsupported exchange={exchange!r}"
+    adapter = get_paper_exchange_adapter(exchange)
+    if adapter is None:
+        return False, f"unsupported exchange={exchange!r}"
+    return adapter.validate_signal(signal)
 
 
 
 def _position_identifier(signal_or_position: dict) -> str | None:
-    exchange = signal_or_position.get('exchange', signal_or_position.get('source'))
-    if exchange == 'Polymarket':
-        return signal_or_position.get('market_id') or signal_or_position.get('symbol')
-    return signal_or_position.get('asset') or signal_or_position.get('symbol')
+    return paper_position_identifier(signal_or_position)
 
 
 class PaperTrader:
@@ -108,158 +86,47 @@ class PaperTrader:
             return None
 
         exchange = self.signal.get('exchange', self.signal.get('source'))
+        adapter = get_paper_exchange_adapter(exchange)
+        if adapter is None:
+            log_non_canonical_signal(self.signal, f"unsupported exchange={exchange!r}")
+            return None
+
+        trade = adapter.build_trade(self.signal, self.position_id)
         if exchange == 'Polymarket':
-            return self.execute_polymarket()
-        return self.execute_hyperliquid()
-
-    def execute_hyperliquid(self) -> dict:
-        asset = self.signal['asset']
-        direction = self.signal['direction']
-        entry_price = float(self.signal['entry_price'])
-        position_size_usd = float(self.signal.get('recommended_position_size_usd', PAPER_BALANCE * 0.02))
-        position_size = position_size_usd / entry_price
-        entry_timestamp = datetime.now(timezone.utc).isoformat()
-        thresholds = EXIT_THRESHOLDS['Hyperliquid']
-        trade = {
-            'trade_id': self.position_id,
-            'position_id': self.position_id,
-            'timestamp': entry_timestamp,
-            'entry_timestamp': entry_timestamp,
-            'entry_time': entry_timestamp,
-            'signal': self.signal,
-            'exchange': 'Hyperliquid',
-            'strategy': 'funding_arbitrage',
-            'symbol': asset,
-            'asset': asset,
-            'side': direction,
-            'direction': direction,
-            'entry_price': entry_price,
-            'position_size': position_size,
-            'position_size_usd': position_size_usd,
-            'status': 'OPEN',
-            'stop_loss_pct': thresholds['stop_loss_pct'],
-            'take_profit_pct': thresholds['take_profit_pct'],
-            'timeout_hours': thresholds['timeout_hours'],
-            'paper_only': True,
-        }
-        print(f"  [OK] Hyperliquid paper trade: {direction} {position_size:.4f} {asset} @ ${entry_price:.4f}")
+            print(f"  [OK] Polymarket paper trade: {trade['side']} {trade['market_id']} ({trade['position_size']:.4f} shares) @ ${trade['entry_price']:.4f}")
+            metadata = {'trade_id': self.position_id, 'market_id': trade['market_id'], 'side': trade['side'], 'entry_price': trade['entry_price']}
+        else:
+            print(f"  [OK] Hyperliquid paper trade: {trade['side']} {trade['position_size']:.4f} {trade['symbol']} @ ${trade['entry_price']:.4f}")
+            metadata = {'trade_id': self.position_id, 'symbol': trade['symbol'], 'side': trade['side'], 'entry_price': trade['entry_price']}
         append_runtime_event(
             stage='paper_trader',
-            exchange='Hyperliquid',
+            exchange=exchange,
             lifecycle_stage='entry_planned',
             status='INFO',
-            message='Hyperliquid paper trade planned',
-            metadata={'trade_id': self.position_id, 'symbol': asset, 'side': direction, 'entry_price': entry_price},
+            message=f'{exchange} paper trade planned',
+            metadata=metadata,
         )
         return trade
-
-    def execute_polymarket(self) -> dict:
-        market_id = self.signal['market_id']
-        side = self.signal['side']
-        entry_price = float(self.signal['entry_price'])
-        position_size_usd = float(self.signal.get('recommended_position_size_usd', 5.0))
-        quantity = position_size_usd / entry_price
-        entry_timestamp = datetime.now(timezone.utc).isoformat()
-        thresholds = EXIT_THRESHOLDS['Polymarket']
-        trade = {
-            'trade_id': self.position_id,
-            'position_id': self.position_id,
-            'timestamp': entry_timestamp,
-            'entry_timestamp': entry_timestamp,
-            'entry_time': entry_timestamp,
-            'signal': self.signal,
-            'exchange': 'Polymarket',
-            'strategy': 'polymarket_spread',
-            'symbol': market_id,
-            'asset': market_id,
-            'market_id': market_id,
-            'market_question': self.signal['market_question'],
-            'token_id': self.signal.get('token_id'),
-            'side': side,
-            'direction': side,
-            'entry_price': entry_price,
-            'position_size': quantity,
-            'position_size_usd': position_size_usd,
-            'status': 'OPEN',
-            'stop_loss_pct': thresholds['stop_loss_pct'],
-            'take_profit_pct': thresholds['take_profit_pct'],
-            'timeout_hours': thresholds['timeout_hours'],
-            'paper_only': True,
-            'experimental': True,
-        }
-        print(f"  [OK] Polymarket paper trade: {side} {market_id} ({quantity:.4f} shares) @ ${entry_price:.4f}")
-        append_runtime_event(
-            stage='paper_trader',
-            exchange='Polymarket',
-            lifecycle_stage='entry_planned',
-            status='INFO',
-            message='Polymarket paper trade planned',
-            metadata={'trade_id': self.position_id, 'market_id': market_id, 'side': side, 'entry_price': entry_price},
-        )
-        return trade
-
-
-
-def get_current_price(asset: str) -> float:
-    """Get current Hyperliquid price for the given asset."""
-    try:
-        r = requests.post("https://api.hyperliquid.xyz/info", json={'type': 'allMids'}, timeout=5)
-        if r.status_code == 200:
-            return float(r.json().get(asset, 0))
-    except Exception:
-        pass
-    return 0
-
-
-
-def get_polymarket_current_price(position: dict) -> float:
-    market_id = position.get('market_id') or position.get('symbol')
-    side = position.get('side', 'YES')
-    token_id = position.get('token_id')
-    if not market_id:
-        return 0
-    try:
-        r = requests.get(
-            "https://gamma-api.polymarket.com/markets",
-            params={'condition_id': market_id},
-            timeout=5,
-        )
-        r.raise_for_status()
-        markets = r.json()
-        if not markets:
-            return 0
-        market = markets[0]
-        for token in market.get('tokens', []):
-            outcome = str(token.get('outcome') or '').upper()
-            candidate_token_id = str(token.get('token_id') or token.get('tokenId') or token.get('id') or '')
-            if outcome == side or (token_id and token_id == candidate_token_id):
-                return float(token.get('price') or token.get('bestAsk') or token.get('ask') or token.get('bestBid') or token.get('bid') or 0)
-    except Exception:
-        pass
-    return 0
 
 
 
 def get_position_current_price(position: dict) -> float:
     exchange = position.get('exchange') or position.get('signal', {}).get('exchange') or position.get('signal', {}).get('source')
-    if exchange == 'Polymarket':
-        return get_polymarket_current_price(position)
-    return get_current_price(position['symbol'])
+    adapter = get_paper_exchange_adapter(exchange)
+    if adapter is None:
+        return 0
+    try:
+        return adapter.get_current_price(position, requests)
+    except Exception:
+        return 0
 
 
 
 def calculate_pnl(entry_price: float, current_price: float, position_size: float, direction: str, exchange: str = 'Hyperliquid') -> tuple[float, float]:
-    if exchange == 'Hyperliquid':
-        if direction == 'LONG':
-            pnl_usd = (current_price - entry_price) * position_size
-            pnl_pct = ((current_price - entry_price) / entry_price) * 100
-        else:
-            pnl_usd = (entry_price - current_price) * position_size
-            pnl_pct = ((entry_price - current_price) / entry_price) * 100
-    else:
-        pnl_usd = (current_price - entry_price) * position_size
-        pnl_pct = ((current_price - entry_price) / entry_price) * 100 if entry_price else 0
-    return pnl_usd, pnl_pct
+    adapter = get_paper_exchange_adapter(exchange)
+    if adapter is None:
+        return 0, 0
+    return adapter.calculate_pnl(entry_price, current_price, position_size, direction)
 
 
 
@@ -272,17 +139,19 @@ def check_exit(position: dict) -> tuple[bool, str | None]:
     if not current_price:
         return False, None
 
-    thresholds = EXIT_THRESHOLDS['Polymarket' if exchange == 'Polymarket' else 'Hyperliquid']
+    adapter = get_paper_exchange_adapter(exchange)
+    if adapter is None:
+        return False, None
     direction = position.get('side', position.get('direction', 'LONG'))
     _, pnl_pct = calculate_pnl(position['entry_price'], current_price, position['position_size'], direction, exchange=exchange)
 
-    if pnl_pct >= thresholds['take_profit_pct']:
+    if pnl_pct >= adapter.take_profit_pct:
         return True, 'take_profit'
-    if pnl_pct <= thresholds['stop_loss_pct']:
+    if pnl_pct <= adapter.stop_loss_pct:
         return True, 'stop_loss'
 
     age_hours = (datetime.now(timezone.utc) - datetime.fromisoformat(position['entry_timestamp'])).total_seconds() / 3600
-    if age_hours >= thresholds['timeout_hours']:
+    if age_hours >= adapter.timeout_hours:
         return True, 'timeout'
     return False, None
 
@@ -450,8 +319,8 @@ def select_trade_candidate(signals: list[dict], open_positions: list[dict], allo
     exchange = best_signal.get('exchange', best_signal.get('source'))
     status = paper_exchange_status(exchange).replace('_', ' ')
     canonical_note = (
-        'preferred canonical mixed-mode exchange'
-        if TRADING_MODE == 'mixed' and exchange == CANONICAL_PAPER_EXCHANGE
+        'current deterministic mixed-mode priority winner'
+        if TRADING_MODE == 'mixed' and exchange == PRIMARY_MIXED_MODE_EXCHANGE
         else status
     )
     return best_signal, (

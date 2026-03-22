@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
 from models.exchange_metadata import paper_exchange_thresholds
+from utils.paper_exchange_adapters import get_paper_exchange_adapter
 from models.position_state import get_open_positions
 from models.trade_schema import validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl
@@ -55,67 +56,45 @@ class TimeoutMonitor:
         return history
     
     def get_current_price(self, position: Dict) -> Optional[float]:
-        """Get current price for Hyperliquid or Polymarket open positions."""
+        """Get current price for any canonical paper-trading exchange via its adapter."""
         exchange = position.get('exchange', position.get('signal', {}).get('exchange', position.get('signal', {}).get('source', 'Hyperliquid')))
-        if exchange == 'Polymarket':
-            market_id = position.get('market_id') or position.get('symbol')
-            side = position.get('side', 'YES')
-            token_id = position.get('token_id')
-            try:
-                r = requests.get(
-                    "https://gamma-api.polymarket.com/markets",
-                    params={'condition_id': market_id},
-                    timeout=5,
-                )
-                if r.status_code == 200:
-                    for market in r.json():
-                        for token in market.get('tokens', []):
-                            outcome = str(token.get('outcome') or '').upper()
-                            candidate_token_id = str(token.get('token_id') or token.get('tokenId') or token.get('id') or '')
-                            if outcome == side or (token_id and candidate_token_id == token_id):
-                                return float(token.get('price') or token.get('bestAsk') or token.get('ask') or token.get('bestBid') or token.get('bid') or 0)
-            except Exception:
-                pass
+        asset = position.get('symbol') or position.get('market_id') or 'unknown'
+        adapter = get_paper_exchange_adapter(exchange)
+        if adapter is None:
             return None
-
-        asset = position['symbol']
         try:
-            r = requests.post("https://api.hyperliquid.xyz/info", 
-                            json={'type': 'allMids'}, timeout=5)
-            if r.status_code == 200:
-                prices = r.json()
-                price = float(prices.get(asset, 0))
-                if price > 0:
-                    self.health_manager.resolve_incident(
-                        incident_type='timeout_monitor_missing_price',
-                        source='timeout-monitor',
-                        affected_trade=asset,
-                        resolution_reason='Price became available again for timeout monitoring',
-                    )
-                    self.health_manager.resolve_incident(
-                        incident_type='timeout_monitor_api_instability',
-                        source='timeout-monitor',
-                        affected_trade=asset,
-                        resolution_reason='Timeout monitor API recovered and price lookups succeeded',
-                    )
-                    self.health_manager.resolve_incident(
-                        incident_type='timeout_monitor_failure',
-                        source='timeout-monitor',
-                        affected_trade=asset,
-                        resolution_reason='Timeout monitor recovered after successful price lookup',
-                    )
+            price = adapter.get_current_price(position, requests)
+            if price > 0:
+                self.health_manager.resolve_incident(
+                    incident_type='timeout_monitor_missing_price',
+                    source='timeout-monitor',
+                    affected_trade=asset,
+                    resolution_reason='Price became available again for timeout monitoring',
+                )
+                self.health_manager.resolve_incident(
+                    incident_type='timeout_monitor_api_instability',
+                    source='timeout-monitor',
+                    affected_trade=asset,
+                    resolution_reason='Timeout monitor API recovered and price lookups succeeded',
+                )
+                self.health_manager.resolve_incident(
+                    incident_type='timeout_monitor_failure',
+                    source='timeout-monitor',
+                    affected_trade=asset,
+                    resolution_reason='Timeout monitor recovered after successful price lookup',
+                )
                 return price
             self.health_manager.record_incident(
                 incident_type='timeout_monitor_api_instability',
                 severity='MEDIUM',
                 source='timeout-monitor',
-                message=f"Timeout monitor price lookup failed for {asset}: HTTP {r.status_code}",
+                message=f"Timeout monitor price lookup failed for {asset}: no actionable price returned",
                 affected_trade=asset,
                 affected_system='timeout-monitoring',
-                affected_components=['timeout_monitor', 'hyperliquid_api'],
-                metadata={'asset': asset, 'status_code': r.status_code},
+                affected_components=['timeout_monitor', f'{exchange.lower()}_api'],
+                metadata={'asset': asset, 'exchange': exchange},
             )
-        except:
+        except Exception:
             self.health_manager.record_incident(
                 incident_type='timeout_monitor_failure',
                 severity='MEDIUM',
@@ -123,8 +102,8 @@ class TimeoutMonitor:
                 message=f"Timeout monitor price lookup raised for {asset}",
                 affected_trade=asset,
                 affected_system='timeout-monitoring',
-                affected_components=['timeout_monitor', 'hyperliquid_api'],
-                metadata={'asset': asset},
+                affected_components=['timeout_monitor', f'{exchange.lower()}_api'],
+                metadata={'asset': asset, 'exchange': exchange},
             )
         return None
     

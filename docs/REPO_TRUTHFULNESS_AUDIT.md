@@ -16,8 +16,8 @@ The repository's active, reviewable canonical path is the **Phase 1 paper-tradin
 
 Supported runtime modes:
 - `hyperliquid_only` — default canonical mode
-- `polymarket_only` — experimental paper mode
-- `mixed` — limited experimental evaluation mode
+- `polymarket_only` — canonical Polymarket paper mode
+- `mixed` — limited deterministic evaluation mode
 
 ## What Is Active and Truthful Now
 
@@ -30,7 +30,6 @@ Supported runtime modes:
 | `models/position_state.py` | KEEP_ACTIVE | Authoritative open-position state model. |
 | `scripts/timeout-monitor.py` | KEEP_ACTIVE | Canonical monitor script run by the orchestrator. |
 | `scripts/performance-dashboard.py` | KEEP_ACTIVE_SUPPORT | Reads canonical trade/state outputs only. |
-| `scripts/polymarket-executor.py` | KEEP_NON_CANONICAL | Standalone helper/scaffold only; not the authoritative Polymarket path. |
 | `scripts/exit-monitor.py` | KEEP_NON_CANONICAL | Proof/audit generator only; not authoritative close persistence. |
 | `scripts/live-readiness-validator.py` | KEEP_NON_CANONICAL_FUTURE_SCOPE | Research model for hypothetical future criteria only. |
 | `scripts/stability-monitor.py` | KEEP_NON_CANONICAL_SUPPORT | Support monitor; not part of canonical execution. |
@@ -41,7 +40,7 @@ Supported runtime modes:
 
 - paper trading only
 - Hyperliquid remains the canonical mode
-- Polymarket remains experimental and not fully proven end-to-end
+- Polymarket is canonical at the paper-trading level and remains non-live-ready
 - mixed mode remains limited and should not be presented as a fully proven side-by-side runtime
 - live trading is not supported
 - supporting dashboards/reports are not proof of live readiness

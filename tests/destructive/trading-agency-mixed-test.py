@@ -48,7 +48,7 @@ if __name__ == '__main__':
         assert len(positions) == 1, positions
         assert trades[0]['exchange'] == 'Hyperliquid', trades
         assert positions[0]['exchange'] == 'Hyperliquid', positions
-        assert 'preferred canonical mixed-mode exchange' in report['execution_reasons']['safety_validation'], report
+        assert 'current deterministic mixed-mode priority winner' in report['execution_reasons']['safety_validation'], report
         assert report['execution_results']['trader'] == 'SUCCESS', report
         assert report['execution_results']['authoritative_state_update'] == 'SUCCESS', report
         assert report['current_state']['open_positions'] == 1, report
