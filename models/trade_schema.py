@@ -6,6 +6,7 @@ import warnings
 
 CANONICAL_CLOSED_TRADE_FIELDS = [
     "trade_id",
+    "exchange",
     "symbol",
     "side",
     "entry_price",
@@ -22,6 +23,7 @@ CANONICAL_CLOSED_TRADE_FIELDS = [
 
 CANONICAL_OPEN_POSITION_FIELDS = [
     "trade_id",
+    "exchange",
     "symbol",
     "side",
     "entry_price",
@@ -82,6 +84,31 @@ def _infer_side(source: dict[str, Any], signal: dict[str, Any]) -> Any:
     )
 
 
+def _infer_exchange(source: dict[str, Any], signal: dict[str, Any]) -> Any:
+    return _coalesce(
+        source.get("exchange"),
+        source.get("source"),
+        signal.get("exchange"),
+        signal.get("source"),
+    )
+
+
+def _infer_strategy(source: dict[str, Any], signal: dict[str, Any]) -> Any:
+    return _coalesce(
+        source.get("strategy"),
+        signal.get("strategy"),
+        signal.get("signal_type"),
+    )
+
+
+def _infer_market_id(source: dict[str, Any], signal: dict[str, Any]) -> Any:
+    return _coalesce(
+        source.get("market_id"),
+        source.get("asset") if _infer_exchange(source, signal) == "Polymarket" else None,
+        signal.get("market_id"),
+    )
+
+
 def normalize_trade_record(record: dict[str, Any] | None) -> dict[str, Any]:
     """Normalize legacy and canonical trade records to the canonical flat schema."""
     source = deepcopy(record or {})
@@ -116,6 +143,8 @@ def normalize_trade_record(record: dict[str, Any] | None) -> dict[str, Any]:
     normalized.update(
         {
             "trade_id": _coalesce(source.get("trade_id"), source.get("position_id"), source.get("id")),
+            "exchange": _infer_exchange(source, signal),
+            "strategy": _infer_strategy(source, signal),
             "symbol": _infer_symbol(source, signal),
             "side": _infer_side(source, signal),
             "entry_price": source.get("entry_price"),
@@ -136,6 +165,11 @@ def normalize_trade_record(record: dict[str, Any] | None) -> dict[str, Any]:
             "exit_reason": _coalesce(source.get("exit_reason"), source.get("close_reason"), source.get("reason")),
             "entry_timestamp": entry_timestamp,
             "exit_timestamp": exit_timestamp,
+            "market_id": _infer_market_id(source, signal),
+            "market_question": _coalesce(source.get("market_question"), signal.get("market_question")),
+            "token_id": _coalesce(source.get("token_id"), signal.get("token_id")),
+            "paper_only": _coalesce(source.get("paper_only"), signal.get("paper_only")),
+            "experimental": _coalesce(source.get("experimental"), signal.get("experimental")),
         }
     )
     normalized["raw"] = source
@@ -158,6 +192,14 @@ def validate_trade_record(record: dict[str, Any] | None, context: str = "trade")
     missing = [field for field in required_fields if normalized.get(field) is None]
     if missing:
         _warn(f"{context}: missing required fields {missing}, skipping")
+        return False
+
+    if normalized.get("exchange") not in {"Hyperliquid", "Polymarket"}:
+        _warn(f"{context}: unsupported exchange {normalized.get('exchange')!r}, skipping")
+        return False
+
+    if normalized.get("exchange") == "Polymarket" and normalized.get("market_id") is None:
+        _warn(f"{context}: Polymarket record missing market_id, skipping")
         return False
 
     if status == "OPEN":

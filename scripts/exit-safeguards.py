@@ -5,6 +5,8 @@ Hard Exit Safeguards - Paper-Trading Support Utility
 - API failure handling (real, not placeholder)
 - Manual close-all with safety checks
 - Explicit exit reason logging
+
+This script is support-only and is not part of the canonical paper-trading loop.
 """
 
 import json

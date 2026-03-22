@@ -6,19 +6,19 @@ This document describes the **current canonical Phase 1 paper-trading system** i
 
 Supported runtime modes:
 - **`hyperliquid_only`** — default canonical mode
-- **`polymarket_only`** — optional experimental paper mode
-- **`mixed`** — optional paper-only evaluation mode
+- **`polymarket_only`** — experimental paper mode
+- **`mixed`** — limited experimental evaluation mode
 
 The architecture is strictly **paper trading only**. No live exchange execution path is implemented.
 
 ## Canonical Execution Flow
 
-The canonical operator path starts with `scripts/trading-agency-phase1.py`.
+The canonical operator entrypoint is `scripts/trading-agency-phase1.py`.
 
 1. **Bootstrap/runtime verification**
    - `scripts/bootstrap-runtime-check.py` verifies local runtime dependencies before the orchestrator loads networked scripts.
-2. **Optional component detection**
-   - The orchestrator reports which optional components are present for the selected mode.
+2. **Support-component visibility**
+   - The orchestrator reports non-canonical helper/support scripts separately from the canonical path.
 3. **Data integrity gate**
    - `scripts/data-integrity-layer.py` validates source health only for exchanges enabled by the current mode.
 4. **Signal scanning**
@@ -26,7 +26,7 @@ The canonical operator path starts with `scripts/trading-agency-phase1.py`.
 5. **Pre-trade safety validation**
    - `scripts/execution-safety-layer.py` validates the next candidate paper entry.
 6. **Paper trade planning**
-   - `scripts/phase1-paper-trader.py` builds normalized entry/exit records for both exchanges.
+   - `scripts/phase1-paper-trader.py` builds canonical entry/exit records.
 7. **Authoritative state update**
    - Canonical records are persisted to `workspace/logs/phase1-paper-trades.jsonl` and `workspace/logs/position-state.json`.
 8. **Monitor/report stage**
@@ -36,7 +36,7 @@ The canonical operator path starts with `scripts/trading-agency-phase1.py`.
 
 ### Append-only trade history
 - File: `workspace/logs/phase1-paper-trades.jsonl`
-- Purpose: durable event log of canonical paper-trade records for all supported exchange paths
+- Purpose: durable event log of canonical paper-trade records for all supported paper paths
 - Shape: normalized by `models/trade_schema.py`
 
 ### Authoritative open-position state
@@ -54,50 +54,51 @@ The canonical operator path starts with `scripts/trading-agency-phase1.py`.
 ### `hyperliquid_only`
 - scans Hyperliquid only
 - validates Hyperliquid only
-- baseline review mode and best-supported path
+- canonical paper-trading path and best-supported mode
 
 ### `polymarket_only`
 - scans Polymarket only
 - validates Polymarket only
-- optional, paper-only, experimental
+- experimental paper-only mode; not fully proven end-to-end
 
 ### `mixed`
 - scans both exchanges
 - persists both exchanges into the same canonical state model
-- intended for side-by-side paper evaluation only
+- currently selects at most one new entry per cycle
+- should be treated as a limited experimental evaluation mode, not a fully proven side-by-side runtime
 
 ## What Is Proven
 
 The verification suite currently proves:
-
 - bootstrap dependency checking works
 - active Python code compiles cleanly
 - mode-aware integrity gating respects selected runtime mode
-- Hyperliquid and Polymarket paper signals conform to expected normalized schema
-- canonical state survives isolated lifecycle tests for Hyperliquid, Polymarket, and mixed-mode flows
+- Hyperliquid and Polymarket paper signals conform to the expected normalized schema
+- canonical state survives isolated paper-trader lifecycle tests for Hyperliquid, Polymarket, and mixed-mode history accumulation
 - dashboard and timeout-monitor support scripts can read canonical outputs as expected
 
 ## What Is Not Proven
 
+- the full orchestrator path is not exercised end-to-end in CI
 - no live-trading path exists to verify
 - external API reachability is not enforced in CI
+- mixed mode is not proven as a simultaneous dual-entry runtime
 - forward performance is not represented as a production-readiness claim
 
 ## Non-Canonical Artifacts
 
 The repository still contains supporting scripts useful for review, but they should not be mistaken for authoritative execution:
-
-- `scripts/polymarket-executor.py` — standalone helper/scaffold
+- `scripts/polymarket-executor.py` — standalone helper/scaffold with non-authoritative helper state
 - `scripts/exit-monitor.py` — proof/audit generator, not authoritative close persistence
 - `scripts/live-readiness-validator.py` — future-scope research model only
+- `scripts/stability-monitor.py` — support-only observability
 - `scripts/archive/` — historical or simulation-only artifacts
 - `docs/archive/` — historical reports and prior audit history
 
 ## Explicitly Out of Scope
 
 The following must **not** be presented as current capabilities:
-
 - live capital deployment
 - production-ready exchange execution
 - autonomous real-money Hyperliquid or Polymarket trading
-- anything beyond paper-trading orchestration, persistence, observability, and reviewable research validation
+- anything beyond paper-trading execution, persistence, observability, and reviewable research validation

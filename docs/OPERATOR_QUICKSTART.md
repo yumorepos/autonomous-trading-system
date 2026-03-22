@@ -27,7 +27,7 @@ Read-only API reachability check for the currently enabled mode. This is useful 
 python3 scripts/runtime-connectivity-check.py
 ```
 
-## 4) Run the canonical paper-trading loop
+## 4) Run the canonical paper-trading entrypoint
 
 ### Hyperliquid only
 
@@ -47,6 +47,8 @@ OPENCLAW_TRADING_MODE=polymarket_only python3 scripts/trading-agency-phase1.py
 OPENCLAW_TRADING_MODE=mixed python3 scripts/trading-agency-phase1.py
 ```
 
+Use mixed mode only as a limited experimental evaluation mode. It is not the canonical proof path.
+
 ## 5) Optional support scripts
 
 ```bash
@@ -55,6 +57,8 @@ python3 scripts/execution-safety-layer.py
 python3 scripts/performance-dashboard.py
 python3 scripts/supervisor-governance.py
 ```
+
+The support scripts above are useful for review and reporting, but they are not the canonical operator entrypoint.
 
 ## 6) Run the same safe verification suite as CI
 
@@ -79,5 +83,5 @@ Canonical files to know:
 ## Notes
 
 - Hyperliquid is the default and best-supported paper-trading path.
-- Polymarket is optional, paper-only, and experimental.
+- Polymarket is optional, paper-only, experimental, and not fully proven end-to-end.
 - Live trading is not implemented anywhere in this repository.

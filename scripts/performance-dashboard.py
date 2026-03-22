@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Performance Dashboard (CLI)
-Shows: total trades, win rate, avg P&L, per-exchange stats, open vs closed
+Reads canonical paper-trading outputs only.
+Shows: total trades, win rate, avg P&L, per-exchange stats, open vs closed.
 """
 
 import json
@@ -26,11 +27,11 @@ class PerformanceDashboard:
         self.canonical_trades = self.load_trades(LOGS_DIR / "phase1-paper-trades.jsonl")
         self.hl_trades = [
             trade for trade in self.canonical_trades
-            if trade.get('raw', {}).get('exchange', trade.get('exchange')) == 'Hyperliquid'
+            if trade.get('exchange') == 'Hyperliquid'
         ]
         self.pm_trades = [
             trade for trade in self.canonical_trades
-            if trade.get('raw', {}).get('exchange', trade.get('exchange')) == 'Polymarket'
+            if trade.get('exchange') == 'Polymarket'
         ]
         self.open_positions = get_open_positions(LOGS_DIR / "position-state.json")
     
@@ -87,9 +88,9 @@ class PerformanceDashboard:
         combined_stats['open'] = len(self.open_positions)
         
         hl_stats = self.calculate_stats(self.hl_trades)
-        hl_stats['open'] = len([p for p in self.open_positions if p.get('raw', {}).get('exchange', p.get('exchange', 'Hyperliquid')) == 'Hyperliquid' or p.get('exchange') == 'Hyperliquid'])
+        hl_stats['open'] = len([p for p in self.open_positions if p.get('exchange') == 'Hyperliquid'])
         pm_stats = self.calculate_stats(self.pm_trades)
-        pm_stats['open'] = len([p for p in self.open_positions if p.get('raw', {}).get('exchange', p.get('exchange')) == 'Polymarket' or p.get('exchange') == 'Polymarket'])
+        pm_stats['open'] = len([p for p in self.open_positions if p.get('exchange') == 'Polymarket'])
         
         print("="*80)
         print("PERFORMANCE DASHBOARD")
@@ -140,7 +141,7 @@ class PerformanceDashboard:
             print("-" * 80)
             
             for trade in self.open_positions[:10]:  # Show max 10
-                exchange = trade.get('exchange', trade.get('raw', {}).get('exchange', 'Unknown'))
+                exchange = trade.get('exchange', 'Unknown')
                 asset = trade.get('symbol', 'Unknown')
                 entry = trade.get('entry_price', 0) or 0
                 print(f"  [{exchange}] {asset} @ ${entry:.2f}")
