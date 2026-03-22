@@ -10,6 +10,7 @@ import sys
 import re
 import subprocess
 import importlib.util
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -29,7 +30,10 @@ from config.runtime import (
 from models.position_state import get_open_positions
 from utils.system_health import SystemHealthManager
 from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
+
 AGENCY_REPORT = LOGS_DIR / "agency-phase1-report.json"
+AGENCY_CYCLE_SUMMARY_JSON = LOGS_DIR / "agency-cycle-summary.json"
+AGENCY_CYCLE_SUMMARY_MD = WORKSPACE / "AGENCY_CYCLE_SUMMARY.md"
 
 
 class StageStatus(str, Enum):
@@ -436,6 +440,245 @@ def count_jsonl_records(path: Path) -> int:
         return sum(1 for line in handle if line.strip())
 
 
+def stage_lookup(stage_results: Iterable[StageResult]) -> dict[str, StageResult]:
+    return {result.stage: result for result in stage_results}
+
+
+def summarize_signal(signal: dict | None) -> dict | None:
+    if not signal:
+        return None
+    return {
+        'exchange': signal.get('exchange', signal.get('source')),
+        'identifier': signal.get('asset') or signal.get('symbol') or signal.get('market_id'),
+        'signal_type': signal.get('signal_type'),
+        'strategy': signal.get('strategy'),
+        'direction': signal.get('direction', signal.get('side')),
+        'entry_price': signal.get('entry_price'),
+        'ev_score': signal.get('ev_score'),
+        'timestamp': signal.get('timestamp'),
+        'experimental': signal.get('experimental', False),
+    }
+
+
+def summarize_trade(trade: dict | None) -> dict | None:
+    if not trade:
+        return None
+    summary = {
+        'trade_id': trade.get('trade_id'),
+        'exchange': trade.get('exchange'),
+        'symbol': trade.get('symbol') or trade.get('asset') or trade.get('market_id'),
+        'side': trade.get('side', trade.get('direction')),
+        'status': trade.get('status'),
+        'entry_price': trade.get('entry_price'),
+    }
+    if trade.get('status') == 'CLOSED':
+        summary.update({
+            'exit_reason': trade.get('exit_reason'),
+            'exit_price': trade.get('exit_price'),
+            'realized_pnl_usd': trade.get('realized_pnl_usd'),
+            'realized_pnl_pct': trade.get('realized_pnl_pct'),
+        })
+    return summary
+
+
+def stage_reason(stage_index: dict[str, StageResult], stage_name: str) -> str | None:
+    stage = stage_index.get(stage_name)
+    return stage.reason if stage else None
+
+
+def compute_cycle_result(stage_index: dict[str, StageResult], trader_data: dict, state_data: dict) -> str:
+    hard_fail_stages = ('bootstrap', 'data_integrity', 'signal_scanner', 'trader', 'authoritative_state_update', 'monitors')
+    if any(stage_index.get(name) and stage_index[name].status == StageStatus.FAIL.value for name in hard_fail_stages):
+        return 'FAILED'
+
+    planned_entry = trader_data.get('planned_entry')
+    planned_closes = trader_data.get('planned_closes', [])
+    persisted = state_data.get('persisted_records', 0)
+
+    if planned_entry and planned_closes and persisted:
+        return 'ENTRY_AND_EXIT_EXECUTED'
+    if planned_entry and persisted:
+        return 'ENTRY_EXECUTED'
+    if planned_closes and persisted:
+        return 'EXIT_EXECUTED'
+
+    safety_status = stage_index.get('safety_validation').status if stage_index.get('safety_validation') else None
+    if safety_status == StageStatus.FAIL.value:
+        return 'ENTRY_BLOCKED'
+    if safety_status == StageStatus.SKIPPED.value and planned_closes:
+        return 'EXIT_EXECUTED_ENTRY_SKIPPED'
+    if safety_status == StageStatus.SKIPPED.value:
+        return 'NO_ACTION'
+    if stage_index.get('trader') and stage_index['trader'].status == StageStatus.SKIPPED.value:
+        return 'NO_ACTION'
+    return 'COMPLETED'
+
+
+def authoritative_files_written(stage_index: dict[str, StageResult]) -> list[dict]:
+    files: list[dict] = []
+    scanner_stage = stage_index.get('signal_scanner')
+    if scanner_stage and scanner_stage.status == StageStatus.SUCCESS.value and (LOGS_DIR / "phase1-signals.jsonl").exists():
+        files.append({
+            'path': str(LOGS_DIR / "phase1-signals.jsonl"),
+            'kind': 'signal_history',
+            'records': count_jsonl_records(LOGS_DIR / "phase1-signals.jsonl"),
+        })
+
+    if (LOGS_DIR / "execution-safety-state.json").exists():
+        files.append({
+            'path': str(LOGS_DIR / "execution-safety-state.json"),
+            'kind': 'safety_state',
+        })
+
+    state_stage = stage_index.get('authoritative_state_update')
+    if state_stage and state_stage.status == StageStatus.SUCCESS.value:
+        for path, kind in (
+            (LOGS_DIR / "phase1-paper-trades.jsonl", 'trade_history'),
+            (LOGS_DIR / "position-state.json", 'open_position_state'),
+            (LOGS_DIR / "phase1-performance.json", 'performance_summary'),
+        ):
+            if path.exists():
+                entry = {'path': str(path), 'kind': kind}
+                if path.suffix == '.jsonl':
+                    entry['records'] = count_jsonl_records(path)
+                files.append(entry)
+
+    files.append({'path': str(AGENCY_REPORT), 'kind': 'agency_report'})
+    return files
+
+
+def write_cycle_summary_markdown(summary: dict) -> None:
+    selected = summary.get('selected_signal') or {}
+    entry = summary.get('entry_outcome') or {}
+    entry_trade = entry.get('trade') or {}
+    exit_outcome = summary.get('exit_outcome') or {}
+    files = summary.get('authoritative_files_written', [])
+
+    lines = [
+        "# Agency Cycle Summary",
+        "",
+        f"- Timestamp: `{summary['timestamp']}`",
+        f"- Mode: `{summary['mode']}`",
+        f"- Cycle result: `{summary['cycle_result']}`",
+        f"- Selected signal: `{selected.get('identifier', 'none')}` on `{selected.get('exchange', 'n/a')}`",
+        f"- Entry outcome: `{entry.get('status', 'unknown')}`",
+        f"- Exit outcome: `{exit_outcome.get('status', 'unknown')}`",
+        "",
+        "## Selected Signal",
+        "",
+        f"- Exchange: `{selected.get('exchange', 'n/a')}`",
+        f"- Identifier: `{selected.get('identifier', 'none')}`",
+        f"- Signal type: `{selected.get('signal_type', 'n/a')}`",
+        f"- Direction: `{selected.get('direction', 'n/a')}`",
+        f"- Entry price: `{selected.get('entry_price', 'n/a')}`",
+        f"- EV score: `{selected.get('ev_score', 'n/a')}`",
+        "",
+        "## Entry",
+        "",
+        f"- Status: `{entry.get('status', 'unknown')}`",
+        f"- Reason: `{entry.get('reason', 'n/a')}`",
+        f"- Trade: `{entry_trade.get('trade_id', 'none')}`",
+        "",
+        "## Exit",
+        "",
+        f"- Status: `{exit_outcome.get('status', 'unknown')}`",
+        f"- Reason: `{exit_outcome.get('reason', 'n/a')}`",
+        f"- Trades: `{len(exit_outcome.get('trades', []))}`",
+        "",
+        "## Authoritative Files Written",
+        "",
+    ]
+    if files:
+        lines.extend([f"- `{item['kind']}`: `{item['path']}`" for item in files])
+    else:
+        lines.append("- None")
+    lines.extend([
+        "",
+        "## Stage Status",
+        "",
+    ])
+    for stage_name, status in summary.get('execution_results', {}).items():
+        lines.append(f"- `{stage_name}`: `{status}`")
+    AGENCY_CYCLE_SUMMARY_MD.write_text("\n".join(lines) + "\n")
+
+
+def build_cycle_summary(stage_results: list[StageResult], performance: dict | None, open_positions: list[dict], latest_signals: list[dict]) -> dict:
+    stage_index = stage_lookup(stage_results)
+    trader_data = (stage_index.get('trader').data or {}) if stage_index.get('trader') else {}
+    state_data = (stage_index.get('authoritative_state_update').data or {}) if stage_index.get('authoritative_state_update') else {}
+    safety_data = (stage_index.get('safety_validation').data or {}) if stage_index.get('safety_validation') else {}
+    initial_open_positions = trader_data.get('open_positions', [])
+
+    planned_entry = trader_data.get('planned_entry')
+    planned_closes = trader_data.get('planned_closes', [])
+    entry_status = 'not_attempted'
+    entry_reason = stage_reason(stage_index, 'trader') or stage_reason(stage_index, 'safety_validation')
+    if planned_entry and stage_index.get('authoritative_state_update') and stage_index['authoritative_state_update'].status == StageStatus.SUCCESS.value:
+        entry_status = 'executed'
+    elif stage_index.get('safety_validation') and stage_index['safety_validation'].status == StageStatus.FAIL.value:
+        entry_status = 'blocked'
+        entry_reason = stage_reason(stage_index, 'safety_validation')
+    elif stage_index.get('safety_validation') and stage_index['safety_validation'].status == StageStatus.SKIPPED.value:
+        entry_status = 'skipped'
+        entry_reason = stage_reason(stage_index, 'safety_validation')
+    elif stage_index.get('trader') and stage_index['trader'].status == StageStatus.SKIPPED.value:
+        entry_status = 'skipped'
+
+    exit_status = 'not_attempted'
+    exit_reason = stage_reason(stage_index, 'trader')
+    if planned_closes and state_data.get('persisted_records', 0):
+        exit_status = 'executed'
+    elif planned_closes:
+        exit_status = 'planned_not_persisted'
+    elif initial_open_positions:
+        exit_status = 'checked_none_triggered'
+        exit_reason = 'Open positions were evaluated and no exit thresholds triggered'
+    else:
+        exit_status = 'no_open_positions'
+        exit_reason = 'No open positions were available for exit evaluation'
+
+    summary = {
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'mode': TRADING_MODE,
+        'cycle_result': compute_cycle_result(stage_index, trader_data, state_data),
+        'selected_signal': summarize_signal(
+            safety_data.get('candidate_signal')
+            or (planned_entry or {}).get('signal')
+            or (latest_signals[0] if latest_signals else None)
+        ),
+        'entry_outcome': {
+            'status': entry_status,
+            'reason': entry_reason,
+            'trade': summarize_trade(planned_entry),
+            'rejection_reason': (
+                stage_reason(stage_index, 'safety_validation')
+                if entry_status in {'blocked', 'skipped'}
+                else None
+            ),
+        },
+        'exit_outcome': {
+            'status': exit_status,
+            'reason': exit_reason,
+            'trades': [summarize_trade(trade) for trade in planned_closes],
+        },
+        'execution_results': {result.stage: result.status for result in stage_results},
+        'rejection_reason': (
+            stage_reason(stage_index, 'safety_validation')
+            if entry_status in {'blocked', 'skipped'}
+            else None
+        ),
+        'current_state': {
+            'open_positions': len(open_positions),
+            'latest_signals_count': len(latest_signals),
+            'closed_trades': (performance or {}).get('total_trades', 0),
+        },
+        'authoritative_files_written': authoritative_files_written(stage_index),
+    }
+    write_json_atomic(AGENCY_CYCLE_SUMMARY_JSON, summary)
+    write_cycle_summary_markdown(summary)
+    return summary
+
+
 def extract_first_int(pattern: str, text: str) -> int | None:
     match = re.search(pattern, text)
     if not match:
@@ -580,6 +823,7 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
     
     # Sort signals by EV
     latest_signals.sort(key=lambda x: x.get('ev_score', 0), reverse=True)
+    cycle_summary = build_cycle_summary(stage_results, performance, open_positions, latest_signals)
     
     monitor_stage = next((result for result in stage_results if result.stage == 'monitors'), None)
 
@@ -593,6 +837,7 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
         'stage_results': [asdict(result) for result in stage_results],
         'optional_components': optional_components,
         'monitoring_summary': (monitor_stage.data or {}) if monitor_stage else {},
+        'runtime_summary': cycle_summary,
         
         'current_state': {
             'open_positions': len(open_positions),
@@ -770,6 +1015,13 @@ def main():
     
     print()
     print(f"[STATS] Cycle #{report['cycle_number']} Complete")
+    print(
+        f"[SUMMARY] Mode={report['runtime_summary']['mode']} | "
+        f"Result={report['runtime_summary']['cycle_result']} | "
+        f"Signal={(report['runtime_summary']['selected_signal'] or {}).get('identifier', 'none')} | "
+        f"Entry={report['runtime_summary']['entry_outcome']['status']} | "
+        f"Exit={report['runtime_summary']['exit_outcome']['status']}"
+    )
     print("[OK] Stage status summary:")
     for result in stage_results:
         print(f"   - {result.stage}: {result.status} ({result.reason})")
@@ -793,6 +1045,15 @@ def main():
     else:
         print(f"[PENDING] Performance: No closed trades yet")
     
+    print()
+    if report['runtime_summary'].get('rejection_reason'):
+        print(f"[BLOCK] Rejection reason: {report['runtime_summary']['rejection_reason']}")
+    print("[FILES] Authoritative artifacts:")
+    for artifact in report['runtime_summary']['authoritative_files_written']:
+        records_suffix = f" | records={artifact['records']}" if 'records' in artifact else ''
+        print(f"  - {artifact['kind']}: {artifact['path']}{records_suffix}")
+    print(f"[REPORT] Cycle summary JSON: {AGENCY_CYCLE_SUMMARY_JSON}")
+    print(f"[REPORT] Cycle summary Markdown: {AGENCY_CYCLE_SUMMARY_MD}")
     print()
     
     if report['supervisor_action_required']:

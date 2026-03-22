@@ -1,7 +1,7 @@
 # System Status
 
-**Last Updated:** 2026-03-21 UTC  
-**Verdict:** Paper-trading research system with one canonical Hyperliquid path and experimental Polymarket support
+**Last Updated:** 2026-03-22 UTC  
+**Verdict:** Paper-trading research system with one canonical Hyperliquid path, stronger offline runtime observability, and experimental Polymarket support
 
 ---
 
@@ -16,7 +16,7 @@
 | Live trading | **Not implemented** |
 | Real-money execution | **Not supported** |
 | CI | Safe verification runs on every push and pull request |
-| Truthfulness | Improved, but still bounded by what code/tests actually prove |
+| Truthfulness | Strong and explicitly bounded by current offline evidence |
 
 ---
 
@@ -27,6 +27,8 @@
 - normalized paper-trade persistence across Hyperliquid and experimental Polymarket paper records
 - authoritative open-position state in one canonical file
 - monitoring and support reporting for paper-trading operations
+- cycle-level operator summaries in JSON and Markdown for the canonical path
+- deterministic repeat-cycle offline validation for canonical Hyperliquid execution
 - isolated regression and lifecycle verification tests
 
 ## Current Limitations
@@ -34,7 +36,7 @@
 - live trading is not implemented
 - no production deployment claim is justified
 - external API reachability is environment-dependent and not guaranteed by CI
-- Polymarket support remains experimental and not fully proven end-to-end
+- Polymarket support remains experimental even though the paper-runtime path now has offline agency proof
 - mixed mode remains limited and should not be presented as a fully proven side-by-side runtime
 - some retained support scripts model future or helper workflows and are **not** canonical execution
 
@@ -73,6 +75,7 @@ The required CI workflow verifies:
 - script-style regression tests
 - isolated lifecycle integrity for canonical paper-trader flows
 - offline agency-entrypoint coverage for Hyperliquid, Polymarket, mixed-mode limitation, and negative-path reliability checks
+- deterministic repeat-cycle stability for the canonical Hyperliquid path
 - canonical dashboard and timeout-monitor reader behavior
 
 CI intentionally avoids making flaky network access a merge blocker while now proving the agency entrypoint offline for success-path and negative-path execution.
@@ -81,8 +84,19 @@ CI intentionally avoids making flaky network access a merge blocker while now pr
 
 - current external API reachability from the runner
 - live external API reachability during `scripts/trading-agency-phase1.py` execution
-- long-duration forward performance characteristics
+- long-duration forward performance characteristics beyond deterministic offline soak scaffolding
 - any live execution behavior, because none is implemented
+
+---
+
+## Proof Index
+
+Use these files to review what is actually proven:
+
+- `PROOF_MATRIX.md` — maps major claims to exact tests/scripts
+- `docs/OPERATOR_EVIDENCE_GUIDE.md` — concise operator review sequence
+- `docs/RUNTIME_OBSERVABILITY.md` — explains the cycle summary artifacts
+- `scripts/hyperliquid-offline-soak.py` — explicit operator-run repeat-cycle validation
 
 ---
 
