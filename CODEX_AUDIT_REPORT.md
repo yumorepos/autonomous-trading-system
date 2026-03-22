@@ -1,264 +1,265 @@
 # CODEX Audit Report
 
-Date: 2026-03-21 UTC
-Repo audited: `yumorepos/autonomous-trading-system`
-Audit scope: repository truthfulness, canonical execution path, subsystem wiring, mode handling, CI proof surface, and Hyperliquid/Polymarket integration completeness.
+Date: 2026-03-22 UTC  
+Repo: `yumorepos/autonomous-trading-system`
+
+## Scope
+
+Audit target:
+- actual canonical entrypoint and execution path
+- Hyperliquid and Polymarket wiring in code
+- mode handling (`hyperliquid_only`, `polymarket_only`, `mixed`)
+- state-model agreement across orchestrator, scanner, safety, trader, monitors, schemas, and persistence
+- CI/test proof surface versus documentation claims
+- dead code, stale docs, duplicate state models, and misleading artifacts
+
+Method:
+- inspected runtime/config/model/test/doc/workflow files in the active tree
+- ran the repo verification suite: `./scripts/ci-safe-verification.sh`
+- ran read-only connectivity checks for Hyperliquid and Polymarket from this environment
+- treated code/tests as authoritative over markdown
+
+---
 
 ## A. Executive Verdict
 
-| Question | Verdict | Basis |
+| Question | Verdict | Exact basis |
 |---|---|---|
-| Is Hyperliquid properly integrated? | **Partial** | The canonical paper path is wired for Hyperliquid from scanner -> safety -> trader -> persistence -> timeout monitor, but CI does not run the orchestrator end-to-end and the strongest lifecycle tests inject signals directly into `phase1-paper-trader.py` rather than proving the full agency path. |
-| Is Polymarket properly integrated? | **Partial** | Polymarket is wired into the same paper path and has isolated paper-flow tests, but it is explicitly experimental, depends on the same market-data endpoint for scan/safety/price checks, is not exercised through the orchestrator in CI, and still coexists with non-canonical helper/state files. |
-| Is the repo truthfully represented? | **Partial** | The active docs are mostly honest about paper-only scope and Polymarket being experimental, but they overstate what CI proves, treat mixed mode as stronger than the code/test proof supports, and leave active-tree future/live-oriented artifacts and non-canonical Polymarket state around. |
-| Is the system paper-trading only? | **Yes** | No live order path is implemented in the canonical flow; non-canonical helper scripts also explicitly say real execution is incomplete/disabled. |
-| Is there any live-ready claim that should be removed? | **Yes** | Active-tree files still expose future/live-readiness framing (`live-readiness-validator.py`, supervisor `LIVE` stage, `Portfolio-ready` wording) that is not backed by current code or tests. |
+| Is Hyperliquid properly integrated? | **Yes, for the paper-trading canonical path** | The canonical flow is wired end-to-end through `scripts/trading-agency-phase1.py` -> integrity -> scanner -> safety -> trader -> canonical persistence -> timeout monitor, and CI runs offline agency tests that prove the Hyperliquid path across entry, exit, reports, and state files. |
+| Is Polymarket properly integrated? | **Partial** | Polymarket is wired into the same canonical paper-trading flow and CI now proves the offline agency path in `polymarket_only`, but it remains explicitly experimental, has no live execution path, still coexists with a non-canonical `polymarket-executor.py`, and depends on the same read-only market-data endpoint for scan/safety/exit pricing. |
+| Is the repo truthfully represented? | **Partial** | Top-level docs are mostly honest about paper-only scope and Polymarket being experimental, but some active docs and previously generated root audit files are stale and now contradict the current code/test reality. |
+| Is the system paper-trading only? | **Yes** | The canonical flow only produces paper records. Live execution is not implemented in the canonical runtime, and `scripts/polymarket-executor.py` explicitly states real Polymarket execution is incomplete/disabled. |
+| Is there any live-ready claim that should be removed? | **Yes** | Any remaining live-readiness framing should be removed or quarantined to future-scope research files because the repo is not live-ready and does not implement real-money execution. |
 
-### Bottom line
+### Direct conclusion
 
-This repository is a **paper-trading research system**, not a production-ready trading system. Hyperliquid is the strongest path, but even that path is only **partially proven end-to-end**. Polymarket is **paper-wired but experimental** rather than fully integrated.
+Current truthful statement:
+- **Hyperliquid is integrated in the canonical paper-trading path.**
+- **Polymarket is integrated into that same paper-trading path, but only as an experimental paper-runtime.**
+- **Nothing in this repo is live-ready.**
+
+---
 
 ## B. Evidence Table
 
 | Component | Status | Evidence file paths | Exact reason |
 |---|---|---|---|
-| bootstrap/runtime check | Working | `scripts/bootstrap-runtime-check.py`, `tests/bootstrap-runtime-check-test.py`, `requirements.txt` | Bootstrap is small and direct: it checks importable dependencies and is covered by a dedicated regression test. It proves runtime package presence only, not exchange reachability. |
-| orchestrator | Partial | `scripts/trading-agency-phase1.py`, `.github/workflows/basic.yml`, `scripts/ci-safe-verification.sh` | The agency script is the real canonical entrypoint, but CI never executes it. The repo has no orchestrator integration test covering actual stage sequencing, real module loading, or final agency report generation. |
-| data integrity layer | Partial | `scripts/data-integrity-layer.py`, `tests/data-integrity-mode-gate-test.py` | Mode-aware gating exists and the Polymarket-only mode gate is tested, but the gate remains network-bound in real runs and CI only proves a mocked mode-selection path. |
-| signal scanner | Partial | `scripts/phase1-signal-scanner.py`, `tests/paper-mode-schema-test.py` | Hyperliquid and Polymarket scanners emit normalized paper signals, but CI only proves schema generation with fake responses. It does not prove scanner -> orchestrator -> persistence in one canonical run. |
-| execution safety | Partial | `scripts/execution-safety-layer.py`, `scripts/trading-agency-phase1.py` | Safety validation is wired into the agency path, refreshes breaker state from canonical history, and persists runtime state. But there is no dedicated integration test proving scanner output actually survives safety validation in the canonical orchestrator path. |
-| paper trader | Working | `scripts/phase1-paper-trader.py`, `tests/destructive/full-lifecycle-integration-test.py`, `tests/destructive/real-exit-integration-test.py`, `tests/destructive/polymarket-paper-flow-test.py` | The paper trader is the strongest proven subsystem. Isolated temp-workspace tests prove open -> close -> performance flows for Hyperliquid and Polymarket using the canonical trade log and position state. |
-| trade schema | Partial | `models/trade_schema.py`, `scripts/performance-dashboard.py`, `scripts/live-readiness-validator.py` | The normalized schema does not carry `exchange`, `strategy`, `market_id`, `market_question`, or `token_id` as canonical top-level fields. Downstream readers recover exchange/type from `raw` or source records, so the claimed “same state model” is incomplete. |
-| position state | Partial | `models/position_state.py`, `scripts/phase1-paper-trader.py`, `scripts/timeout-monitor.py` | `position-state.json` is authoritative for open positions, but it extends the normalized trade schema with exchange/strategy/Polymarket extras outside the canonical field list. Schema alignment is practical, not formally unified. |
-| timeout monitor | Partial | `scripts/timeout-monitor.py`, `tests/timeout-monitor-polymarket-threshold-test.py` | It reads canonical open positions and supports Polymarket-specific thresholds, but it is non-authoritative by design and CI only proves threshold math, not a real orchestrated runtime monitor cycle. |
-| exit monitor | Non-canonical | `scripts/exit-monitor.py`, `scripts/trading-agency-phase1.py` | The exit monitor explicitly says it is standalone/non-canonical and the orchestrator explicitly skips it because it can write proof artifacts without authoritative close persistence. |
-| performance dashboard | Partial | `scripts/performance-dashboard.py`, `tests/performance-dashboard-canonical-test.py` | The dashboard reads canonical closed trade history in tests, but it depends on `raw.exchange`/extra fields because the normalized schema does not include exchange as a first-class canonical field. |
-| Hyperliquid path | Partial | `scripts/phase1-signal-scanner.py`, `scripts/execution-safety-layer.py`, `scripts/phase1-paper-trader.py`, `tests/destructive/full-lifecycle-integration-test.py`, `tests/destructive/real-exit-integration-test.py` | Hyperliquid is the default path and best-covered path. Still, the full orchestrator path is not CI-proven and current runtime connectivity from this environment failed. |
-| Polymarket path | Partial | `scripts/phase1-signal-scanner.py`, `scripts/execution-safety-layer.py`, `scripts/phase1-paper-trader.py`, `tests/destructive/polymarket-paper-flow-test.py`, `scripts/polymarket-executor.py` | Canonical paper wiring exists, but it is explicitly experimental, not orchestrator-tested in CI, and still coexists with a non-canonical executor/state model (`polymarket-trades.jsonl`, `polymarket-state.json`). |
-| mixed mode | Partial | `config/runtime.py`, `scripts/phase1-paper-trader.py`, `tests/destructive/mixed-mode-integration-test.py`, `docs/SYSTEM_ARCHITECTURE.md` | Mixed mode is supported in config and can accumulate positions from both exchanges, but each cycle selects only one new candidate signal. The test proves this only by calling the trader twice, not by one agency cycle or simultaneous dual-entry handling. |
-| CI workflow | Working / Limited proof | `.github/workflows/basic.yml`, `scripts/ci-safe-verification.sh` | CI reliably runs compile checks and isolated tests on every push/PR. It intentionally excludes live network checks and does not run the orchestrator end-to-end. |
-| destructive/integration tests | Partial | `tests/destructive/*.py` | They prove canonical temp-workspace lifecycle behavior inside the paper trader, not full runtime orchestration. Scanner and safety are bypassed in the strongest lifecycle tests by injecting signals or monkeypatching price functions. |
-| docs truthfulness | Partial | `README.md`, `SYSTEM_STATUS.md`, `docs/SYSTEM_ARCHITECTURE.md`, `docs/REPO_TRUTHFULNESS_AUDIT.md`, `scripts/live-readiness-validator.py`, `scripts/supervisor-governance.py` | Core docs are substantially more honest than typical trading repos, but they still overstate CI-backed architecture proof, keep active-tree live/future language, and understate schema/model drift plus non-canonical Polymarket state leftovers. |
+| bootstrap/runtime check | **working** | `scripts/bootstrap-runtime-check.py`, `tests/bootstrap-runtime-check-test.py` | Minimal dependency gate; proves required imports only. |
+| orchestrator | **working** | `scripts/trading-agency-phase1.py`, `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-polymarket-test.py`, `tests/destructive/trading-agency-mixed-test.py`, `scripts/ci-safe-verification.sh`, `.github/workflows/basic.yml` | This is the real canonical entrypoint and CI now executes it offline for Hyperliquid, Polymarket, mixed-mode limitation, and negative paths. |
+| data integrity layer | **working** | `scripts/data-integrity-layer.py`, `config/runtime.py`, `tests/data-integrity-mode-gate-test.py`, `tests/support/offline_requests_sitecustomize.py` | Mode-aware gate is real; `polymarket_only` no longer requires Hyperliquid. It writes its own state/metrics and participates in the agency flow. |
+| signal scanner | **working** | `scripts/phase1-signal-scanner.py`, `utils/api_connectivity.py`, `tests/paper-mode-schema-test.py`, `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-polymarket-test.py`, `tests/destructive/trading-agency-mixed-test.py` | Scanner emits canonical Hyperliquid and Polymarket paper signals, writes `phase1-signals.jsonl`, and is exercised through the agency path offline. |
+| execution safety | **working** | `scripts/execution-safety-layer.py`, `scripts/trading-agency-phase1.py`, `tests/destructive/trading-agency-negative-path-test.py`, `tests/destructive/trading-agency-polymarket-test.py` | Safety layer is in the canonical loop, refreshes breakers from canonical history, blocks stale/duplicate/capacity/breaker cases, and persists safety state. |
+| paper trader | **working** | `scripts/phase1-paper-trader.py`, `tests/destructive/full-lifecycle-integration-test.py`, `tests/destructive/real-exit-integration-test.py`, `tests/destructive/polymarket-paper-flow-test.py` | Canonical planner/persistence layer for both exchanges. Proven for isolated lifecycle entry/exit/persistence. |
+| trade schema | **working** | `models/trade_schema.py`, `tests/trade-schema-contract-test.py`, `tests/paper-mode-schema-test.py` | Current schema normalization and validation support both Hyperliquid and Polymarket records, including `market_id` enforcement for Polymarket. |
+| position state | **working** | `models/position_state.py`, `tests/trade-schema-contract-test.py`, `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-polymarket-test.py` | `position-state.json` is the authoritative open-position file and both exchanges persist through it. |
+| timeout monitor | **working** | `scripts/timeout-monitor.py`, `scripts/trading-agency-phase1.py`, `tests/timeout-monitor-polymarket-threshold-test.py`, `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-polymarket-test.py` | Monitor reads only canonical open state, supports Polymarket thresholds, and is executed by the orchestrator. It is monitoring-only, not authoritative close persistence. |
+| exit monitor | **non-canonical** | `scripts/exit-monitor.py`, `scripts/trading-agency-phase1.py` | Explicitly skipped by the canonical loop because it can write proof artifacts without authoritative close persistence. |
+| performance dashboard | **working** | `scripts/performance-dashboard.py`, `tests/performance-dashboard-canonical-test.py`, `tests/trade-schema-contract-test.py` | Reads canonical closed-trade history and authoritative open-position state. |
+| Hyperliquid path | **working** | `scripts/phase1-signal-scanner.py`, `scripts/execution-safety-layer.py`, `scripts/phase1-paper-trader.py`, `scripts/trading-agency-phase1.py`, `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-hyperliquid-repeat-cycle-test.py` | Strongest path in the repo. Proven offline through the actual orchestrator, including repeat-cycle stability. |
+| Polymarket path | **partial** | `scripts/phase1-signal-scanner.py`, `scripts/execution-safety-layer.py`, `scripts/phase1-paper-trader.py`, `scripts/trading-agency-phase1.py`, `tests/destructive/trading-agency-polymarket-test.py`, `tests/destructive/polymarket-paper-flow-test.py`, `scripts/polymarket-executor.py` | Canonical paper path exists and is offline-proven through the orchestrator, but the repo still keeps a separate non-canonical Polymarket helper/state model and no live execution exists. |
+| mixed mode | **partial** | `config/runtime.py`, `scripts/phase1-signal-scanner.py`, `scripts/phase1-paper-trader.py`, `tests/destructive/trading-agency-mixed-test.py`, `tests/destructive/mixed-mode-integration-test.py` | Real mode. Scanner sees both exchanges. Shared persistence is real. Limitation: planner selects at most one new entry per cycle. Mixed is not simultaneous dual-entry execution. |
+| CI workflow | **working** | `.github/workflows/basic.yml`, `scripts/ci-safe-verification.sh` | CI runs on push/PR and executes compile checks, regression tests, and destructive offline agency tests. |
+| destructive/integration tests | **working, but offline-only** | `tests/destructive/*.py`, `tests/support/trading_agency_offline.py`, `tests/support/offline_requests_sitecustomize.py` | Test suite now proves the agency entrypoint offline. It does not prove live API reliability or live order placement. |
+| docs truthfulness | **partial** | `README.md`, `SYSTEM_STATUS.md`, `PROOF_MATRIX.md`, `docs/SYSTEM_ARCHITECTURE.md`, `docs/OPERATOR_QUICKSTART.md`, `docs/DATA_INTEGRITY_LAYER.md`, old root report files replaced by this audit | README/SYSTEM_STATUS/PROOF_MATRIX are mostly aligned. `docs/SYSTEM_ARCHITECTURE.md` and `docs/DATA_INTEGRITY_LAYER.md` contain stale statements, and the previous root audit files were outdated. |
+
+---
 
 ## C. Canonical Flow Map
 
-### Actual canonical operator entrypoint
+### Actual canonical entrypoint
 
 1. **Operator entrypoint:** `scripts/trading-agency-phase1.py`.
-   - This is the real top-level canonical runner.
-   - `scripts/bootstrap-runtime-check.py` is *not* the repo’s operator entrypoint; it is invoked as the first stage by the agency script.
+   - This is the only script that sequences the full runtime.
+   - `scripts/bootstrap-runtime-check.py` is stage 1 inside that flow, not the top-level operator entrypoint.
 
 ### Real canonical execution sequence
 
 1. `scripts/trading-agency-phase1.py`
-   - Detects mode using `config/runtime.py`.
-   - Detects optional components.
-   - Ensures workspace/status plumbing via `SystemHealthManager`.
-   - Writes/updates:
-     - `workspace/operator_control.json` (if missing)
+   - resolves mode from `config/runtime.py`
+   - initializes health/operator-control plumbing through `utils/system_health.py`
+   - reports non-canonical helper files separately
+   - writes/refreshes support state such as:
+     - `workspace/operator_control.json`
      - `workspace/system_status.json`
      - `workspace/system_health.json`
      - `workspace/logs/operator-control-audit.json`
 
-2. `scripts/bootstrap-runtime-check.py` (subprocess from orchestrator)
-   - Verifies importable dependencies only.
-   - Writes no canonical state.
+2. `scripts/bootstrap-runtime-check.py`
+   - verifies required runtime imports
+   - blocks the cycle on missing dependencies
+   - writes no canonical trade state
 
-3. `scripts/data-integrity-layer.py` (loaded as module; `run_pre_scan_gate`)
-   - Checks mode-required source availability/completeness.
-   - Writes/updates:
+3. `scripts/data-integrity-layer.py` via `run_pre_scan_gate()`
+   - checks only the exchanges enabled by the selected mode
+   - writes:
      - `workspace/logs/data-integrity-state.json`
      - `workspace/logs/source-reliability-metrics.json`
      - `workspace/logs/runtime-events.jsonl`
-     - `workspace/logs/system-incidents.jsonl` when incidents are raised/resolved
+     - `workspace/logs/system-incidents.jsonl` when incidents change
 
-4. `scripts/phase1-signal-scanner.py` (subprocess)
-   - Scans Hyperliquid and/or Polymarket depending on mode.
-   - Appends to:
+4. `scripts/phase1-signal-scanner.py`
+   - scans Hyperliquid and/or Polymarket depending on mode
+   - appends canonical signals to:
      - `workspace/logs/phase1-signals.jsonl`
-     - `workspace/logs/runtime-events.jsonl`
-   - Writes:
+   - writes support artifacts:
      - `workspace/PHASE1_SIGNAL_REPORT.md`
-
-5. `scripts/execution-safety-layer.py` (loaded as module by orchestrator)
-   - Selects the next candidate from the latest signals using trader helpers.
-   - Validates kill switch, signal freshness, position size, breaker state, exchange health, liquidity, spread.
-   - Writes/updates:
-     - `workspace/logs/execution-safety-state.json`
-     - `workspace/logs/blocked-actions.jsonl` when a trade is blocked
-     - `workspace/logs/incident-log.jsonl`
-     - `workspace/logs/system-incidents.jsonl`
-
-6. `scripts/phase1-paper-trader.py` (loaded as module by orchestrator)
-   - Reads:
-     - `workspace/logs/phase1-signals.jsonl`
-     - `workspace/logs/position-state.json`
-     - `workspace/logs/phase1-paper-trades.jsonl`
-   - Plans exits first, then at most one new entry.
-   - Persists authoritative state only after orchestrator approval:
-     - appends `workspace/logs/phase1-paper-trades.jsonl`
-     - rewrites `workspace/logs/position-state.json`
-     - rewrites `workspace/logs/phase1-performance.json`
-     - appends `workspace/logs/runtime-events.jsonl`
-
-7. `scripts/timeout-monitor.py` (subprocess from orchestrator)
-   - Reads authoritative open state from `workspace/logs/position-state.json`.
-   - Appends:
-     - `workspace/logs/timeout-history.jsonl`
      - `workspace/logs/runtime-events.jsonl`
-   - Writes:
+
+5. `scripts/execution-safety-layer.py` via orchestrator calls
+   - loads open positions and latest signals through trader helpers
+   - selects a candidate entry
+   - validates kill switch, freshness, dedupe, position size, circuit breakers, exchange health, liquidity, spread, and data integrity
+   - writes:
+     - `workspace/logs/execution-safety-state.json`
+     - `workspace/logs/blocked-actions.jsonl` when blocking
+     - incident logs and runtime events indirectly through health/state handling
+
+6. `scripts/phase1-paper-trader.py`
+   - evaluates exits for authoritative open positions first
+   - selects at most one new entry for the cycle
+   - persists canonical trade records only after orchestrator approval
+   - authoritative outputs:
+     - `workspace/logs/phase1-paper-trades.jsonl`
+     - `workspace/logs/position-state.json`
+     - `workspace/logs/phase1-performance.json`
+   - support output:
+     - `workspace/logs/runtime-events.jsonl`
+
+7. `scripts/timeout-monitor.py`
+   - reads only `workspace/logs/position-state.json`
+   - writes monitoring-only outputs:
+     - `workspace/logs/timeout-history.jsonl`
      - `workspace/TIMEOUT_MONITOR_REPORT.md`
+     - `workspace/logs/runtime-events.jsonl`
 
 8. `scripts/trading-agency-phase1.py` finalization
-   - Generates and writes:
+   - writes:
      - `workspace/logs/agency-phase1-report.json`
+     - `workspace/logs/agency-cycle-summary.json`
+     - `workspace/AGENCY_CYCLE_SUMMARY.md`
      - refreshed `workspace/system_status.json`
 
-### Authoritative vs non-authoritative outputs
+### Authoritative state hierarchy
 
-**Authoritative runtime state**
+**Tier 1: authoritative trading state**
 - `workspace/logs/phase1-paper-trades.jsonl`
 - `workspace/logs/position-state.json`
 - `workspace/logs/phase1-performance.json`
 
-**Support / observability state**
-- `workspace/logs/execution-safety-state.json`
-- `workspace/logs/data-integrity-state.json`
-- `workspace/logs/source-reliability-metrics.json`
-- `workspace/logs/runtime-events.jsonl`
-- `workspace/logs/system-incidents.jsonl`
-- `workspace/logs/timeout-history.jsonl`
-- `workspace/logs/agency-phase1-report.json`
+**Tier 2: control/health state**
+- `workspace/operator_control.json`
 - `workspace/system_status.json`
 - `workspace/system_health.json`
+- `workspace/logs/execution-safety-state.json`
+- `workspace/logs/data-integrity-state.json`
 
-**Explicitly non-canonical side paths**
-- `scripts/polymarket-executor.py` -> `workspace/logs/polymarket-trades.jsonl`, `workspace/logs/polymarket-state.json`
-- `scripts/exit-monitor.py` -> proof artifacts only
-- `scripts/exit-safeguards.py`, `scripts/enhanced-exit-capture.py`, `scripts/position-exit-tracker.py` -> support tooling, not canonical trade-state mutation
+**Tier 3: observability/support artifacts**
+- `workspace/logs/runtime-events.jsonl`
+- `workspace/logs/system-incidents.jsonl`
+- `workspace/logs/blocked-actions.jsonl`
+- `workspace/logs/timeout-history.jsonl`
+- `workspace/logs/agency-phase1-report.json`
+- `workspace/logs/agency-cycle-summary.json`
+- `workspace/AGENCY_CYCLE_SUMMARY.md`
+- `workspace/PHASE1_SIGNAL_REPORT.md`
+- `workspace/TIMEOUT_MONITOR_REPORT.md`
 
-## D. Gap Analysis: blockers to any claim that both Hyperliquid and Polymarket are fully integrated
+### Non-canonical / helper / historical paths
 
-1. **No orchestrator integration test exists.**
-   - The canonical entrypoint is `scripts/trading-agency-phase1.py`.
-   - CI never runs it in any mode.
-   - Result: stage sequencing, agency reporting, and final state handoff are not formally proven.
-
-2. **The strongest lifecycle tests bypass scanner and safety.**
-   - Hyperliquid and Polymarket lifecycle tests inject signals directly into the paper trader.
-   - Result: they prove persistence and exit behavior, not full source -> gate -> scan -> safety -> persist orchestration.
-
-3. **Mixed mode is not truly “dual-path per cycle.”**
-   - `select_trade_candidate()` returns a single best signal.
-   - `build_execution_plan()` produces at most one new entry per cycle.
-   - The mixed-mode test opens both exchanges by invoking the trader twice.
-   - Result: mixed mode is accumulative, not fully side-by-side inside one canonical cycle.
-
-4. **The canonical trade schema is incomplete for a multi-exchange system.**
-   - `models/trade_schema.py` normalizes only a flat subset.
-   - Exchange identity and Polymarket-specific fields are not first-class canonical fields.
-   - Result: readers must depend on `raw` or out-of-band extras.
-
-5. **Position state and trade schema are not the same formal model.**
-   - `models/position_state.py` preserves exchange/strategy/Polymarket extras beyond the normalized schema.
-   - Result: practical compatibility exists, but formal schema agreement does not.
-
-6. **Dashboard/analytics layers recover exchange from raw records instead of canonical schema.**
-   - Result: schema drift risk and misleading confidence in “one canonical state model.”
-
-7. **Non-canonical Polymarket state still exists in active code.**
-   - `scripts/polymarket-executor.py` writes `polymarket-trades.jsonl` and `polymarket-state.json`.
-   - `scripts/live-readiness-validator.py` and `scripts/stability-monitor.py` still reference those files.
-   - Result: the repo still contains an alternate Polymarket persistence model.
-
-8. **Optional component detection is misleading.**
-   - The orchestrator reports `polymarket_execution` as enabled when the helper file exists and the mode includes Polymarket.
-   - The helper is not actually part of the canonical execution flow.
-   - Result: runtime status output can overstate what is truly active.
-
-9. **Monitor/support tooling is uneven across exchanges.**
-   - Timeout monitor is mode-aware.
-   - Several support utilities remain Hyperliquid-centric or conceptually outside the canonical flow.
-   - Result: repository breadth exceeds the truly aligned canonical architecture.
-
-10. **No committed runtime evidence exists in the repository workspace.**
-   - The checked-in `workspace/` contains only defaults, not actual canonical logs.
-   - Result: current truth rests on code/tests, not persisted runtime evidence.
-
-11. **Current external connectivity was not verified successfully from this audit environment.**
-   - Both Hyperliquid and Polymarket read-only connectivity checks failed here with proxy `403 Forbidden` tunneling errors.
-   - This is environment-specific, but it means there is no fresh external runtime proof from this audit run.
-
-12. **Active-tree future/live framing should not coexist with production-readiness language.**
-   - `live-readiness-validator.py` and governance `LIVE` language are explicitly caveated, but still create avoidable ambiguity.
-
-## E. Truthfulness findings vs README/docs claims
-
-### Claims that are supported
-
-- **Paper trading only**: supported.
-- **No live trading implemented**: supported.
-- **Hyperliquid is the default/best-supported path**: supported.
-- **Polymarket is optional and experimental**: supported.
-- **Timeout monitor is canonical; exit monitor is not**: supported.
-
-### Claims that are only partially supported
-
-1. **“canonical paper-trade orchestration across Hyperliquid and optional Polymarket modes”**
-   - Mostly true in code wiring.
-   - Not fully proven by tests because the orchestrator is not exercised end-to-end.
-
-2. **“canonical state persistence … shared across supported modes”**
-   - Mostly true for the paper trader and timeout monitor.
-   - Not completely true repo-wide because active support scripts still reference `polymarket-state.json` / `polymarket-trades.jsonl`.
-
-3. **“mixed mode … side-by-side paper evaluation across both exchanges”**
-   - Only partially true.
-   - One cycle selects one new entry; the mixed-mode test accumulates both exchanges over multiple trader invocations.
-
-4. **“isolated end-to-end paper-trading lifecycle flows persist and clear canonical state correctly”**
-   - True for isolated paper-trader flows.
-   - Not true for the full orchestrator path.
-
-5. **“test-backed architecture” / “CI-backed verification”**
-   - True, but narrower than the wording suggests.
-   - CI proves compileability and isolated module behavior, not full canonical runtime orchestration.
-
-## F. Authoritative vs non-canonical inventory
-
-### Authoritative / canonical
-- `config/runtime.py`
-- `scripts/trading-agency-phase1.py`
-- `scripts/bootstrap-runtime-check.py`
-- `scripts/data-integrity-layer.py`
-- `scripts/phase1-signal-scanner.py`
-- `scripts/execution-safety-layer.py`
-- `scripts/phase1-paper-trader.py`
-- `scripts/timeout-monitor.py`
-- `models/trade_schema.py`
-- `models/position_state.py`
-- canonical state files under `workspace/logs/phase1-*` and `position-state.json`
-
-### Active but non-canonical / support only
+These are not part of the canonical trading loop:
 - `scripts/polymarket-executor.py`
 - `scripts/exit-monitor.py`
-- `scripts/exit-safeguards.py`
 - `scripts/enhanced-exit-capture.py`
+- `scripts/exit-safeguards.py`
 - `scripts/position-exit-tracker.py`
-- `scripts/stability-monitor.py`
 - `scripts/live-readiness-validator.py`
-- `scripts/supervisor-governance.py`
+- `scripts/stability-monitor.py`
 - `scripts/alpha-intelligence-layer.py`
 - `scripts/portfolio-allocator.py`
+- `scripts/supervisor-governance.py`
+- `scripts/archive/`
+- `docs/archive/`
 
-### Historical / scaffold / archive
-- `scripts/archive/*`
-- `docs/archive/*`
+---
 
-## Final verdict paragraph
+## D. Gap Analysis
 
-You **cannot** truthfully make a strong unqualified claim that “Hyperliquid and Polymarket are both fully integrated.” The most accurate short form is:
+These are the gaps that block a truthful claim that **both Hyperliquid and Polymarket are fully integrated**.
 
-**Hyperliquid is the canonical paper-trading path and is the most integrated path in the repo; Polymarket is experimental and not yet fully integrated.**
+1. **Polymarket still has a second, non-canonical implementation surface.**
+   - `scripts/polymarket-executor.py` writes `workspace/logs/polymarket-trades.jsonl` and `workspace/logs/polymarket-state.json`.
+   - That is separate from the canonical `phase1-paper-trades.jsonl` + `position-state.json` model.
+   - Result: Polymarket is not cleanly single-path inside the repo.
 
-That wording is truthful. The shorter sentence **“Hyperliquid is integrated; Polymarket is experimental and not yet fully integrated”** is directionally correct, but it should still be tightened to **“integrated in the paper-trading path”** to avoid overstating end-to-end proof.
+2. **There is no live Polymarket execution path at all.**
+   - `scripts/polymarket-executor.py` explicitly says real execution is incomplete/disabled.
+   - The canonical flow only paper-trades.
+   - Result: any “fully integrated” statement must be scoped to paper trading only.
+
+3. **Polymarket exit pricing is still based on read-only market lookups, not execution-grade order handling.**
+   - Scanner, safety, and trader all query the Gamma markets endpoint.
+   - There is no authenticated order path, signed order handling, fill handling, or settlement handling.
+   - Result: good enough for paper simulation, not full exchange integration.
+
+4. **Mixed mode is not true side-by-side dual-entry execution.**
+   - `scripts/phase1-paper-trader.py` selects one candidate entry per cycle.
+   - `tests/destructive/trading-agency-mixed-test.py` proves the limitation explicitly.
+   - Result: “mixed” is a shared-state evaluation mode, not a full dual-exchange engine.
+
+5. **External runtime connectivity is not proven in this environment.**
+   - `python3 scripts/runtime-connectivity-check.py` failed for Hyperliquid here.
+   - `OPENCLAW_TRADING_MODE=polymarket_only python3 scripts/runtime-connectivity-check.py` failed for Polymarket here.
+   - Failures were proxy/tunnel `403 Forbidden` errors from the audit environment, not code exceptions.
+   - Result: there is no fresh live market-data proof from this audit run.
+
+6. **Support/documentation surfaces still create ambiguity about truth.**
+   - `docs/SYSTEM_ARCHITECTURE.md` still says the full orchestrator path is not exercised end-to-end in CI.
+   - `docs/DATA_INTEGRITY_LAYER.md` still documents Hyperliquid as a universal primary source whose failure halts all signal generation.
+   - Result: repo truth is not uniformly represented.
+
+7. **The checked-in workspace is not evidence of real runtime activity.**
+   - The repo ships only `workspace/README.md`, `workspace/operator_control.json`, and `workspace/system_status.json`.
+   - No canonical trade log or open-position state is committed.
+   - Result: truth comes from code/tests, not bundled runtime artifacts.
+
+---
+
+## E. Claims in docs/README that are not fully supported by code/tests
+
+### Confirmed truthful or conservative
+
+- `README.md`: paper-trading only, Hyperliquid canonical, Polymarket experimental, mixed limited.
+- `SYSTEM_STATUS.md`: paper-only, no live trading, Polymarket experimental, mixed limited.
+- `PROOF_MATRIX.md`: current CI/offline proof surface is described substantially correctly.
+
+### Stale or incorrect
+
+1. **`docs/SYSTEM_ARCHITECTURE.md` says the full orchestrator path is not exercised end-to-end in CI.**
+   - That is now false.
+   - CI runs `tests/destructive/trading-agency-hyperliquid-test.py`, `trading-agency-polymarket-test.py`, `trading-agency-mixed-test.py`, and `trading-agency-negative-path-test.py` from `scripts/ci-safe-verification.sh`.
+
+2. **`docs/DATA_INTEGRITY_LAYER.md` still describes Hyperliquid as a universal primary source whose failure halts all signal generation.**
+   - That is no longer the runtime behavior.
+   - `polymarket_only` mode can pass without Hyperliquid, and there is a dedicated test proving that.
+
+3. **Previously generated root audit files were stale.**
+   - The old `CODEX_AUDIT_REPORT.md`, `INTEGRATION_GAP_MATRIX.md`, `EXECUTION_TRUTH_MAP.md`, and `REMEDIATION_PLAN.md` claimed the orchestrator was not exercised in CI and understated the current paper-path proof surface.
+   - Those files are replaced by this audit set.
+
+### Important nuance: conservative statements are not bugs
+
+The following wording is conservative, not false:
+- “Polymarket is experimental and not fully proven end-to-end.”
+- That remains a fair statement because the repo proves only an offline paper-runtime path, not full execution-grade integration.
+
+---
+
+## F. Final verdict
+
+You can truthfully say:
+
+**“Hyperliquid is integrated; Polymarket is experimental and not yet fully integrated.”**
+
+That sentence is accurate **only if you mean the current paper-trading repository**:
+- Hyperliquid is integrated in the canonical paper-runtime and is the strongest/proven path.
+- Polymarket is wired into the canonical paper-runtime and is offline-proven, but it is still experimental, still has non-canonical helper leftovers, and is not execution-grade or live-ready.

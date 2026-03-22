@@ -1,70 +1,50 @@
 # Integration Gap Matrix
 
-Date: 2026-03-21 UTC
+Date: 2026-03-22 UTC
 
-## Matrix legend
+Legend:
+- **present** = code path exists
+- **canonical** = part of the real operator flow
+- **offline-proven** = covered by current CI-safe tests
+- **live-proven** = not available anywhere in this repo
 
-- **Present** = code path exists
-- **Proven** = covered by CI/test evidence in the current repo
-- **Canonical** = part of the real operator flow
-- **Gap** = what still blocks a stronger claim
-
-| Area | Hyperliquid | Polymarket | Mixed | Canonical? | Proven? | Gap |
+| Area | Hyperliquid | Polymarket | Mixed | Canonical | Offline-proven | Gap / note |
 |---|---|---|---|---|---|---|
-| runtime mode config | Present | Present | Present | Yes | Implicitly | No direct config/unit test beyond mode-gate behavior. |
-| pre-scan integrity gate | Present | Present | Present | Yes | Partially | Only mocked mode-aware behavior is tested. |
-| signal scanner | Present | Present | Present | Yes | Partially | Schema generation tested with fakes; no orchestrator integration proof. |
-| safety validation | Present | Present | Present | Yes | Weakly | No direct test proving scanner output survives safety in agency flow. |
-| paper entry planning | Present | Present | Present | Yes | Yes (isolated) | Proven in trader tests, not in orchestrator. |
-| paper exit planning | Present | Present | Present | Yes | Yes (isolated) | Proven in trader tests only. |
-| append-only trade history | Present | Present | Present | Yes | Yes (isolated) | Repo-wide canonical claim weakened by non-canonical Polymarket files elsewhere. |
-| authoritative open-position state | Present | Present | Present | Yes | Yes (isolated) | Schema mismatch remains between normalized trade model and stored position extras. |
-| performance summary | Present | Present | Present | Yes | Yes (isolated) | Depends on closed trade normalization only. |
-| timeout monitor | Present | Present | Present | Yes | Partially | Threshold support proven; actual orchestrated runtime monitoring not proven. |
-| exit monitor | Present | Present | Present | No | No | Explicitly non-canonical proof generator. |
-| non-canonical executor helper | N/A | Present | N/A | No | No | Creates alternate Polymarket state model and naming confusion. |
-| full agency/orchestrator run | Present in code | Present in code | Present in code | Yes | No | No CI or destructive test executes `trading-agency-phase1.py`. |
-| external connectivity proof | Weak | Weak | Weak | Optional | No | Current audit environment failed both read-only connectivity checks. |
-| mode-specific truthfulness | Strongest | Experimental | Overstated | Mixed | Partial | Mixed mode is not dual-entry per cycle; Polymarket still has active non-canonical leftovers. |
+| runtime mode config | present | present | present | yes | yes | Mixed semantics are limited to one new entry per cycle. |
+| bootstrap/runtime check | present | present | present | yes | yes | Only import/dependency proof, not exchange reachability. |
+| data-integrity gate | present | present | present | yes | yes | Real runs still depend on live read-only APIs unless fixtures are injected. |
+| signal scanner | present | present | present | yes | yes | Polymarket scanner is paper-only and uses read-only Gamma market data. |
+| safety validation | present | present | present | yes | yes | Polymarket safety is still market-data-based, not execution-grade. |
+| paper entry planning | present | present | present | yes | yes | Planner creates at most one new entry per cycle. |
+| paper exit planning | present | present | present | yes | yes | Exit pricing for Polymarket is still heuristic/read-only lookup. |
+| canonical trade history | present | present | present | yes | yes | Clean for canonical flow. Polymarket also has extra helper logs elsewhere. |
+| authoritative open-position state | present | present | present | yes | yes | Canonical state is shared, but helper scripts still introduce alternative Polymarket files. |
+| performance summary | present | present | present | yes | yes | Derived from canonical closed trades only. |
+| timeout monitor | present | present | present | yes | yes | Monitoring only; not authoritative close persistence. |
+| agency/orchestrator runtime | present | present | present | yes | yes | Offline-only proof. No live API proof in CI. |
+| non-canonical executor helper | n/a | present | n/a | no | no | `scripts/polymarket-executor.py` duplicates Polymarket state handling. |
+| live execution | absent | absent | absent | no | no | Repo is paper-trading only. |
+| external connectivity proof | weak | weak | weak | optional | no | Connectivity checks failed in this audit environment due proxy/tunnel errors. |
+| truthfulness consistency across docs | strong | partial | partial | mixed | no | Some docs remain stale relative to code/tests. |
 
-## Specific gaps
+## Blocking gaps for a “both fully integrated” claim
 
-### 1. Missing orchestrator proof
-- File path: `scripts/trading-agency-phase1.py`
-- Problem: no test invokes the real canonical runner.
-- Impact: “end-to-end” is not fully proven for either exchange.
+1. `scripts/polymarket-executor.py` still exists as a second Polymarket implementation surface.
+2. Real Polymarket execution is explicitly not implemented.
+3. Mixed mode is single-entry-per-cycle, not dual-entry-per-cycle.
+4. Live API reachability is not part of CI proof and was not successful from this audit environment.
+5. Some docs still describe an older proof/model story.
 
-### 2. Mixed mode is accumulative, not truly parallel
-- File paths: `scripts/phase1-paper-trader.py`, `tests/destructive/mixed-mode-integration-test.py`
-- Problem: the trader selects one candidate entry per cycle.
-- Impact: docs that imply side-by-side operation are stronger than the implementation.
+## Minimum truthful statements available now
 
-### 3. Canonical schema does not fully encode exchange identity
-- File paths: `models/trade_schema.py`, `scripts/performance-dashboard.py`, `models/position_state.py`
-- Problem: readers rely on raw/extras instead of a single formal schema.
-- Impact: state-model agreement is incomplete.
+### Safe
+- Hyperliquid is the canonical integrated paper-trading path.
+- Polymarket is integrated into the canonical paper-trading path, but experimental.
+- Mixed mode is a limited evaluation mode.
+- The repository is paper-trading only.
 
-### 4. Polymarket still has alternate state files in active code
-- File paths: `scripts/polymarket-executor.py`, `scripts/live-readiness-validator.py`, `scripts/stability-monitor.py`
-- Problem: alternate Polymarket persistence exists outside the canonical path.
-- Impact: repo cannot claim one fully unified Polymarket state model.
-
-### 5. Optional-component reporting overstates active Polymarket execution
-- File path: `scripts/trading-agency-phase1.py`
-- Problem: `polymarket_execution` is reported as enabled when helper file exists + mode includes Polymarket.
-- Impact: runtime status wording is misleading because canonical execution never calls that helper.
-
-## Minimum truthful statements available today
-
-### Safe statements
-- Hyperliquid is the default canonical paper-trading path.
-- Polymarket is available in the paper-trading path but remains experimental.
-- The repository does not implement live trading.
-- CI verifies isolated paper-trading behavior and schema expectations.
-
-### Unsafe statements
-- Hyperliquid is fully end-to-end proven.
-- Polymarket is fully integrated end-to-end.
-- Mixed mode is fully proven as a side-by-side dual-exchange runtime.
-- CI proves the canonical orchestrator.
-- The repository has one fully unified state model across every active script.
+### Unsafe
+- Both exchanges are fully integrated end-to-end.
+- Mixed mode is a full side-by-side dual-exchange runtime.
+- The repo is live-ready.
+- CI proves live connectivity or live execution.
