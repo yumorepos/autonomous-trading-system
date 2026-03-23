@@ -6,7 +6,7 @@ This document describes the **current canonical Phase 1 paper-trading system** i
 
 Supported runtime modes:
 - **`hyperliquid_only`** — default canonical mode
-- **`polymarket_only`** — canonical Polymarket paper mode
+- **`polymarket_only`** — canonical Polymarket paper mode, experimental overall
 - **`mixed`** — limited deterministic evaluation mode
 
 The architecture is strictly **paper trading only**. No live exchange execution path is implemented.
@@ -60,6 +60,7 @@ The canonical operator entrypoint is `scripts/trading-agency-phase1.py`.
 - scans Polymarket only
 - validates Polymarket only
 - canonical paper-only mode using the shared execution architecture
+- experimental overall because no authenticated execution path exists
 
 ### `mixed`
 - scans both exchanges
@@ -75,11 +76,11 @@ The verification suite currently proves:
 - mode-aware integrity gating respects selected runtime mode
 - Hyperliquid and Polymarket paper signals conform to the expected normalized schema
 - canonical state survives isolated paper-trader lifecycle tests for Hyperliquid, Polymarket, and mixed-mode history accumulation
+- the full agency orchestrator path is exercised offline in CI for Hyperliquid, Polymarket, mixed-mode limitation handling, and negative-path blocking
 - dashboard and timeout-monitor support scripts can read canonical outputs as expected
 
 ## What Is Not Proven
 
-- the full orchestrator path is not exercised end-to-end in CI
 - no live-trading path exists to verify
 - external API reachability is not enforced in CI
 - mixed mode is not proven as a simultaneous dual-entry runtime

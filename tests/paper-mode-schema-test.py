@@ -81,6 +81,7 @@ if __name__ == '__main__':
         assert hl_signal['signal_type'] == 'funding_arbitrage'
         assert hl_signal['direction'] in {'LONG', 'SHORT'}
         assert hl_signal['entry_price'] > 0
+        assert hl_signal['experimental'] is False
 
         pm_signal = pm[0]
         required_pm_fields = {'exchange', 'signal_type', 'market_id', 'market_question', 'side', 'entry_price', 'token_id'}
@@ -89,5 +90,6 @@ if __name__ == '__main__':
         assert pm_signal['signal_type'] == 'polymarket_binary_market'
         assert pm_signal['side'] in {'YES', 'NO'}
         assert pm_signal['entry_price'] > 0
+        assert pm_signal['experimental'] is True
 
         print('[OK] Scanner schema validation passed for Hyperliquid and Polymarket')

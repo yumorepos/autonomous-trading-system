@@ -1,6 +1,6 @@
 # Repository Truthfulness Audit
 
-**Date:** 2026-03-21  
+**Date:** 2026-03-22  
 **Purpose:** define the current truthful scope of the repository after tightening the canonical paper-trading path and downgrading overstated claims.
 
 ## Canonical Truth
@@ -16,7 +16,7 @@ The repository's active, reviewable canonical path is the **Phase 1 paper-tradin
 
 Supported runtime modes:
 - `hyperliquid_only` — default canonical mode
-- `polymarket_only` — canonical Polymarket paper mode
+- `polymarket_only` — canonical Polymarket paper mode, experimental overall
 - `mixed` — limited deterministic evaluation mode
 
 ## What Is Active and Truthful Now
@@ -40,11 +40,12 @@ Supported runtime modes:
 
 - paper trading only
 - Hyperliquid remains the canonical mode
-- Polymarket is canonical at the paper-trading level and remains non-live-ready
+- Polymarket is canonical at the paper-trading level, experimental overall, and remains non-live-ready
 - mixed mode remains limited and should not be presented as a fully proven side-by-side runtime
 - live trading is not supported
 - supporting dashboards/reports are not proof of live readiness
 - CI intentionally avoids flaky network-dependent requirements
+- the offline agency entrypoint is exercised in CI for Hyperliquid, Polymarket, mixed-mode limitation handling, and negative-path blocking
 
 ## Reviewer Guidance
 

@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from models.exchange_metadata import paper_exchange_is_experimental
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WORKSPACE = REPO_ROOT / "workspace"
 
@@ -47,7 +49,7 @@ def append_runtime_event(
         "message": message,
         "metadata": metadata or {},
         "paper_only": True,
-        "experimental": exchange == "Polymarket",
+        "experimental": paper_exchange_is_experimental(exchange),
     }
     target_path.parent.mkdir(parents=True, exist_ok=True)
     with open(target_path, "a") as handle:
