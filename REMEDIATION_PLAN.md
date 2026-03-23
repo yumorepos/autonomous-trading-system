@@ -3,9 +3,9 @@
 Audit date: 2026-03-23 UTC
 Goal: repair the repository to match a strict, evidence-based description of what is actually implemented.
 
-## Phase 0 — truth cleanup
+## Phase 0 — truth cleanup — completed
 
-### Task 0.1 — archive or relabel stale generated docs
+### Task 0.1 — archive or relabel stale generated docs — completed
 - **Files to edit:**
   - `docs/TIMEOUT_MONITOR_REPORT.md`
   - `docs/POSITION_TRACKING_REPORT.md`
@@ -13,9 +13,9 @@ Goal: repair the repository to match a strict, evidence-based description of wha
 - **Why:** active docs root contains stale/generated report content that looks current and can contradict code.
 - **Dependency/order:** first.
 - **Risk:** low.
-- **Done criteria:** each file is moved to archive or starts with a clear non-canonical historical/example banner.
+- **Done criteria:** met — each file now starts with a clear non-canonical historical/example banner.
 
-### Task 0.2 — standardize repo truth wording
+### Task 0.2 — standardize repo truth wording — completed
 - **Files to edit:**
   - `README.md`
   - `SYSTEM_STATUS.md`
@@ -26,9 +26,9 @@ Goal: repair the repository to match a strict, evidence-based description of wha
 - **Why:** these are the main review surfaces and should use identical language.
 - **Dependency/order:** after Task 0.1.
 - **Risk:** low.
-- **Done criteria:** one consistent vocabulary is used everywhere: `canonical paper path`, `experimental overall`, `mixed limited`, `support-only`, `historical`, `offline-proven`.
+- **Done criteria:** met — one consistent vocabulary is used across the active truth surfaces: `canonical paper path`, `experimental overall`, `mixed limited`, `support-only`, `historical`, `offline proof only`.
 
-### Task 0.3 — sharpen support/future-scope labeling
+### Task 0.3 — sharpen support/future-scope labeling — completed
 - **Files to edit:**
   - `scripts/live-readiness-validator.py`
   - `scripts/supervisor-governance.py`
@@ -36,7 +36,7 @@ Goal: repair the repository to match a strict, evidence-based description of wha
 - **Why:** names and descriptions still suggest broader operational scope than exists.
 - **Dependency/order:** parallel.
 - **Risk:** low-medium.
-- **Done criteria:** no reviewer can mistake these scripts for part of the canonical runtime.
+- **Done criteria:** met — their top-level descriptions now mark them as support-only and outside the canonical runtime.
 
 ## Phase 1 — fix canonical architecture
 
@@ -50,18 +50,21 @@ Goal: repair the repository to match a strict, evidence-based description of wha
 - **Risk:** medium.
 - **Done criteria:** met — exchange-invalid Hyperliquid and Polymarket signals are rejected before writing to `phase1-signals.jsonl`.
 
-### Task 1.2 — centralize canonical trade/state contract
+### Task 1.2 — centralize canonical trade/state contract — completed
 - **Files to edit:**
+  - `models/paper_contracts.py`
   - `models/trade_schema.py`
   - `models/position_state.py`
   - `scripts/phase1-paper-trader.py`
   - `scripts/performance-dashboard.py`
   - `scripts/timeout-monitor.py`
   - `scripts/execution-safety-layer.py`
-- **Why:** contract is mostly aligned, but validation and field expectations are distributed.
-- **Dependency/order:** after Task 1.1.
+  - `scripts/data-integrity-layer.py`
+  - `utils/paper_exchange_adapters.py`
+- **Why:** remove distributed paper-contract assumptions across validation, persistence, and readers.
+- **Dependency/order:** completed after Task 1.1.
 - **Risk:** medium.
-- **Done criteria:** all canonical readers/producers use the same explicit contract helpers for both open and closed records.
+- **Done criteria:** met — canonical signal requirements plus open/closed paper-trade requirements now come from shared helpers in `models/paper_contracts.py`.
 
 ### Task 1.3 — make mixed-mode semantics explicit in code and docs
 - **Files to edit:**
@@ -77,14 +80,14 @@ Goal: repair the repository to match a strict, evidence-based description of wha
 
 ## Phase 2 — repair/add tests
 
-### Task 2.1 — add Polymarket negative-path tests
+### Task 2.1 — add Polymarket negative-path tests — completed
 - **Files to edit/add:**
-  - add tests under `tests/destructive/`
-  - maybe update `scripts/ci-safe-verification.sh`
-- **Why:** Hyperliquid has stronger negative-path proof coverage than Polymarket.
-- **Dependency/order:** after Task 1.1.
+  - `tests/destructive/trading-agency-polymarket-negative-path-test.py`
+  - `scripts/ci-safe-verification.sh`
+- **Why:** Hyperliquid had stronger negative-path proof coverage than Polymarket.
+- **Dependency/order:** completed after Task 1.1.
 - **Risk:** low-medium.
-- **Done criteria:** tests cover stale Polymarket signals, duplicate entries, missing token metadata, and invalid market payloads.
+- **Done criteria:** met — tests now cover stale Polymarket signals, duplicate entries, missing token metadata, and invalid market payloads.
 
 ### Task 2.2 — add optional live-shape contract checks
 - **Files to edit/add:**

@@ -41,6 +41,7 @@ run_step '4/4 offline isolated lifecycle tests' bash -lc '
     tests/destructive/trading-agency-hyperliquid-test.py \
     tests/destructive/trading-agency-hyperliquid-repeat-cycle-test.py \
     tests/destructive/trading-agency-negative-path-test.py \
+    tests/destructive/trading-agency-polymarket-negative-path-test.py \
     tests/destructive/trading-agency-polymarket-test.py \
     tests/destructive/trading-agency-mixed-test.py \
     tests/destructive/full-lifecycle-integration-test.py \
