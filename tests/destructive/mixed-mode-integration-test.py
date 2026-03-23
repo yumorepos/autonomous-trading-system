@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DESTRUCTIVE TEST -- isolated mixed-mode canonical state integrity."""
+"""Offline isolated mixed-mode canonical state integrity test."""
 
 import json
 import os

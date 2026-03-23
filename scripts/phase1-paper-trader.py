@@ -22,7 +22,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from config.runtime import LOGS_DIR, TRADING_MODE, mode_includes_hyperliquid, mode_includes_polymarket
 from models.exchange_metadata import (
-    PRIMARY_MIXED_MODE_EXCHANGE,
+    mixed_mode_max_new_entries_per_cycle,
+    mixed_mode_selection_note,
     paper_exchange_priority,
     paper_exchange_status,
 )
@@ -319,8 +320,8 @@ def select_trade_candidate(signals: list[dict], open_positions: list[dict], allo
     exchange = best_signal.get('exchange', best_signal.get('source'))
     status = paper_exchange_status(exchange).replace('_', ' ')
     canonical_note = (
-        'current deterministic mixed-mode priority winner'
-        if TRADING_MODE == 'mixed' and exchange == PRIMARY_MIXED_MODE_EXCHANGE
+        f"{mixed_mode_selection_note(exchange)}; max_new_entries_per_cycle={mixed_mode_max_new_entries_per_cycle()}"
+        if TRADING_MODE == 'mixed'
         else status
     )
     return best_signal, (

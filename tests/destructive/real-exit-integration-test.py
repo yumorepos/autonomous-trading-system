@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-DESTRUCTIVE TEST -- NEVER RUN AGAINST LIVE STATE
-Real Exit Path Integration Test
+OFFLINE ISOLATED WORKSPACE TEST
+Real Exit Path Paper-Flow Test
 Uses actual check_exit/build_execution_plan logic inside a temporary workspace only.
 """
 
@@ -66,8 +66,8 @@ def inject_signal(signals_file: Path, asset: str, direction: str, entry_price: f
 
 if __name__ == '__main__':
     print('=' * 80)
-    print('REAL EXIT PATH INTEGRATION TEST')
-    print('DESTRUCTIVE TEST -- NEVER RUN AGAINST LIVE STATE')
+    print('REAL EXIT PATH PAPER-FLOW TEST')
+    print('OFFLINE ISOLATED WORKSPACE -- DOES NOT TOUCH LIVE STATE')
     print('=' * 80)
     print()
 

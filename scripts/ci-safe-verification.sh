@@ -22,6 +22,8 @@ run_step '3/4 script regression tests' bash -lc '
     tests/data-integrity-mode-gate-test.py \
     tests/paper-mode-schema-test.py \
     tests/trade-schema-contract-test.py \
+    tests/execution-safety-schema-test.py \
+    tests/mixed-mode-policy-test.py \
     tests/polymarket-metadata-truth-test.py \
     tests/repo-truth-guard-test.py \
     tests/performance-dashboard-canonical-test.py \
@@ -31,7 +33,7 @@ run_step '3/4 script regression tests' bash -lc '
     python3 "$test_file"
   done
 '
-run_step '4/4 isolated lifecycle tests' bash -lc '
+run_step '4/4 offline isolated lifecycle tests' bash -lc '
   set -euo pipefail
   for test_file in \
     tests/destructive/trading-agency-hyperliquid-test.py \

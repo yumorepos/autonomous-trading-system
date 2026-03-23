@@ -66,6 +66,8 @@ The canonical operator entrypoint is `scripts/trading-agency-phase1.py`.
 - scans both exchanges
 - persists both exchanges into the same canonical state model
 - currently selects at most one new entry per cycle
+- treats Hyperliquid as the primary exchange for deterministic entry selection
+- treats secondary-source health as advisory when Hyperliquid is also enabled
 - should be treated as a limited deterministic evaluation mode, not a fully proven side-by-side runtime
 
 ## What Is Proven
@@ -83,7 +85,7 @@ The verification suite currently proves:
 
 - no live-trading path exists to verify
 - external API reachability is not enforced in CI
-- mixed mode is not proven as a simultaneous dual-entry runtime
+- mixed mode is not proven as a simultaneous dual-entry runtime and is intentionally asymmetric
 - forward performance is not represented as a production-readiness claim
 
 ## Non-Canonical Artifacts
@@ -94,6 +96,7 @@ The repository still contains supporting scripts useful for review, but they sho
 - `scripts/stability-monitor.py` — support-only observability
 - `scripts/archive/` — historical or simulation-only artifacts
 - `docs/archive/` — historical reports and prior audit history
+- `TRUTH_INDEX.md` — authoritative reviewer index for the current repo state
 
 ## Explicitly Out of Scope
 

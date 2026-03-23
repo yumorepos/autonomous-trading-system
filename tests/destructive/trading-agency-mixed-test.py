@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline truth-enforcement proof for mixed mode at the agency entrypoint."""
+"""Offline isolated truth-enforcement proof for mixed mode at the agency entrypoint."""
 
 from __future__ import annotations
 
