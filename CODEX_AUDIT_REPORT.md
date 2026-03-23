@@ -8,9 +8,9 @@ Standard: production-readiness and truthfulness audit with zero assumptions
 
 - **Hyperliquid properly integrated?** **Yes, for the repository's canonical paper-trading path only.**
 - **Polymarket properly integrated?** **Partial.** It is wired into the same canonical paper-trading path, but remains experimental, paper-only, asymmetric in mixed mode, and unproven for any live-execution meaning.
-- **Repo truthfully represented?** **Partial.** Main truth surfaces are mostly aligned with code/tests, but active non-archive docs still contain stale/generated report content that can mislead reviewers.
+- **Repo truthfully represented?** **Yes, within a paper-trading-only scope.** Active truth surfaces now match the code/tests: Hyperliquid is the canonical paper-trading path, Polymarket is a canonical paper path that remains experimental overall and not live-integrated, mixed mode is limited/asymmetric, and CI is offline-only proof.
 - **System paper-trading only?** **Yes.**
-- **Any live-ready claim that should be removed?** **No direct active live-ready claim remains in the main truth surfaces, but stale active docs and future-scope script names should be moved/labeled more aggressively because they can imply maturity the canonical path does not prove.**
+- **Any live-ready claim that should be removed?** **No active live-ready claim remains in the current truth surfaces.** Support/history artifacts are now explicitly labeled non-canonical or support-only, so the remaining truth gap is not wording drift but missing live-integration capability and proof.
 
 ### Bottom line
 
@@ -26,10 +26,10 @@ Standard: production-readiness and truthfulness audit with zero assumptions
 | Component | Status | Evidence file paths | Exact reason |
 |---|---|---|---|
 | bootstrap/runtime check | working | `scripts/bootstrap-runtime-check.py`, `.github/workflows/basic.yml`, `scripts/ci-safe-verification.sh`, `tests/bootstrap-runtime-check-test.py` | Canonical bootstrap exists, is stage 1 in the orchestrator, and CI executes/tests it. It only checks Python dependencies, not exchange reachability. |
-| orchestrator | working | `scripts/trading-agency-phase1.py`, `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-polymarket-test.py`, `tests/destructive/trading-agency-negative-path-test.py` | Canonical flow is explicit and exercised offline through bootstrap → integrity → scan → safety → trader → persistence → monitor/report. |
+| orchestrator | working | `scripts/trading-agency-phase1.py`, `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-polymarket-test.py`, `tests/destructive/trading-agency-negative-path-test.py`, `tests/destructive/trading-agency-polymarket-negative-path-test.py` | Canonical flow is explicit and exercised offline through bootstrap → integrity → scan → safety → trader → persistence → monitor/report. |
 | data integrity layer | working | `scripts/data-integrity-layer.py`, `tests/data-integrity-mode-gate-test.py`, `tests/signal-integrity-canonical-test.py`, `tests/mixed-mode-policy-test.py` | Pre-scan health gating and signal integrity are wired in and mode-aware. Scanner acceptance now enforces the same exchange-specific canonical signal contract that the trader uses later. |
 | signal scanner | working | `scripts/phase1-signal-scanner.py`, `utils/api_connectivity.py`, `tests/paper-mode-schema-test.py`, `tests/signal-integrity-canonical-test.py` | Scanner emits both Hyperliquid and Polymarket paper signals, passes them through integrity validation, and appends to one canonical signal log. |
-| execution safety | working | `scripts/execution-safety-layer.py`, `scripts/trading-agency-phase1.py`, `tests/execution-safety-schema-test.py`, `tests/destructive/trading-agency-negative-path-test.py` | Safety layer validates the next candidate entry, persists safety state, and can block new entries. It uses canonical trade history for breaker refresh. |
+| execution safety | working | `scripts/execution-safety-layer.py`, `scripts/trading-agency-phase1.py`, `tests/execution-safety-schema-test.py`, `tests/destructive/trading-agency-negative-path-test.py`, `tests/destructive/trading-agency-polymarket-negative-path-test.py` | Safety layer validates the next candidate entry, persists safety state, and can block new entries. It uses canonical trade history for breaker refresh. |
 | paper trader | working | `scripts/phase1-paper-trader.py`, `utils/paper_exchange_adapters.py`, `tests/destructive/full-lifecycle-integration-test.py`, `tests/destructive/real-exit-integration-test.py`, `tests/destructive/polymarket-paper-flow-test.py` | Trader builds OPEN/CLOSED paper records, persists them, and updates canonical open-position state. This is paper simulation, not live execution. |
 | trade schema | working | `models/trade_schema.py`, `tests/trade-schema-contract-test.py`, `tests/execution-safety-schema-test.py`, `tests/performance-dashboard-canonical-test.py` | Shared normalization layer covers both exchanges and downstream readers consume the same schema. |
 | position state | working | `models/position_state.py`, `tests/trade-schema-contract-test.py`, `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-polymarket-test.py` | One authoritative `position-state.json` is maintained from trade records and supports both exchanges. |
@@ -41,7 +41,7 @@ Standard: production-readiness and truthfulness audit with zero assumptions
 | mixed mode | partial | `config/runtime.py`, `models/exchange_metadata.py`, `scripts/data-integrity-layer.py`, `scripts/phase1-paper-trader.py`, `tests/destructive/trading-agency-mixed-test.py`, `tests/destructive/mixed-mode-integration-test.py`, `tests/mixed-mode-policy-test.py` | Mixed mode scans both exchanges and can store both in canonical state over time, but the agency loop allows only one new entry per cycle and deterministically prefers Hyperliquid. It is not a peer-symmetric dual-entry runtime. |
 | CI workflow | working | `.github/workflows/basic.yml`, `scripts/ci-safe-verification.sh` | CI runs compile checks, regression tests, and destructive offline lifecycle proofs on push/PR. |
 | destructive/integration tests | working but offline-only | `scripts/ci-safe-verification.sh`, `tests/destructive/*.py`, `tests/support/trading_agency_offline.py`, `tests/support/offline_requests_sitecustomize.py` | Integration-style tests exist and are valuable, but they are fixture-driven offline proofs, not live-network integration tests. |
-| docs truthfulness | partial | `README.md`, `SYSTEM_STATUS.md`, `TRUTH_INDEX.md`, `PROOF_MATRIX.md`, `docs/SYSTEM_ARCHITECTURE.md`, `docs/POLYMARKET_EXECUTION_SCOPE.md`, `docs/TIMEOUT_MONITOR_REPORT.md`, `docs/POSITION_TRACKING_REPORT.md`, `docs/EXIT_TRACKER_REPORT.md` | Main truth docs are mostly aligned. Problem: active docs root still contains stale/generated report files that read like current operational evidence and in one case contradict current limits (`max open positions` 10 vs code 3). |
+| docs truthfulness | working | `README.md`, `SYSTEM_STATUS.md`, `TRUTH_INDEX.md`, `PROOF_MATRIX.md`, `docs/SYSTEM_ARCHITECTURE.md`, `docs/POLYMARKET_EXECUTION_SCOPE.md`, `docs/TIMEOUT_MONITOR_REPORT.md`, `docs/POSITION_TRACKING_REPORT.md`, `docs/EXIT_TRACKER_REPORT.md`, `tests/repo-truth-guard-test.py` | Active truth surfaces now use one consistent paper-only wording, and the generated example reports are explicitly marked non-canonical/historical rather than current runtime evidence. |
 
 ## C. Canonical flow map
 
@@ -147,34 +147,34 @@ Real current canonical flow, as implemented now:
    - Read-only connectivity checks to Hyperliquid and Polymarket both failed here with proxy 403 tunnel errors.
    - That is an environment/network limitation, but it means there is still no direct live reachability proof from this audit run.
 
-7. **Active docs still include misleading generated report files outside archive.**
-   - These files can be mistaken for authoritative current evidence.
-   - They do not change the code reality, but they weaken repo truthfulness.
+7. **Truth surfaces are aligned, but that does not expand capability.**
+   - The repo now labels generated reports and support scripts clearly.
+   - The remaining gaps are substantive: no live execution path, asymmetric mixed mode, and no live/external failure-path proof for Polymarket beyond the expanded offline negative-path suite.
 
 ## E. Repair plan
 
-### Phase 0: truth cleanup
+### Phase 0: truth cleanup — completed
 
-1. **Move or relabel stale generated docs in `docs/`**
+1. **Relabel stale generated docs in `docs/`**
    - **Files:** `docs/TIMEOUT_MONITOR_REPORT.md`, `docs/POSITION_TRACKING_REPORT.md`, `docs/EXIT_TRACKER_REPORT.md`
-   - **Why:** these are generated/example artifacts in active docs scope; they look current and one contradicts code limits.
-   - **Dependency/order:** first.
+   - **Why:** prevent generated examples from being mistaken for current runtime evidence.
+   - **Dependency/order:** completed first.
    - **Risk:** low.
-   - **Done criteria:** each file is either archived/moved or has a top-of-file banner declaring historical/example-only, non-canonical, and non-current.
+   - **Done criteria:** met — each file now begins with a non-canonical historical/example banner.
 
-2. **Add one explicit truth note about offline-only proof scope**
-   - **Files:** `README.md`, `SYSTEM_STATUS.md`, `docs/OPERATOR_EVIDENCE_GUIDE.md`
-   - **Why:** make it impossible to confuse offline fixture proof with live integration proof.
-   - **Dependency/order:** after stale-doc cleanup.
+2. **Standardize active truth wording and offline-proof scope**
+   - **Files:** `README.md`, `SYSTEM_STATUS.md`, `TRUTH_INDEX.md`, `docs/SYSTEM_ARCHITECTURE.md`, `docs/POLYMARKET_EXECUTION_SCOPE.md`, `docs/OPERATOR_EVIDENCE_GUIDE.md`
+   - **Why:** make the paper-only/runtime boundary unambiguous for reviewers.
+   - **Dependency/order:** completed after stale-doc labeling.
    - **Risk:** low.
-   - **Done criteria:** all active truth surfaces use the same language: “canonical paper path”, “offline-proven”, “not live integration proof”.
+   - **Done criteria:** met — active truth surfaces use the same wording for Hyperliquid, Polymarket, mixed mode, and CI scope.
 
-3. **Reduce future-scope naming ambiguity**
-   - **Files:** `scripts/live-readiness-validator.py`, `scripts/supervisor-governance.py`, related docs that mention them.
-   - **Why:** filenames still imply a stronger operational scope than the canonical runtime supports.
-   - **Dependency/order:** independent.
-   - **Risk:** low-medium if imports/docs reference names.
-   - **Done criteria:** support/future-scope scripts are unmistakably labeled non-canonical in filename or top-level truth docs.
+3. **Label support/future-scope scripts as non-canonical**
+   - **Files:** `scripts/live-readiness-validator.py`, `scripts/supervisor-governance.py`
+   - **Why:** keep support tooling from reading like part of the canonical runtime.
+   - **Dependency/order:** completed in parallel with wording cleanup.
+   - **Risk:** low.
+   - **Done criteria:** met — those scripts now describe themselves as support-only and outside the canonical runtime.
 
 ### Phase 1: fix canonical architecture
 
@@ -185,12 +185,12 @@ Real current canonical flow, as implemented now:
    - **Risk:** medium, because scanner rejection rates may change.
    - **Done criteria:** met — signal integrity rejects exchange-invalid Hyperliquid and Polymarket signals before append-only persistence.
 
-2. **Centralize canonical contract definitions and reuse them everywhere**
-   - **Files:** `scripts/data-integrity-layer.py`, `utils/paper_exchange_adapters.py`, `models/trade_schema.py`, `models/position_state.py`, `scripts/phase1-paper-trader.py`, `scripts/performance-dashboard.py`, `scripts/timeout-monitor.py`
-   - **Why:** scanner acceptance already enforces the paper adapter's exchange-specific contract, but that contract and the downstream trade/state model are still spread across multiple modules with implicit duplication.
-   - **Dependency/order:** after exchange-specific validation.
+2. **Centralize canonical contract definitions and reuse them everywhere** — **completed**
+   - **Files:** `models/paper_contracts.py`, `scripts/data-integrity-layer.py`, `utils/paper_exchange_adapters.py`, `models/trade_schema.py`, `models/position_state.py`, `scripts/phase1-paper-trader.py`, `scripts/performance-dashboard.py`, `scripts/timeout-monitor.py`, `scripts/execution-safety-layer.py`
+   - **Why:** remove distributed field assumptions across validators, producers, persistence, and readers.
+   - **Dependency/order:** completed after exchange-specific validation.
    - **Risk:** medium.
-   - **Done criteria:** all readers/producers import one shared contract for canonical open/closed records and exchange-specific optional fields.
+   - **Done criteria:** met — canonical signal contracts plus open/closed trade requirements now live in `models/paper_contracts.py`, and the canonical readers/producers consume those helpers.
 
 3. **Separate canonical artifacts from support artifacts in docs and code references**
    - **Files:** `README.md`, `TRUTH_INDEX.md`, `docs/SYSTEM_ARCHITECTURE.md`, `scripts/trading-agency-phase1.py`
@@ -208,12 +208,12 @@ Real current canonical flow, as implemented now:
    - **Risk:** medium because live APIs are flaky/changeable.
    - **Done criteria:** optional/manual tests assert expected top-level payload shape for current Hyperliquid and Polymarket public endpoints.
 
-2. **Add canonical agency tests for negative Polymarket paths**
-   - **Files:** new destructive/offline tests under `tests/destructive/`
-   - **Why:** Hyperliquid has stronger negative-path coverage than Polymarket.
-   - **Dependency/order:** after Phase 1 validation fixes.
+2. **Add canonical agency tests for negative Polymarket paths** — **completed**
+   - **Files:** `tests/destructive/trading-agency-polymarket-negative-path-test.py`, `scripts/ci-safe-verification.sh`
+   - **Why:** broaden offline proof for Polymarket blocking/rejection behavior at the canonical agency entrypoint.
+   - **Dependency/order:** completed after the Phase 1 validation/contract fixes.
    - **Risk:** low-medium.
-   - **Done criteria:** offline proofs cover stale Polymarket signals, duplicate market entries, broken token metadata, and missing market_id/token_id cases.
+   - **Done criteria:** met — offline proofs now cover stale Polymarket signals, duplicate entries, missing token metadata, and invalid market payloads.
 
 3. **Add mixed-mode persistence/restart coverage at the orchestrator level**
    - **Files:** new `tests/destructive/` mixed-mode multi-cycle test.
@@ -278,9 +278,9 @@ Real current canonical flow, as implemented now:
 ## F. Contradictions called out explicitly
 
 1. **`docs/POSITION_TRACKING_REPORT.md` says max open positions is 10, but canonical code sets `MAX_OPEN_POSITIONS = 3`.**
-2. **Active docs root contains generated monitoring/tracking reports that look like current evidence, while the canonical runtime truth lives elsewhere.**
+2. **Generated monitoring/tracking reports remain visible in active docs scope, but they are now explicitly labeled non-canonical examples rather than current evidence.**
 3. **Polymarket is described as canonical paper-path capable, which is true in code/tests, but mixed mode still hard-codes Hyperliquid priority, so Polymarket is not an equal participant in the main mixed loop.**
-4. **Signal integrity is correctly described as canonical validation before persistence, and it now guarantees the paper adapter's declared exchange-specific executability contract at validation time. The remaining architecture gap is that those contracts are still defined in multiple places instead of one centralized source.**
+4. **Signal integrity and the canonical paper-trade/open-position contract are now centralized in shared helpers, and the offline Polymarket negative-path suite now covers stale signals, duplicate entries, missing token metadata, and malformed payload blocking. The remaining architecture gaps are outside paper-contract enforcement: no live execution path, no fill/settlement handling, and no live failure-path proof.**
 5. **CI is strong for offline proofs, but any reader equating that with live exchange compatibility would be overclaiming.**
 
 ## Final verdict paragraph

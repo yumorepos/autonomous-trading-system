@@ -96,8 +96,8 @@ Audit date: 2026-03-23 UTC
 
 ### Where agreement is still imperfect
 
-- Signal executability is enforced at validation time, but the contract definitions are still distributed across data integrity, exchange adapters, trade normalization, and state readers.
-- That is workable, but centralizing more of the contract would further reduce schema-drift risk and make future changes safer.
+- Signal executability and canonical paper-trade/open-position requirements are now centralized in `models/paper_contracts.py` and consumed by the canonical validators, trader, persistence layer, and key readers.
+- Remaining asymmetries are intentional, not accidental: Polymarket records require `market_id`, Polymarket stays experimental overall, and mixed mode still gives deterministic priority to Hyperliquid.
 
 ## Mode truth map
 
@@ -135,10 +135,10 @@ Audit date: 2026-03-23 UTC
 - `scripts/archive/`
 - `docs/archive/`
 
-### Misleading active-doc surfaces that should be treated as non-authoritative
+### Labeled active-doc examples that remain non-authoritative
 
 - `docs/TIMEOUT_MONITOR_REPORT.md`
 - `docs/POSITION_TRACKING_REPORT.md`
 - `docs/EXIT_TRACKER_REPORT.md`
 
-These should not be used as canonical capability evidence.
+These files are now explicitly marked non-canonical/historical examples and should not be used as canonical capability evidence.
