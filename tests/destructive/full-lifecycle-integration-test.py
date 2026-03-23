@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-DESTRUCTIVE TEST -- NEVER RUN AGAINST LIVE STATE
-Full Lifecycle Integration Test
+OFFLINE ISOLATED WORKSPACE TEST
+Full Lifecycle Paper-Flow Test
 Verifies canonical Hyperliquid entry -> canonical state -> actual close -> performance
 inside an isolated temporary workspace with mocked market data.
 """
@@ -76,8 +76,8 @@ def load_trade_log(trades_file: Path):
 
 if __name__ == '__main__':
     print('=' * 80)
-    print('FULL LIFECYCLE INTEGRATION TEST')
-    print('DESTRUCTIVE TEST -- NEVER RUN AGAINST LIVE STATE')
+    print('FULL LIFECYCLE PAPER-FLOW TEST')
+    print('OFFLINE ISOLATED WORKSPACE -- DOES NOT TOUCH LIVE STATE')
     print('=' * 80)
     print()
 

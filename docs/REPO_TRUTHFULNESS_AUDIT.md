@@ -51,6 +51,7 @@ Supported runtime modes:
 
 Trust these files first:
 - `README.md`
+- `TRUTH_INDEX.md`
 - `SYSTEM_STATUS.md`
 - `docs/OPERATOR_QUICKSTART.md`
 - `docs/SYSTEM_ARCHITECTURE.md`

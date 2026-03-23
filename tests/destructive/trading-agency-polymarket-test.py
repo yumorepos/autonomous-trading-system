@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline end-to-end proof for the canonical Polymarket agency runtime."""
+"""Offline isolated proof for the canonical Polymarket agency runtime."""
 
 from __future__ import annotations
 

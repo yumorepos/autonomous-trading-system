@@ -8,7 +8,6 @@ the canonical exit path.
 
 import json
 import sys
-import requests
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -21,6 +20,7 @@ from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
 from models.exchange_metadata import paper_exchange_thresholds
 from models.position_state import get_open_positions
 from models.trade_schema import validate_trade_record
+from utils.paper_exchange_adapters import get_paper_exchange_adapter
 from utils.json_utils import safe_read_json, safe_read_jsonl
 from utils.system_health import SystemHealthManager
 PAPER_TRADES = LOGS_DIR / "phase1-paper-trades.jsonl"
@@ -77,76 +77,29 @@ class ExitMonitor:
         return positions
     
     def get_current_price(self, position: Dict) -> Optional[float]:
-        """Get current price from Hyperliquid or Polymarket for proof generation."""
+        """Get current price via the same exchange adapters used by the canonical paper flow."""
         exchange = position.get('exchange', position.get('signal', {}).get('exchange', position.get('signal', {}).get('source', 'Hyperliquid')))
-        if exchange == 'Polymarket':
-            market_id = position.get('market_id') or position.get('symbol')
-            side = position.get('side', 'YES')
-            token_id = position.get('token_id')
-            try:
-                r = requests.get(
-                    "https://gamma-api.polymarket.com/markets",
-                    params={'condition_id': market_id},
-                    timeout=5,
-                )
-                if r.status_code == 200:
-                    for market in r.json():
-                        for token in market.get('tokens', []):
-                            outcome = str(token.get('outcome') or '').upper()
-                            candidate_token_id = str(token.get('token_id') or token.get('tokenId') or token.get('id') or '')
-                            if outcome == side or (token_id and candidate_token_id == token_id):
-                                return float(token.get('price') or token.get('bestAsk') or token.get('ask') or token.get('bestBid') or token.get('bid') or 0)
-            except Exception as e:
-                self.log(f"Failed to get Polymarket price for {market_id}: {e}", "ERROR")
+        adapter = get_paper_exchange_adapter(exchange)
+        if adapter is None:
+            self.log(f"Unsupported exchange for proof monitor: {exchange}", "ERROR")
             return None
 
-        asset = position['symbol']
+        asset = position.get('symbol') or position.get('market_id') or 'unknown'
         try:
-            url = "https://api.hyperliquid.xyz/info"
-            r = requests.post(url, json={'type': 'allMids'}, timeout=5)
-            
-            if r.status_code != 200:
-                self.log(f"API returned status {r.status_code}", "ERROR")
-                self.health_manager.record_incident(
-                    incident_type='exit_monitor_api_instability',
-                    severity='MEDIUM',
-                    source='exit-monitor',
-                    message=f"Price lookup failed for {asset}: HTTP {r.status_code}",
-                    affected_system='position-monitoring',
-                    affected_components=['exit_monitor', 'hyperliquid_api'],
-                    metadata={'asset': asset, 'status_code': r.status_code},
-                )
-                return None
-            
-            mids = r.json()
-            
-            if asset not in mids:
-                self.log(f"Asset {asset} not in API response", "ERROR")
-                self.health_manager.record_incident(
-                    incident_type='exit_monitor_state_mismatch',
-                    severity='HIGH',
-                    source='exit-monitor',
-                    message=f"Asset {asset} missing from Hyperliquid mids response",
-                    affected_trade=asset,
-                    affected_system='position-monitoring',
-                    affected_components=['exit_monitor', 'hyperliquid_api'],
-                    metadata={'asset': asset},
-                )
-                return None
-            
-            price = float(mids[asset])
-            return price
-            
-        except requests.Timeout:
-            self.log(f"API timeout for {asset}", "ERROR")
+            import requests
+
+            price = adapter.get_current_price(position, requests)
+            if price > 0:
+                return price
+            self.log(f"No actionable price returned for {asset}", "ERROR")
             self.health_manager.record_incident(
                 incident_type='exit_monitor_api_instability',
                 severity='MEDIUM',
                 source='exit-monitor',
-                message=f"Price lookup timeout for {asset}",
+                message=f"Price lookup failed for {asset}: no actionable price returned",
                 affected_trade=asset,
                 affected_system='position-monitoring',
-                affected_components=['exit_monitor', 'hyperliquid_api'],
+                affected_components=['exit_monitor', f'{exchange.lower()}_api'],
                 metadata={'asset': asset},
             )
             return None
@@ -159,25 +112,17 @@ class ExitMonitor:
                 message=f"Price lookup failed for {asset}: {e}",
                 affected_trade=asset,
                 affected_system='position-monitoring',
-                affected_components=['exit_monitor', 'hyperliquid_api'],
-                metadata={'asset': asset, 'error': str(e)},
+                affected_components=['exit_monitor', f'{exchange.lower()}_api'],
+                metadata={'asset': asset, 'exchange': exchange, 'error': str(e)},
             )
             return None
     
     def calculate_pnl(self, entry_price: float, current_price: float, position_size: float, direction: str, exchange: str) -> Tuple[float, float]:
-        """Calculate P&L in USD and percentage using exchange-specific paper semantics."""
-        if exchange == 'Hyperliquid':
-            if direction == 'LONG':
-                pnl_usd = (current_price - entry_price) * position_size
-            else:
-                pnl_usd = (entry_price - current_price) * position_size
-        else:
-            pnl_usd = (current_price - entry_price) * position_size
-
-        entry_value = entry_price * position_size
-        pnl_pct = (pnl_usd / entry_value) * 100 if entry_value > 0 else 0
-
-        return pnl_usd, pnl_pct
+        """Calculate P&L using the canonical paper adapter for the exchange."""
+        adapter = get_paper_exchange_adapter(exchange)
+        if adapter is None:
+            return 0, 0
+        return adapter.calculate_pnl(entry_price, current_price, position_size, direction)
 
     def check_exit_conditions(self, position: Dict, current_price: float) -> Tuple[bool, Optional[str]]:
         """Check if position should exit using exchange-specific paper thresholds."""

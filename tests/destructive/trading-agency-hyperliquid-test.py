@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolated end-to-end proof for the canonical Hyperliquid agency runtime."""
+"""Offline isolated proof for the canonical Hyperliquid agency runtime."""
 
 from __future__ import annotations
 
