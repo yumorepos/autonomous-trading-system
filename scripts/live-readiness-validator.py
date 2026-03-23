@@ -4,6 +4,7 @@ Future-scope readiness research framework.
 This script models hypothetical future criteria for research purposes only.
 It does not imply that the repository currently supports live trading, and it is not part of the canonical paper-trading path.
 It reads canonical paper-trading history only and should not be treated as an execution or deployment approval tool.
+Support-only, not part of the canonical runtime.
 """
 
 import json
@@ -77,7 +78,7 @@ class BaselineComparison:
 
 
 class LiveReadinessValidator:
-    """Research-only validator for hypothetical future deployment criteria."""
+    """Research-only, support-only validator for hypothetical future deployment criteria outside the canonical runtime."""
     
     def __init__(self):
         self.state = self.load_state()

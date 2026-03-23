@@ -29,7 +29,7 @@ This is the shortest authoritative review path for the current repository state.
 
 ## Current scope in one paragraph
 
-The repository currently implements a canonical **paper-trading** runtime. Hyperliquid is the default and best-supported paper path. Polymarket is also wired into the canonical paper path, but remains experimental overall and is not a live execution integration. Mixed mode is limited, admits at most one new entry per cycle, and treats Hyperliquid as the deterministic primary exchange.
+The repository currently implements a canonical **paper-trading** runtime. Hyperliquid = canonical paper-trading path. Polymarket = canonical paper path, experimental overall, not live-integrated. Mixed mode = limited, asymmetric (one entry per cycle, Hyperliquid priority). CI = offline proof only, not live exchange validation.
 
 ## Non-canonical / historical surfaces
 

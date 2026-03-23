@@ -1,7 +1,7 @@
 # System Status
 
 **Last Updated:** 2026-03-22 UTC  
-**Verdict:** Paper-trading research system with canonical Hyperliquid and Polymarket paper paths, Polymarket experimental overall, and limited mixed-mode semantics
+**Verdict:** Paper-trading research system. Hyperliquid = canonical paper-trading path. Polymarket = canonical paper path, experimental overall, not live-integrated. Mixed mode = limited, asymmetric (one entry per cycle, Hyperliquid priority). CI = offline proof only, not live exchange validation.
 
 ---
 
@@ -11,11 +11,12 @@
 |---|---|
 | Core capability | Phase 1 paper-trading execution |
 | Canonical entrypoint | `scripts/trading-agency-phase1.py` |
-| Canonical default | `hyperliquid_only` |
-| Limited modes | `mixed` |
+| Hyperliquid | Canonical paper-trading path |
+| Polymarket | Canonical paper path, experimental overall, not live-integrated |
+| Mixed mode | Limited, asymmetric (one entry per cycle, Hyperliquid priority) |
 | Live trading | **Not implemented** |
 | Real-money execution | **Not supported** |
-| CI | Safe verification runs on every push and pull request |
+| CI | Offline proof only, not live exchange validation |
 | Truthfulness | Strong and explicitly bounded by current offline evidence |
 
 ---
@@ -36,8 +37,8 @@
 - live trading is not implemented
 - no production deployment claim is justified
 - external API reachability is environment-dependent and not guaranteed by CI
-- Polymarket now uses the same canonical paper-trading runtime stages, persistence, and monitors as Hyperliquid, but remains experimental overall
-- mixed mode remains limited, Hyperliquid-primary, and should not be presented as a fully proven side-by-side runtime
+- Polymarket is a canonical paper path, experimental overall, and not live-integrated
+- mixed mode is limited, asymmetric (one entry per cycle, Hyperliquid priority), and should not be presented as a symmetric side-by-side runtime
 - some retained support scripts model future workflows and are **not** canonical execution
 
 ---
@@ -68,7 +69,7 @@
 
 ## What CI Proves
 
-The required CI workflow verifies:
+The required CI workflow verifies, offline only:
 - bootstrap/runtime dependency checking
 - Python compile/syntax validation
 - script-style regression tests
@@ -77,7 +78,7 @@ The required CI workflow verifies:
 - deterministic repeat-cycle stability for the canonical Hyperliquid path
 - canonical dashboard and timeout-monitor reader behavior
 
-CI intentionally avoids making flaky network access a merge blocker while now proving the agency entrypoint offline for success-path and negative-path execution.
+CI intentionally avoids making flaky network access a merge blocker and should be described as offline proof only, not live exchange validation.
 
 ## What Remains Unverified in CI
 
