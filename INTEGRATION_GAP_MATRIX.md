@@ -1,60 +1,39 @@
 # Integration Gap Matrix
 
-Date: 2026-03-23 UTC
-
-## Scope
+Audit date: 2026-03-23 UTC
 
 This matrix lists the concrete gaps between the current repository and any truthful claim that **both Hyperliquid and Polymarket are fully integrated**.
 
-| Gap | Files / surface | Current state | Why it matters | Severity |
+| Claim area | Current evidence | Gap | Why it matters | Priority |
 |---|---|---|---|---|
-| No live execution implementation at all | `README.md`, `SYSTEM_STATUS.md`, `docs/POLYMARKET_EXECUTION_SCOPE.md` | Repo explicitly says paper-trading only. | Blocks any production/full-integration claim for either exchange. | Critical |
-| Polymarket adapter is public-market-data + paper math only | `utils/paper_exchange_adapters.py` | Uses Gamma `GET /markets` for price/health/liquidity/spread; no signed orders or fills. | Confirms Polymarket is not live-integrated. | Critical |
-| Hyperliquid is also paper-only | `utils/paper_exchange_adapters.py`, `README.md` | Hyperliquid path also stops at paper trade records. | “Integrated” is truthful only with a paper-trading qualifier. | Critical |
-| Mixed mode is not peer/dual execution | `models/exchange_metadata.py`, `scripts/phase1-paper-trader.py`, `scripts/data-integrity-layer.py` | One new entry per cycle; Hyperliquid priority winner; secondary Polymarket health advisory. | Prevents any claim that mixed mode is a mature dual-exchange runtime. | High |
-| CI does not prove live/network-backed end-to-end behavior | `.github/workflows/basic.yml`, `scripts/ci-safe-verification.sh` | CI intentionally excludes blocking network-dependent checks and uses offline fixtures for destructive tests. | The repo is well-tested offline, not live-integrated. | High |
-| Non-canonical exit monitor duplicates exchange logic | `scripts/exit-monitor.py`, `utils/paper_exchange_adapters.py` | Extra proof/report surface exists outside canonical flow. | Extra maintenance surface and truth confusion. | Medium |
-| Support scripts can be mistaken for active execution | `scripts/live-readiness-validator.py`, `scripts/exit-monitor.py`, `scripts/stability-monitor.py` | Present in active tree, not on canonical path. | Confuses reviewers about what is real. | Medium |
-| Historical archive remains large and grep-visible | `docs/archive/`, `scripts/archive/` | Old conclusions and historical scaffolding remain in-tree. | Reviewers can still confuse historical material with current truth. | Medium |
-| No live integration tests for Polymarket | `tests/`, `.github/workflows/basic.yml` | Strong offline paper tests only. | Paper proof does not imply live integration. | High |
-| No authenticated-client abstraction split between paper and live | `utils/paper_exchange_adapters.py` | Paper adapters are the only exchange adapters. | Makes future live integration harder and keeps nomenclature ambiguous. | Medium |
-| Top truth surfaces are honest, but docs truth guard is incomplete | `tests/repo-truth-guard-test.py` | Test protects a few docs, not all active docs. | Allows support-doc drift back into overclaim territory. | Low |
+| Hyperliquid end-to-end paper path | Canonical orchestrator, scanner, safety, trader, state, monitor, and offline agency tests exist. | No live execution path. | “Fully integrated” is only truthful with a paper-only qualifier. | Critical |
+| Polymarket end-to-end paper path | Canonical scanner/trader/state path exists and offline agency tests pass. | No authenticated execution path, fill handling, settlement, or live integration proof. | Blocks any stronger-than-paper integration claim. | Critical |
+| Public API compatibility today | Optional connectivity script exists. | CI does not prove current live payload compatibility; audit connectivity checks failed in this environment due proxy tunnel 403. | Current runtime compatibility is not continuously proven. | High |
+| Shared canonical contract | Scanner integrity now enforces exchange-specific canonical signal fields before persistence. | Canonical contract logic is still distributed across integrity checks, exchange adapters, trade normalization, and state readers. | Drift risk is lower now, but not fully eliminated. | Medium |
+| Mixed mode | Both exchanges can be scanned; state model can hold both over time. | Only one new entry per cycle; Hyperliquid is deterministic priority winner. | Mixed mode is not peer-symmetric full integration. | High |
+| Docs truth surface | Main truth docs are mostly aligned. | Active docs root still contains stale/generated report files that read like current evidence. | Reviewers can misread repo maturity and current state. | High |
+| Canonical vs support artifacts | Canonical path is sharply implemented in code. | Support/future-scope scripts still have names that imply broader scope. | Raises truthfulness and review ambiguity risk. | Medium |
+| Current state model | Shared trade schema and position state work across both exchanges. | Contract is distributed across multiple modules and validations, not enforced from one source at all producer boundaries. | Schema drift risk grows as features expand. | Medium |
+| Negative-path coverage parity | Hyperliquid negative paths are tested thoroughly. | Polymarket negative-path coverage is lighter. | Experimental path remains less proven. | Medium |
+| Live-readiness framing | Main docs say paper-only. | Generated reports/support docs can still imply operator-grade maturity. | Weakens repo truthfulness even without explicit false claims. | Medium |
 
-## Exchange-by-exchange summary
+## Minimum truthful wording right now
 
-### Hyperliquid
+Use wording like this:
 
-| Layer | State |
-|---|---|
-| Scanner | implemented |
-| Safety | implemented |
-| Paper execution | implemented |
-| Canonical persistence | implemented |
-| Timeout monitor | implemented |
-| Offline orchestrator proof | implemented |
-| Live execution | not implemented |
-| Live tests | not implemented |
+> Hyperliquid is integrated into the canonical paper-trading runtime. Polymarket is integrated into the same paper runtime, but remains experimental overall and is not yet fully integrated beyond paper trading.
 
-### Polymarket
+Avoid wording like this:
 
-| Layer | State |
-|---|---|
-| Scanner | implemented |
-| Safety | implemented |
-| Paper execution | implemented |
-| Canonical persistence | implemented |
-| Timeout monitor | implemented |
-| Offline orchestrator proof | implemented |
-| Authenticated order placement | missing |
-| Wallet/signing flow | missing |
-| Fill reconciliation | missing |
-| Settlement handling | missing |
-| Live tests | missing |
+- “Both exchanges are fully integrated.”
+- “Polymarket is complete end-to-end.”
+- “Mixed mode runs both exchanges side by side as equal peers.”
+- “CI proves live exchange compatibility.”
 
-## Immediate repair priority
+## Short priority order
 
-1. Tighten docs to say exactly what is wired now.
-2. Wire signal-level integrity validation into the scanner if the docs want to claim it.
-3. Keep Polymarket described as canonical **paper** integration, not full integration.
-4. Either archive non-canonical support surfaces or label them harder.
-5. Only then decide whether live Polymarket integration is an actual goal.
+1. Fix truth surface and stale docs.
+2. Centralize canonical contract helpers across integrity, adapters, schema normalization, and readers.
+3. Add optional live-shape contract checks.
+4. Expand Polymarket negative-path tests.
+5. Decide whether Polymarket remains paper-only or gets a real execution roadmap.
