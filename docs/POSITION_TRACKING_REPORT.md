@@ -1,3 +1,5 @@
+# NON-CANONICAL – historical/generated example, not current runtime evidence
+
 # Position Tracking Report
 **Generated:** 2026-03-20 21:14 EDT  
 **Purpose:** Track distance to exit for all open positions

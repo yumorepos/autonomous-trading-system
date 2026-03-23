@@ -29,6 +29,7 @@ from config.runtime import (
 from models.exchange_metadata import mixed_mode_primary_exchange, mixed_mode_secondary_health_is_advisory
 from utils.api_connectivity import fetch_hyperliquid_meta, fetch_polymarket_markets
 from utils.system_health import SystemHealthManager
+from models.paper_contracts import get_signal_contract, validate_signal_contract
 from utils.runtime_logging import append_runtime_event
 DATA_STATE = LOGS_DIR / "data-integrity-state.json"
 REJECTED_SIGNALS = LOGS_DIR / "rejected-signals.jsonl"
@@ -503,6 +504,25 @@ class DataIntegrityLayer:
         
         # Required fields
         validations.append(self.validate_required_fields(signal, 'signal'))
+
+        exchange = signal.get('exchange', signal.get('source'))
+        signal_contract = get_signal_contract(exchange)
+        exchange_valid, exchange_reason, _ = validate_signal_contract(signal, exchange=exchange)
+        validations.append(ValidationResult(
+            passed=exchange_valid,
+            check_name="exchange_contract",
+            reason=(
+                exchange_reason
+                if signal_contract is not None
+                else f"unsupported exchange for canonical signal validation: {exchange!r}"
+            ),
+            severity="CRITICAL" if not exchange_valid else "INFO",
+            data={
+                'exchange': exchange,
+                'signal_type': signal.get('signal_type'),
+                'required_fields': list(signal_contract.required_signal_fields) if signal_contract is not None else [],
+            }
+        ))
         
         # Timestamp freshness
         if 'timestamp' in signal:

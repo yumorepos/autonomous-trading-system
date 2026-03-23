@@ -5,28 +5,48 @@ from datetime import datetime, timezone
 from typing import Any
 
 from models.exchange_metadata import paper_exchange_is_experimental
+from models.paper_contracts import SIGNAL_CONTRACTS, SignalContract, paper_position_identifier as contract_position_identifier, validate_signal_contract
 
 
 @dataclass(frozen=True)
 class PaperExchangeAdapter:
-    exchange: str
-    strategy: str
-    signal_type: str
-    required_signal_fields: tuple[str, ...]
-    default_position_size_usd: float
-    take_profit_pct: float
-    stop_loss_pct: float
-    timeout_hours: float
+    contract: SignalContract
+
+    @property
+    def exchange(self) -> str:
+        return self.contract.exchange
+
+    @property
+    def strategy(self) -> str:
+        return self.contract.strategy
+
+    @property
+    def signal_type(self) -> str:
+        return self.contract.signal_type
+
+    @property
+    def required_signal_fields(self) -> tuple[str, ...]:
+        return self.contract.required_signal_fields
+
+    @property
+    def default_position_size_usd(self) -> float:
+        return self.contract.default_position_size_usd
+
+    @property
+    def take_profit_pct(self) -> float:
+        return self.contract.take_profit_pct
+
+    @property
+    def stop_loss_pct(self) -> float:
+        return self.contract.stop_loss_pct
+
+    @property
+    def timeout_hours(self) -> float:
+        return self.contract.timeout_hours
 
     def validate_signal(self, signal: dict[str, Any] | None) -> tuple[bool, str]:
-        if not isinstance(signal, dict):
-            return False, "signal payload is not a dict"
-        if signal.get('signal_type') != self.signal_type:
-            return False, f"signal_type={signal.get('signal_type')!r} is not canonical for {self.exchange}"
-        missing = [field for field in self.required_signal_fields if signal.get(field) is None]
-        if missing:
-            return False, f"missing required {self.exchange} fields: {missing}"
-        return True, f'canonical {self.exchange} signal'
+        passed, reason, _ = validate_signal_contract(signal, exchange=self.exchange)
+        return passed, reason
 
     def build_trade(self, signal: dict[str, Any], position_id: str, entry_timestamp: str | None = None) -> dict[str, Any]:
         raise NotImplementedError
@@ -238,26 +258,8 @@ class PolymarketPaperAdapter(PaperExchangeAdapter):
 
 
 PAPER_EXCHANGE_ADAPTERS: dict[str, PaperExchangeAdapter] = {
-    'Hyperliquid': HyperliquidPaperAdapter(
-        exchange='Hyperliquid',
-        strategy='funding_arbitrage',
-        signal_type='funding_arbitrage',
-        required_signal_fields=('asset', 'direction', 'entry_price'),
-        default_position_size_usd=1.96,
-        take_profit_pct=10.0,
-        stop_loss_pct=-10.0,
-        timeout_hours=24.0,
-    ),
-    'Polymarket': PolymarketPaperAdapter(
-        exchange='Polymarket',
-        strategy='polymarket_spread',
-        signal_type='polymarket_binary_market',
-        required_signal_fields=('market_id', 'market_question', 'side', 'entry_price'),
-        default_position_size_usd=5.0,
-        take_profit_pct=8.0,
-        stop_loss_pct=-8.0,
-        timeout_hours=24.0,
-    ),
+    'Hyperliquid': HyperliquidPaperAdapter(contract=SIGNAL_CONTRACTS['Hyperliquid']),
+    'Polymarket': PolymarketPaperAdapter(contract=SIGNAL_CONTRACTS['Polymarket']),
 }
 
 
@@ -268,7 +270,4 @@ def get_paper_exchange_adapter(exchange: str | None) -> PaperExchangeAdapter | N
 
 
 def paper_position_identifier(record: dict[str, Any]) -> str | None:
-    exchange = record.get('exchange', record.get('source'))
-    if exchange == 'Polymarket':
-        return record.get('market_id') or record.get('symbol')
-    return record.get('asset') or record.get('symbol')
+    return contract_position_identifier(record)

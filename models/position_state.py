@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 import warnings
 
+from models.paper_contracts import canonical_position_state_record
 from models.trade_schema import (
-    CANONICAL_OPEN_POSITION_FIELDS,
     normalize_trade_record,
     validate_trade_record,
     warn_on_status_transition,
@@ -34,33 +34,7 @@ def _canonical_open_position(record: dict[str, Any] | None, context: str) -> dic
         return None
     if not validate_trade_record(normalized, context=context):
         return None
-    canonical = {field: normalized.get(field) for field in CANONICAL_OPEN_POSITION_FIELDS}
-    canonical.update({
-        'position_id': normalized.get('trade_id'),
-        'direction': normalized.get('side'),
-        'entry_time': normalized.get('entry_timestamp'),
-    })
-    for extra_field in [
-        'signal',
-        'stop_loss_pct',
-        'take_profit_pct',
-        'timeout_hours',
-        'raw',
-    ]:
-        if source.get(extra_field) is not None:
-            canonical[extra_field] = source.get(extra_field)
-    for normalized_field in [
-        'strategy',
-        'market_id',
-        'market_question',
-        'token_id',
-        'paper_only',
-        'experimental',
-    ]:
-        if normalized.get(normalized_field) is not None:
-            canonical[normalized_field] = normalized.get(normalized_field)
-    canonical['status'] = 'OPEN'
-    return canonical
+    return canonical_position_state_record(normalized, source=source)
 
 
 def load_position_state(path: Path | str) -> dict[str, Any]:

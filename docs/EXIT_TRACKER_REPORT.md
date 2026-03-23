@@ -1,3 +1,5 @@
+# NON-CANONICAL – historical/generated example, not current runtime evidence
+
 # Exit Tracker Report
 **Generated:** 2026-03-20 21:17:32 EDT
 **Purpose:** Rank positions by proximity to ANY exit condition

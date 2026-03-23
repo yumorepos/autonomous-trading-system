@@ -99,17 +99,17 @@ if __name__ == '__main__':
         }, indent=2))
 
         scanner = load_scanner(workspace_root)
-        now = datetime.now(timezone.utc).isoformat()
+        base = datetime.now(timezone.utc)
         scanner.scan_hyperliquid_funding = lambda: [
             {
-                'timestamp': now,
+                'timestamp': base.isoformat(),
                 'source': 'Hyperliquid',
                 'exchange': 'Hyperliquid',
                 'signal_type': 'funding_arbitrage',
                 'strategy': 'funding_arbitrage',
                 'asset': 'BTC',
                 'symbol': 'BTC',
-                'direction': 'LONG',
+                'entry_price': 50000.0,
                 'ev_score': 12.0,
                 'conviction': 'MEDIUM',
                 'recommended_position_size_usd': 1.96,
@@ -119,7 +119,7 @@ if __name__ == '__main__':
         ]
         scanner.scan_polymarket_markets = lambda: [
             {
-                'timestamp': now,
+                'timestamp': (base.replace(microsecond=1)).isoformat(),
                 'source': 'Polymarket',
                 'exchange': 'Polymarket',
                 'signal_type': 'polymarket_binary_market',
@@ -142,6 +142,30 @@ if __name__ == '__main__':
                 'recommended_position_size_usd': 5.0,
                 'paper_only': True,
                 'experimental': True,
+            },
+            {
+                'timestamp': (base.replace(microsecond=2)).isoformat(),
+                'source': 'Polymarket',
+                'exchange': 'Polymarket',
+                'signal_type': 'polymarket_binary_market',
+                'strategy': 'polymarket_spread',
+                'asset': 'pm-btc-down',
+                'symbol': 'pm-btc-down',
+                'market_id': 'pm-btc-down',
+                'side': 'NO',
+                'direction': 'NO',
+                'token_id': 'no-token',
+                'entry_price': 0.57,
+                'best_bid': 0.55,
+                'best_ask': 0.57,
+                'last_price': 0.56,
+                'spread_pct': 3.51,
+                'liquidity_usd': 18000.0,
+                'ev_score': 9.25,
+                'conviction': 'MEDIUM',
+                'recommended_position_size_usd': 5.0,
+                'paper_only': True,
+                'experimental': True,
             }
         ]
         scanner.main()
@@ -156,15 +180,23 @@ if __name__ == '__main__':
         assert persisted_signals[0]['market_id'] == 'pm-btc-up', persisted_signals
 
         rejected_signals = [json.loads(line) for line in rejected_path.read_text().splitlines() if line.strip()]
-        assert len(rejected_signals) == 1, rejected_signals
-        assert rejected_signals[0]['source'] == 'hyperliquid', rejected_signals
-        assert rejected_signals[0]['signal']['exchange'] == 'Hyperliquid', rejected_signals
-        failed_checks = {validation['check_name'] for validation in rejected_signals[0]['validations'] if not validation['passed']}
-        assert 'required_fields' in failed_checks, rejected_signals
+        assert len(rejected_signals) == 2, rejected_signals
+        rejected_sources = {rejection['source'] for rejection in rejected_signals}
+        assert rejected_sources == {'hyperliquid', 'polymarket'}, rejected_signals
+        failed_checks_by_exchange = {
+            rejection['signal']['exchange']: {
+                validation['check_name']
+                for validation in rejection['validations']
+                if not validation['passed']
+            }
+            for rejection in rejected_signals
+        }
+        assert failed_checks_by_exchange['Hyperliquid'] == {'exchange_contract'}, failed_checks_by_exchange
+        assert failed_checks_by_exchange['Polymarket'] == {'exchange_contract'}, failed_checks_by_exchange
 
         report = report_path.read_text()
         assert 'Accepted signals this scan: 1' in report, report
-        assert 'Rejected signals this scan: 1' in report, report
+        assert 'Rejected signals this scan: 2' in report, report
         assert 'validate_signal()' in report, report
 
-        print('[OK] Canonical scanner applies signal-level data-integrity validation before persistence')
+        print('[OK] Canonical scanner rejects exchange-invalid Hyperliquid and Polymarket signals before persistence')

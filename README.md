@@ -8,11 +8,12 @@ Status: CI-backed research repository for **paper trading only**
 This repository implements a **Phase 1 paper-trading execution path** for truthful research and portfolio review.
 
 Current repo truth:
-- **canonical paper-trading path:** Hyperliquid via `scripts/trading-agency-phase1.py`
-- **canonical paper-trading path:** Polymarket in `polymarket_only`, using the same shared architecture and deterministic offline agency proof, but experimental overall
-- **limited evaluation mode:** `mixed` with one new entry per cycle, Hyperliquid-primary selection, and advisory-only secondary-source health
-- **live trading:** not implemented
-- **real-money execution:** not supported
+- **Hyperliquid:** canonical paper-trading path
+- **Polymarket:** canonical paper path, experimental overall, not live-integrated
+- **Mixed mode:** limited, asymmetric (one entry per cycle, Hyperliquid priority)
+- **CI:** offline proof only, not live exchange validation
+- **Live trading:** not implemented
+- **Real-money execution:** not supported
 
 Phase 4 adds:
 - cycle-level runtime summaries for the canonical path
@@ -41,9 +42,9 @@ That script runs this Phase 1 paper-trading flow:
 
 | Mode | Purpose | Truthful status |
 |---|---|---|
-| `hyperliquid_only` | Default paper-trading run | canonical and best-supported |
-| `polymarket_only` | Polymarket paper-trading run | canonical paper-trading path with offline proof; experimental overall |
-| `mixed` | Shared-state evaluation across both exchanges | limited experimental mode; one new entry per cycle, Hyperliquid-primary, not the canonical proof path |
+| `hyperliquid_only` | Default paper-trading run | Hyperliquid = canonical paper-trading path |
+| `polymarket_only` | Polymarket paper-trading run | Polymarket = canonical paper path, experimental overall, not live-integrated |
+| `mixed` | Shared-state evaluation across both exchanges | Mixed mode = limited, asymmetric (one entry per cycle, Hyperliquid priority) |
 
 ## Canonical Architecture
 
@@ -71,7 +72,7 @@ Non-canonical/support-only artifacts:
 
 ## What CI Proves
 
-The safe verification suite proves:
+The safe verification suite proves, offline only:
 - bootstrap dependency checks behave correctly
 - compile/syntax validation succeeds for active Python code
 - mode-aware data-integrity gating respects the selected runtime mode
@@ -93,6 +94,7 @@ Run the same suite locally with:
 
 - live API reachability during `scripts/trading-agency-phase1.py` execution is not proven by CI
 - runtime connectivity to external APIs is not a blocking CI guarantee
+- CI is offline proof only, not live exchange validation
 - no live trading support exists
 - no real-money execution path exists
 - `mixed` is not proven as a simultaneous dual-entry runtime; it remains a limited deterministic evaluation mode with one new entry per cycle and Hyperliquid-primary selection semantics
@@ -177,9 +179,10 @@ workspace/   Runtime state, operator controls, logs, and generated artifacts.
 ## Current Truthful Status
 
 - **Execution mode:** paper trading only
-- **Canonical exchange path:** Hyperliquid
-- **Experimental exchange path:** Polymarket canonical paper trading with deterministic offline agency-level proof, but experimental overall
-- **Mixed mode:** limited experimental evaluation mode with one new entry per cycle and Hyperliquid-primary selection
+- **Hyperliquid:** canonical paper-trading path
+- **Polymarket:** canonical paper path, experimental overall, not live-integrated
+- **Mixed mode:** limited, asymmetric (one entry per cycle, Hyperliquid priority)
+- **CI:** offline proof only, not live exchange validation
 - **Live trading:** not implemented
 - **Production deployment claim:** unsupported
 - **Audience:** research, audit, portfolio review
