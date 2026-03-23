@@ -5,39 +5,16 @@ from typing import Any
 import warnings
 
 from models.exchange_metadata import SUPPORTED_PAPER_EXCHANGES
-
-CANONICAL_CLOSED_TRADE_FIELDS = [
-    "trade_id",
-    "exchange",
-    "symbol",
-    "side",
-    "entry_price",
-    "exit_price",
-    "position_size",
-    "position_size_usd",
-    "realized_pnl_usd",
-    "realized_pnl_pct",
-    "status",
-    "exit_reason",
-    "entry_timestamp",
-    "exit_timestamp",
-]
-
-CANONICAL_OPEN_POSITION_FIELDS = [
-    "trade_id",
-    "exchange",
-    "symbol",
-    "side",
-    "entry_price",
-    "position_size",
-    "position_size_usd",
-    "status",
-    "entry_timestamp",
-]
+from models.paper_contracts import (
+    CANONICAL_CLOSED_TRADE_FIELDS,
+    CANONICAL_OPEN_POSITION_FIELDS,
+    canonical_trade_optional_fields,
+    canonical_trade_required_fields,
+)
 
 _CANONICAL_FIELDS = {
     field: None for field in sorted(
-        set(CANONICAL_CLOSED_TRADE_FIELDS + CANONICAL_OPEN_POSITION_FIELDS)
+        set(CANONICAL_CLOSED_TRADE_FIELDS + CANONICAL_OPEN_POSITION_FIELDS + canonical_trade_optional_fields())
     )
 }
 
@@ -186,11 +163,7 @@ def validate_trade_record(record: dict[str, Any] | None, context: str = "trade")
         _warn(f"{context}: invalid status {status!r}, skipping")
         return False
 
-    required_fields = (
-        CANONICAL_OPEN_POSITION_FIELDS
-        if status == "OPEN"
-        else CANONICAL_CLOSED_TRADE_FIELDS
-    )
+    required_fields = canonical_trade_required_fields(status=status, exchange=normalized.get("exchange"))
     missing = [field for field in required_fields if normalized.get(field) is None]
     if missing:
         _warn(f"{context}: missing required fields {missing}, skipping")
@@ -198,10 +171,6 @@ def validate_trade_record(record: dict[str, Any] | None, context: str = "trade")
 
     if normalized.get("exchange") not in SUPPORTED_PAPER_EXCHANGES:
         _warn(f"{context}: unsupported exchange {normalized.get('exchange')!r}, skipping")
-        return False
-
-    if normalized.get("exchange") == "Polymarket" and normalized.get("market_id") is None:
-        _warn(f"{context}: Polymarket record missing market_id, skipping")
         return False
 
     if status == "OPEN":
@@ -214,6 +183,15 @@ def validate_trade_record(record: dict[str, Any] | None, context: str = "trade")
 
     return True
 
+
+
+
+def is_trade_open(record: dict[str, Any] | None) -> bool:
+    return _normalize_status((record or {}).get('status')) == 'OPEN'
+
+
+def is_trade_closed(record: dict[str, Any] | None) -> bool:
+    return _normalize_status((record or {}).get('status')) == 'CLOSED'
 
 def warn_on_status_transition(previous_status: Any, new_status: Any, context: str = "trade") -> bool:
     previous = _normalize_status(previous_status)
