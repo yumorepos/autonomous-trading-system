@@ -23,6 +23,7 @@ The canonical operator entrypoint is `scripts/trading-agency-phase1.py`.
    - `scripts/data-integrity-layer.py` validates source health only for exchanges enabled by the current mode.
 4. **Signal scanning**
    - `scripts/phase1-signal-scanner.py` emits canonical executable paper signals.
+   - Generated signals now pass `DataIntegrityLayer.validate_signal()` before they are appended to canonical signal history.
 5. **Pre-trade safety validation**
    - `scripts/execution-safety-layer.py` validates the next candidate paper entry.
 6. **Paper trade planning**
@@ -76,6 +77,7 @@ The verification suite currently proves:
 - bootstrap dependency checking works
 - active Python code compiles cleanly
 - mode-aware integrity gating respects selected runtime mode
+- generated paper signals are validated by the data-integrity layer before persistence
 - Hyperliquid and Polymarket paper signals conform to the expected normalized schema
 - canonical state survives isolated paper-trader lifecycle tests for Hyperliquid, Polymarket, and mixed-mode history accumulation
 - the full agency orchestrator path is exercised offline in CI for Hyperliquid, Polymarket, mixed-mode limitation handling, and negative-path blocking

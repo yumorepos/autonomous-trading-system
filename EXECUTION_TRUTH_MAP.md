@@ -13,7 +13,7 @@ Date: 2026-03-23 UTC
 2. `scripts/bootstrap-runtime-check.py`
 3. `utils/system_health.py` state/override refresh
 4. `scripts/data-integrity-layer.py` pre-scan gate
-5. `scripts/phase1-signal-scanner.py`
+5. `scripts/phase1-signal-scanner.py` + `DataIntegrityLayer.validate_signal()` for generated signals
 6. `scripts/execution-safety-layer.py`
 7. `scripts/phase1-paper-trader.py`
 8. `models/position_state.py`
@@ -25,6 +25,7 @@ Date: 2026-03-23 UTC
 | File | Writer | Truth |
 |---|---|---|
 | `workspace/logs/phase1-signals.jsonl` | `scripts/phase1-signal-scanner.py` | canonical append-only signal history |
+| `workspace/logs/rejected-signals.jsonl` | `scripts/data-integrity-layer.py` via scanner | canonical rejected-signal log for generated signals that fail validation |
 | `workspace/logs/execution-safety-state.json` | `scripts/execution-safety-layer.py` via orchestrator | canonical safety-state snapshot |
 | `workspace/logs/blocked-actions.jsonl` | `scripts/execution-safety-layer.py` | canonical record of blocked entries |
 | `workspace/logs/phase1-paper-trades.jsonl` | `scripts/phase1-paper-trader.py` | canonical append-only paper trade history |
@@ -67,7 +68,7 @@ Date: 2026-03-23 UTC
 
 | Subsystem | Shared model alignment |
 |---|---|
-| scanner | emits exchange-tagged paper signals for both exchanges |
+| scanner | emits exchange-tagged paper signals for both exchanges and validates them before persistence |
 | safety | consumes one candidate signal and uses exchange adapters for health/liquidity/spread |
 | trader | converts the signal into OPEN/CLOSED trade records |
 | trade schema | normalizes both Hyperliquid and Polymarket records |

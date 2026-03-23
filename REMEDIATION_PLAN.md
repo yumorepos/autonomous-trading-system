@@ -22,23 +22,17 @@ Date: 2026-03-23 UTC
 
 ## Phase 1 — fix canonical architecture
 
-### Task 1.1
-- **Task:** Call `DataIntegrityLayer.validate_signal()` from the canonical scanner before persisting signals.
-- **Files to edit:** `scripts/phase1-signal-scanner.py`, `scripts/data-integrity-layer.py`
-- **Why:** duplicate detection, signal decay, and rejected-signal logging are currently dead from the canonical path.
-- **Dependency/order:** after Phase 0.
-- **Risk:** medium.
-- **Done criteria:** scanner accepts/rejects signals through the integrity layer and writes accepted/rejected counts.
+**Completed on the current branch:** the canonical scanner now calls `DataIntegrityLayer.validate_signal()` before persisting signals and records accepted/rejected counts in scanner artifacts.
 
-### Task 1.2
+### Task 1.1
 - **Task:** Either retire `scripts/exit-monitor.py` from the active tree or rewrite it as a pure canonical-state reader.
 - **Files to edit:** `scripts/exit-monitor.py`, `docs/RUNTIME_OBSERVABILITY.md`, `docs/SYSTEM_ARCHITECTURE.md`
 - **Why:** it is intentionally skipped today because it can confuse proof/reporting with authoritative persistence.
-- **Dependency/order:** after 1.1.
+- **Dependency/order:** after Phase 0.
 - **Risk:** medium.
 - **Done criteria:** no active monitor script looks authoritative while being non-authoritative.
 
-### Task 1.3
+### Task 1.2
 - **Task:** Emit machine-readable mixed-mode policy in cycle/report artifacts.
 - **Files to edit:** `scripts/trading-agency-phase1.py`, `scripts/phase1-paper-trader.py`, `models/exchange_metadata.py`
 - **Why:** reviewers should not have to infer selection asymmetry from code.
@@ -51,8 +45,8 @@ Date: 2026-03-23 UTC
 ### Task 2.1
 - **Task:** Add a scanner-path regression test that fails if invalid/stale/duplicate signals are persisted.
 - **Files to edit:** add new test under `tests/`; possibly update `scripts/ci-safe-verification.sh`
-- **Why:** current tests do not prove that signal-level integrity logic runs in the canonical path.
-- **Dependency/order:** after 1.1.
+- **Why:** this keeps the newly wired signal-validation path from regressing.
+- **Dependency/order:** completed on the current branch; keep in CI.
 - **Risk:** low.
 - **Done criteria:** CI fails if scanner bypasses integrity enforcement.
 
@@ -60,7 +54,7 @@ Date: 2026-03-23 UTC
 - **Task:** Add orchestrator-level multi-cycle mixed-mode proof that accumulates both exchanges over time without breaking the one-entry-per-cycle rule.
 - **Files to edit:** add new destructive test under `tests/destructive/`; update `scripts/ci-safe-verification.sh`
 - **Why:** current mixed-mode proof is correct but still narrow.
-- **Dependency/order:** after 1.3.
+- **Dependency/order:** after 1.2.
 - **Risk:** medium.
 - **Done criteria:** one destructive test proves both shared-state accumulation and selection asymmetry at orchestrator level.
 

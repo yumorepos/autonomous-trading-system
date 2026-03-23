@@ -24,7 +24,7 @@ Bottom line:
 |---|---|---|---|
 | bootstrap/runtime check | working | `scripts/bootstrap-runtime-check.py`; `tests/bootstrap-runtime-check-test.py`; `.github/workflows/basic.yml`; `scripts/ci-safe-verification.sh` | Bootstrap is the first runtime stage, checks only Python deps, and is covered by CI. It does not prove exchange connectivity. |
 | orchestrator | working | `scripts/trading-agency-phase1.py`; `tests/destructive/trading-agency-hyperliquid-test.py`; `tests/destructive/trading-agency-polymarket-test.py` | Canonical entrypoint is `scripts/trading-agency-phase1.py`. It runs bootstrap → data integrity → scanner → safety → trader → persistence → monitors, then writes cycle/report artifacts. |
-| data integrity layer | partial | `scripts/data-integrity-layer.py`; `tests/data-integrity-mode-gate-test.py`; `tests/mixed-mode-policy-test.py`; `docs/DATA_INTEGRITY_LAYER.md` | Pre-scan API/freshness/completeness gating is wired. But the richer signal-level logic (`validate_signal`, duplicate detection, decay, rejected-signal logging) exists in code and is described in docs, yet is not called by the canonical scanner/orchestrator. |
+| data integrity layer | working with mixed-mode asymmetry | `scripts/data-integrity-layer.py`; `tests/data-integrity-mode-gate-test.py`; `tests/mixed-mode-policy-test.py`; `tests/signal-integrity-canonical-test.py`; `docs/DATA_INTEGRITY_LAYER.md` | Pre-scan API/freshness/completeness gating is wired, and generated signals now pass canonical signal-level validation before persistence. Mixed mode still treats Hyperliquid as the primary required source. |
 | signal scanner | working | `scripts/phase1-signal-scanner.py`; `tests/paper-mode-schema-test.py` | Scanner emits canonical Hyperliquid and Polymarket paper signals into one shared schema and appends them to canonical signal history. |
 | execution safety | working | `scripts/execution-safety-layer.py`; `tests/execution-safety-schema-test.py` | Safety is in the canonical loop and blocks on stale signals, duplicates, size limits, kill switch, circuit breakers, and exchange-health failures. Liquidity/spread/data-integrity checks are advisory or warning-level depending on the check. |
 | paper trader | working | `scripts/phase1-paper-trader.py`; `tests/destructive/full-lifecycle-integration-test.py`; `tests/destructive/polymarket-paper-flow-test.py` | Trader builds paper-only OPEN/CLOSED records for both exchanges, persists them, and updates canonical position state. |
@@ -38,7 +38,7 @@ Bottom line:
 | mixed mode | partial | `models/exchange_metadata.py`; `scripts/phase1-paper-trader.py`; `scripts/data-integrity-layer.py`; `tests/destructive/trading-agency-mixed-test.py`; `tests/mixed-mode-policy-test.py` | Mixed mode scans both exchanges and can accumulate both exchanges in shared state over time, but admits only one new entry per cycle and deterministically favors Hyperliquid. Secondary Polymarket health is advisory when Hyperliquid is enabled. |
 | CI workflow | working with bounded scope | `.github/workflows/basic.yml`; `scripts/ci-safe-verification.sh` | CI runs compile checks plus offline regression/destructive tests. It explicitly excludes blocking network-dependent checks. |
 | destructive/integration tests | partial | `tests/destructive/*.py`; `tests/support/trading_agency_offline.py` | Integration proof is strong for offline paper mode. There are no live exchange integration tests, authenticated execution tests, or network-backed end-to-end tests. |
-| docs truthfulness | partial | `README.md`; `SYSTEM_STATUS.md`; `docs/POLYMARKET_EXECUTION_SCOPE.md`; `docs/DATA_INTEGRITY_LAYER.md`; `docs/EXECUTION_SAFETY_LAYER.md` | Main truth surfaces are mostly accurate. Support docs for the data-integrity and safety layers still describe stronger guarantees and a broader architecture than the canonical flow actually enforces. |
+| docs truthfulness | partial | `README.md`; `SYSTEM_STATUS.md`; `docs/POLYMARKET_EXECUTION_SCOPE.md`; `docs/DATA_INTEGRITY_LAYER.md`; `docs/EXECUTION_SAFETY_LAYER.md`; `docs/archive/` | Active truth surfaces are now aligned with the current runtime, but the repository still contains substantial historical material that can mislead grep-based review. |
 
 ## C. Canonical flow map
 
@@ -71,8 +71,10 @@ Real canonical execution flow as implemented now:
 
 5. **Signal scan:** subprocess call to `scripts/phase1-signal-scanner.py`
    - Fetches market data using `utils/api_connectivity.py`.
+   - Validates each generated signal through `DataIntegrityLayer.validate_signal()` before append-only persistence.
    - Writes:
      - `workspace/logs/phase1-signals.jsonl`
+     - `workspace/logs/rejected-signals.jsonl` when signal-level validation rejects a candidate
      - `workspace/PHASE1_SIGNAL_REPORT.md`
      - runtime event stream in `workspace/logs/runtime-events.jsonl`
 
@@ -133,16 +135,7 @@ Real canonical execution flow as implemented now:
    - It does not have live authenticated integration tests.
    - It does not even make read-only network success a CI requirement.
 
-6. **Signal-level data-integrity logic is not wired into the canonical scanner flow.**
-   - The code contains duplicate detection, signal decay, rejected-signal logging, and per-signal validation.
-   - The canonical scanner does not call that logic before persisting signals.
-   - Some active docs imply this richer behavior is active now.
-
-7. **Some active support docs are stronger than the code path.**
-   - `docs/DATA_INTEGRITY_LAYER.md` says no data enters the system without passing validation, but canonical execution only runs the pre-scan gate; it does not run `validate_signal` on emitted signals.
-   - `docs/EXECUTION_SAFETY_LAYER.md` still describes a broader architecture position and future/live concepts; the top note mitigates this, but the document still reads broader than the code path actually proves.
-
-8. **There is extra non-canonical surface area that can still confuse reviewers.**
+6. **There is extra non-canonical surface area that can still confuse reviewers.**
    - `scripts/exit-monitor.py`, `scripts/live-readiness-validator.py`, `scripts/stability-monitor.py`, `scripts/portfolio-allocator.py`, `scripts/supervisor-governance.py`, and other support scripts are outside the canonical path.
    - Historical material remains extensive under `docs/archive/` and `scripts/archive/`.
 
@@ -166,21 +159,19 @@ Real canonical execution flow as implemented now:
 
 ### Phase 1: fix canonical architecture
 
-3. **Wire signal-level integrity validation into the canonical scanner before signal persistence**
-   - **Files to edit:** `scripts/phase1-signal-scanner.py`, `scripts/data-integrity-layer.py`
-   - **Why:** `validate_signal`, `apply_signal_decay`, duplicate detection, and rejected-signal logging exist but are not used in the canonical flow.
-   - **Dependency/order:** after Phase 0 doc cleanup.
-   - **Risk:** medium because this can change signal volume and downstream tests.
-   - **Done criteria:** every persisted signal has passed canonical per-signal validation; rejected signals are logged in `workspace/logs/rejected-signals.jsonl`; scanner report clearly counts accepted vs rejected signals.
+Completed on the current branch:
+- generated signals now pass `DataIntegrityLayer.validate_signal()` before append-only persistence
+- rejected generated signals are written to `workspace/logs/rejected-signals.jsonl`
+- scanner reports now expose accepted vs rejected counts
 
-4. **Reduce duplicate/non-canonical monitor surface**
+3. **Reduce duplicate/non-canonical monitor surface**
    - **Files to edit:** `scripts/exit-monitor.py`, `scripts/timeout-monitor.py`, `docs/RUNTIME_OBSERVABILITY.md`, `docs/SYSTEM_ARCHITECTURE.md`
    - **Why:** exit monitoring/reporting is split between a canonical timeout monitor and a deliberately skipped exit monitor, which confuses reviewers.
-   - **Dependency/order:** after task 3.
+   - **Dependency/order:** after Phase 0 doc cleanup.
    - **Risk:** medium.
    - **Done criteria:** either `exit-monitor.py` is archived/retired or rewritten as a pure reader over canonical state with no pseudo-authoritative semantics.
 
-5. **Make mixed-mode limitation machine-readable in runtime outputs**
+4. **Make mixed-mode limitation machine-readable in runtime outputs**
    - **Files to edit:** `scripts/trading-agency-phase1.py`, `scripts/phase1-paper-trader.py`, `models/exchange_metadata.py`
    - **Why:** current behavior is limited but correct; reports should expose that no more than one new mixed-mode entry is allowed and why a specific exchange won selection.
    - **Dependency/order:** after task 3.
@@ -189,21 +180,21 @@ Real canonical execution flow as implemented now:
 
 ### Phase 2: repair/add tests
 
-6. **Add a test that proves signal-level integrity validation is executed in the canonical path**
+5. **Keep the new signal-integrity regression in CI**
    - **Files to edit:** `tests/paper-mode-schema-test.py`, add new focused test under `tests/`
-   - **Why:** current tests prove schema output, not signal-level integrity enforcement inside the canonical scanner runtime.
-   - **Dependency/order:** after Phase 1 task 3.
+   - **Why:** the scanner now depends on signal-level validation and that should remain a hard regression surface.
+   - **Dependency/order:** completed on the current branch; maintain going forward.
    - **Risk:** low.
    - **Done criteria:** a test fails if scanner persists a stale/duplicate/expired signal without calling the integrity layer.
 
-7. **Add integration coverage for mixed-mode multi-cycle accumulation with canonical orchestrator, not just trader-only state tests**
+6. **Add integration coverage for mixed-mode multi-cycle accumulation with canonical orchestrator, not just trader-only state tests**
    - **Files to edit:** add new destructive test under `tests/destructive/`
    - **Why:** current mixed-mode agency proof covers one-cycle Hyperliquid-preferred entry and separate trader-only state accumulation, but not a stronger multi-cycle orchestrator proof of both exchanges coexisting under canonical flow.
    - **Dependency/order:** after Phase 1 task 5.
    - **Risk:** medium.
    - **Done criteria:** orchestrator-level mixed-mode test shows both exchanges can appear in canonical shared state across multiple cycles while preserving the one-entry-per-cycle rule.
 
-8. **Add a negative-path Polymarket test suite around bad market payloads and schema rejection**
+7. **Add a negative-path Polymarket test suite around bad market payloads and schema rejection**
    - **Files to edit:** add tests under `tests/` and `tests/destructive/` as needed
    - **Why:** current Polymarket proof is mostly happy-path paper-mode coverage.
    - **Dependency/order:** parallel with task 7.
