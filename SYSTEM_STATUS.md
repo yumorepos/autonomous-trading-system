@@ -1,7 +1,7 @@
 # System Status
 
 **Last Updated:** 2026-03-22 UTC  
-**Verdict:** Paper-trading research system with canonical Hyperliquid and Polymarket paths, stronger offline runtime observability, and limited mixed-mode semantics
+**Verdict:** Paper-trading research system with canonical Hyperliquid and Polymarket paper paths, Polymarket experimental overall, and limited mixed-mode semantics
 
 ---
 
@@ -36,7 +36,7 @@
 - live trading is not implemented
 - no production deployment claim is justified
 - external API reachability is environment-dependent and not guaranteed by CI
-- Polymarket now uses the same canonical paper-trading runtime stages, persistence, and monitors as Hyperliquid
+- Polymarket now uses the same canonical paper-trading runtime stages, persistence, and monitors as Hyperliquid, but remains experimental overall
 - mixed mode remains limited and should not be presented as a fully proven side-by-side runtime
 - some retained support scripts model future workflows and are **not** canonical execution
 

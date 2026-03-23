@@ -25,6 +25,7 @@ from config.runtime import (
     mode_includes_polymarket,
 )
 from utils.api_connectivity import fetch_hyperliquid_meta, fetch_polymarket_markets
+from models.exchange_metadata import paper_exchange_is_experimental
 from utils.json_utils import safe_read_jsonl
 from utils.runtime_logging import append_runtime_event
 
@@ -102,7 +103,7 @@ def scan_hyperliquid_funding() -> list[dict]:
             'conviction': conviction,
             'recommended_position_size_usd': CANONICAL_POSITION_SIZES['Hyperliquid'],
             'paper_only': True,
-            'experimental': False,
+            'experimental': paper_exchange_is_experimental('Hyperliquid'),
         })
 
     opportunities.sort(key=lambda x: x['ev_score'], reverse=True)
@@ -212,7 +213,7 @@ def scan_polymarket_markets() -> list[dict]:
             'conviction': conviction,
             'recommended_position_size_usd': CANONICAL_POSITION_SIZES['Polymarket'],
             'paper_only': True,
-            'experimental': False,
+            'experimental': paper_exchange_is_experimental('Polymarket'),
         })
 
     opportunities.sort(key=lambda x: x['ev_score'], reverse=True)

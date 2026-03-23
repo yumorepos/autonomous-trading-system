@@ -9,7 +9,7 @@ This repository implements a **Phase 1 paper-trading execution path** for truthf
 
 Current repo truth:
 - **canonical paper-trading path:** Hyperliquid via `scripts/trading-agency-phase1.py`
-- **canonical paper-trading path:** Polymarket in `polymarket_only`, using the same shared architecture and deterministic offline agency proof
+- **canonical paper-trading path:** Polymarket in `polymarket_only`, using the same shared architecture and deterministic offline agency proof, but experimental overall
 - **limited evaluation mode:** `mixed`
 - **live trading:** not implemented
 - **real-money execution:** not supported
@@ -42,7 +42,7 @@ That script runs this Phase 1 paper-trading flow:
 | Mode | Purpose | Truthful status |
 |---|---|---|
 | `hyperliquid_only` | Default paper-trading run | canonical and best-supported |
-| `polymarket_only` | Polymarket paper-trading run | canonical paper-trading path with offline proof |
+| `polymarket_only` | Polymarket paper-trading run | canonical paper-trading path with offline proof; experimental overall |
 | `mixed` | Shared-state evaluation across both exchanges | limited experimental mode; not the canonical proof path |
 
 ## Canonical Architecture
@@ -90,12 +90,12 @@ Run the same suite locally with:
 
 ## What CI Does Not Prove
 
-- the agency entrypoint in `scripts/trading-agency-phase1.py` is exercised offline in CI for Hyperliquid, Polymarket, mixed-mode limitation confirmation, and orchestrator negative-path blocking
+- live API reachability during `scripts/trading-agency-phase1.py` execution is not proven by CI
 - runtime connectivity to external APIs is not a blocking CI guarantee
 - no live trading support exists
 - no real-money execution path exists
 - `mixed` is not proven as a simultaneous dual-entry runtime; it remains a limited deterministic evaluation mode
-- Polymarket is canonical at the paper-trading level but does not imply live readiness
+- Polymarket is canonical at the paper-trading level, experimental overall, and does not imply live readiness
 
 ## Operator Quickstart
 
@@ -176,7 +176,7 @@ workspace/   Runtime state, operator controls, logs, and generated artifacts.
 
 - **Execution mode:** paper trading only
 - **Canonical exchange path:** Hyperliquid
-- **Experimental exchange path:** Polymarket paper trading with deterministic offline agency-level proof and canonical persistence compatibility
+- **Experimental exchange path:** Polymarket canonical paper trading with deterministic offline agency-level proof, but experimental overall
 - **Mixed mode:** limited experimental evaluation mode
 - **Live trading:** not implemented
 - **Production deployment claim:** unsupported

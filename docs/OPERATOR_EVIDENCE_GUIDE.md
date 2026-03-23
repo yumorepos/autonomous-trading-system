@@ -9,7 +9,7 @@
 - Cycle-level inspectability: `workspace/logs/agency-cycle-summary.json` and `workspace/AGENCY_CYCLE_SUMMARY.md`.
 
 ### Experimental or limited
-- `polymarket_only` is offline-proven as a paper path, but still experimental.
+- `polymarket_only` is offline-proven as a canonical paper path, but still experimental overall.
 - `mixed` remains a limited evaluation mode, not the portfolio claim path.
 - Live execution is not proven because it is not implemented.
 
@@ -47,7 +47,7 @@ python3 scripts/hyperliquid-offline-soak.py --cycles 12
 - End-to-end Hyperliquid proof: `tests/destructive/trading-agency-hyperliquid-test.py`
 - Repeat-cycle deterministic stability: `tests/destructive/trading-agency-hyperliquid-repeat-cycle-test.py`
 - Negative-path truthfulness: `tests/destructive/trading-agency-negative-path-test.py`
-- Experimental Polymarket paper path: `tests/destructive/trading-agency-polymarket-test.py`
+- Canonical Polymarket paper path (experimental overall): `tests/destructive/trading-agency-polymarket-test.py`
 - Mixed-mode limited handling: `tests/destructive/trading-agency-mixed-test.py`
 
 ## What This Phase Does Not Claim
@@ -55,4 +55,4 @@ python3 scripts/hyperliquid-offline-soak.py --cycles 12
 - No production-readiness claim.
 - No live-trading claim.
 - No claim that mixed mode is fully mature.
-- No claim that Polymarket is canonical.
+- No claim that Polymarket is anything more than a canonical paper path with experimental overall status.
