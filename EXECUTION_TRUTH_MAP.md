@@ -1,92 +1,144 @@
 # Execution Truth Map
 
-Date: 2026-03-23 UTC
+Audit date: 2026-03-23 UTC
 
 ## Canonical entrypoint
 
-- **Actual entrypoint:** `scripts/trading-agency-phase1.py`
-- **Not the entrypoint:** `scripts/bootstrap-runtime-check.py`
+- **Canonical operator entrypoint:** `scripts/trading-agency-phase1.py`
+- **Not the canonical entrypoint:** `scripts/bootstrap-runtime-check.py`
+- **Explicitly non-canonical in the main loop:** `scripts/exit-monitor.py`
 
-## Real execution sequence
+## Authoritative code path
 
-1. `scripts/trading-agency-phase1.py`
-2. `scripts/bootstrap-runtime-check.py`
-3. `utils/system_health.py` state/override refresh
-4. `scripts/data-integrity-layer.py` pre-scan gate
-5. `scripts/phase1-signal-scanner.py` + `DataIntegrityLayer.validate_signal()` for generated signals
-6. `scripts/execution-safety-layer.py`
-7. `scripts/phase1-paper-trader.py`
-8. `models/position_state.py`
+1. `config/runtime.py`
+   - Resolves workspace paths and creates directories.
+
+2. `scripts/trading-agency-phase1.py`
+   - Main orchestrator.
+   - Prints mode truth statement.
+   - Creates `SystemHealthManager`.
+
+3. `scripts/bootstrap-runtime-check.py`
+   - Dependency-only bootstrap stage.
+
+4. `utils/system_health.py`
+   - Writes / refreshes:
+     - `workspace/operator_control.json`
+     - `workspace/system_health.json`
+     - `workspace/system_status.json`
+     - `workspace/logs/operator-control-audit.json`
+     - incident/operator logs as needed
+
+5. `scripts/data-integrity-layer.py`
+   - Pre-scan source health gate.
+   - Writes:
+     - `workspace/logs/data-integrity-state.json`
+     - `workspace/logs/source-reliability-metrics.json`
+     - `workspace/DATA_HEALTH_REPORT.md` in standalone mode
+     - runtime events / incidents
+
+6. `scripts/phase1-signal-scanner.py`
+   - Generates paper signals for enabled exchanges.
+   - Calls signal integrity validation before append.
+   - Writes:
+     - `workspace/logs/phase1-signals.jsonl`
+     - `workspace/PHASE1_SIGNAL_REPORT.md`
+     - runtime events
+
+7. `scripts/execution-safety-layer.py`
+   - Validates one selected candidate entry.
+   - Writes:
+     - `workspace/logs/execution-safety-state.json`
+     - `workspace/logs/blocked-actions.jsonl` when blocking
+     - `workspace/logs/incident-log.jsonl`
+
+8. `scripts/phase1-paper-trader.py`
+   - Builds exit records first, then possibly one new entry record.
+   - Uses `utils/paper_exchange_adapters.py`.
+   - Persists via:
+     - `workspace/logs/phase1-paper-trades.jsonl`
+     - `workspace/logs/position-state.json`
+     - `workspace/logs/phase1-performance.json`
+     - runtime events
+
 9. `scripts/timeout-monitor.py`
-10. cycle/report packaging inside `scripts/trading-agency-phase1.py`
+   - Reads authoritative open-position state only.
+   - Writes monitoring artifacts only:
+     - `workspace/logs/timeout-history.jsonl`
+     - `workspace/TIMEOUT_MONITOR_REPORT.md`
+     - runtime events
 
-## State written in canonical flow
+10. `scripts/trading-agency-phase1.py` final reporting
+    - Writes:
+      - `workspace/logs/agency-cycle-summary.json`
+      - `workspace/AGENCY_CYCLE_SUMMARY.md`
+      - `workspace/logs/agency-phase1-report.json`
 
-| File | Writer | Truth |
-|---|---|---|
-| `workspace/logs/phase1-signals.jsonl` | `scripts/phase1-signal-scanner.py` | canonical append-only signal history |
-| `workspace/logs/rejected-signals.jsonl` | `scripts/data-integrity-layer.py` via scanner | canonical rejected-signal log for generated signals that fail validation |
-| `workspace/logs/execution-safety-state.json` | `scripts/execution-safety-layer.py` via orchestrator | canonical safety-state snapshot |
-| `workspace/logs/blocked-actions.jsonl` | `scripts/execution-safety-layer.py` | canonical record of blocked entries |
-| `workspace/logs/phase1-paper-trades.jsonl` | `scripts/phase1-paper-trader.py` | canonical append-only paper trade history |
-| `workspace/logs/position-state.json` | `models/position_state.py` | authoritative open-position state |
-| `workspace/logs/phase1-performance.json` | `scripts/phase1-paper-trader.py` | canonical closed-trade performance summary |
-| `workspace/logs/timeout-history.jsonl` | `scripts/timeout-monitor.py` | monitor-only history |
-| `workspace/TIMEOUT_MONITOR_REPORT.md` | `scripts/timeout-monitor.py` | monitor-only human report |
-| `workspace/logs/agency-cycle-summary.json` | `scripts/trading-agency-phase1.py` | canonical small per-cycle summary |
-| `workspace/AGENCY_CYCLE_SUMMARY.md` | `scripts/trading-agency-phase1.py` | human-readable cycle summary |
-| `workspace/logs/agency-phase1-report.json` | `scripts/trading-agency-phase1.py` | full cycle report |
-| `workspace/system_health.json` | `utils/system_health.py` | health-state record |
-| `workspace/system_status.json` | `utils/system_health.py` | current computed operator/system status |
+## State model agreement
+
+### Files that agree on the canonical trade/state model
+
+- `models/trade_schema.py`
+- `models/position_state.py`
+- `scripts/phase1-paper-trader.py`
+- `scripts/performance-dashboard.py`
+- `scripts/execution-safety-layer.py`
+- `scripts/timeout-monitor.py`
+- `scripts/exit-monitor.py` (reader only; non-canonical)
+
+### What currently agrees
+
+- One append-only trade history file for both exchanges.
+- One authoritative open-position file for both exchanges.
+- Performance is derived from normalized closed trades only.
+- Dashboard and monitors read the same canonical outputs.
+- Scanner integrity now enforces the paper adapter's declared exchange-specific signal contracts before persistence.
+
+### Where agreement is still imperfect
+
+- Signal executability and canonical paper-trade/open-position requirements are now centralized in `models/paper_contracts.py` and consumed by the canonical validators, trader, persistence layer, and key readers.
+- Remaining asymmetries are intentional, not accidental: Polymarket records require `market_id`, Polymarket stays experimental overall, and mixed mode still gives deterministic priority to Hyperliquid.
 
 ## Mode truth map
 
 ### `hyperliquid_only`
 
-- Scanner includes Hyperliquid only.
-- Data-integrity gate requires Hyperliquid only.
-- Trade candidate selection can admit only Hyperliquid signals.
-- This is the strongest and most-proven path.
+- Includes Hyperliquid scanner/integrity/safety/trader path.
+- Excludes Polymarket from scanner and pre-scan integrity gate.
+- This is the best-supported canonical mode.
 
 ### `polymarket_only`
 
-- Scanner includes Polymarket only.
-- Data-integrity gate requires Polymarket only.
-- Trader, schema, position state, performance, and timeout monitor all support Polymarket.
+- Includes Polymarket scanner/integrity/safety/trader path.
+- Excludes Hyperliquid from scanner and pre-scan integrity gate.
 - This is a real canonical **paper** path, but still experimental overall.
 
 ### `mixed`
 
-- Scanner includes both exchanges.
-- Data-integrity gate requires Hyperliquid but downgrades Polymarket availability to advisory if Hyperliquid is present.
-- Candidate selection sorts by exchange priority then EV score.
-- `models/exchange_metadata.py` sets Hyperliquid priority `0` and Polymarket priority `1`.
-- Only one new entry is admitted per cycle.
+- Scans both exchanges.
+- Data integrity treats Polymarket as secondary/advisory when Hyperliquid is also enabled.
+- Trader selects at most **one** new candidate per cycle.
+- Exchange priority prefers Hyperliquid.
 - This is not a dual-entry proof path.
 
-## State-model agreement check
+## Non-canonical and historical surfaces
 
-| Subsystem | Shared model alignment |
-|---|---|
-| scanner | emits exchange-tagged paper signals for both exchanges and validates them before persistence |
-| safety | consumes one candidate signal and uses exchange adapters for health/liquidity/spread |
-| trader | converts the signal into OPEN/CLOSED trade records |
-| trade schema | normalizes both Hyperliquid and Polymarket records |
-| position state | stores open positions from both exchanges in one map |
-| timeout monitor | reads canonical open positions and uses exchange thresholds |
-| performance dashboard | reads normalized closed trades and canonical open positions |
+### Non-canonical support scripts
 
-Conclusion: the main canonical subsystems agree on a single paper-trading state model. The biggest drift risk is not schema mismatch; it is **truth-surface mismatch** between active docs and what the canonical runtime actually calls.
+- `scripts/exit-monitor.py`
+- `scripts/live-readiness-validator.py`
+- `scripts/stability-monitor.py`
+- `scripts/supervisor-governance.py`
 
-## Non-canonical map
+### Historical/scaffold surfaces
 
-| File | Truth |
-|---|---|
-| `scripts/exit-monitor.py` | proof/audit only; skipped by orchestrator |
-| `scripts/live-readiness-validator.py` | future-scope research model |
-| `scripts/stability-monitor.py` | support-only observability |
-| `scripts/exit-safeguards.py` | support utility |
-| `scripts/position-exit-tracker.py` | support utility |
-| `scripts/enhanced-exit-capture.py` | support utility |
-| `scripts/archive/*` | historical/scaffold |
-| `docs/archive/*` | historical/scaffold |
+- `scripts/archive/`
+- `docs/archive/`
+
+### Labeled active-doc examples that remain non-authoritative
+
+- `docs/TIMEOUT_MONITOR_REPORT.md`
+- `docs/POSITION_TRACKING_REPORT.md`
+- `docs/EXIT_TRACKER_REPORT.md`
+
+These files are now explicitly marked non-canonical/historical examples and should not be used as canonical capability evidence.
