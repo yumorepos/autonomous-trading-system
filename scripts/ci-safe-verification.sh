@@ -25,6 +25,7 @@ run_step '3/4 script regression tests' bash -lc '
     tests/execution-safety-schema-test.py \
     tests/mixed-mode-policy-test.py \
     tests/polymarket-metadata-truth-test.py \
+    tests/signal-integrity-canonical-test.py \
     tests/repo-truth-guard-test.py \
     tests/performance-dashboard-canonical-test.py \
     tests/timeout-monitor-polymarket-threshold-test.py

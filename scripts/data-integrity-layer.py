@@ -128,7 +128,8 @@ class DataIntegrityLayer:
                 }
             },
             'last_validated_data': {},
-            'validation_failures': []
+            'validation_failures': [],
+            'recent_signals': [],
         }
     
     def save_state(self):
@@ -187,6 +188,37 @@ class DataIntegrityLayer:
             if reason not in self.metrics[source]['rejection_reasons']:
                 self.metrics[source]['rejection_reasons'][reason] = 0
             self.metrics[source]['rejection_reasons'][reason] += 1
+
+    def _signal_history_record(self, signal: Dict) -> Dict:
+        return {
+            'timestamp': signal.get('timestamp'),
+            'source': signal.get('source'),
+            'exchange': signal.get('exchange'),
+            'asset': signal.get('asset'),
+            'symbol': signal.get('symbol'),
+            'signal_type': signal.get('signal_type'),
+            'entry_price': signal.get('entry_price'),
+            'market_id': signal.get('market_id'),
+            'token_id': signal.get('token_id'),
+            'ev_score': signal.get('ev_score'),
+            'ev_score_decayed': signal.get('ev_score_decayed'),
+        }
+
+    def _record_recent_signal(self, signal: Dict) -> None:
+        recent_signals = self.state.setdefault('recent_signals', [])
+        recent_signals.append(self._signal_history_record(signal))
+        self.state['recent_signals'] = recent_signals[-200:]
+
+    def _record_validation_failure(self, source: str, signal: Dict, validations: List[ValidationResult]) -> None:
+        failures = self.state.setdefault('validation_failures', [])
+        failures.append({
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'source': source,
+            'asset': signal.get('asset') or signal.get('market_id') or signal.get('symbol'),
+            'signal_type': signal.get('signal_type'),
+            'failed_checks': [asdict(result) for result in validations if not result.passed],
+        })
+        self.state['validation_failures'] = failures[-50:]
     
     # === SOURCE HEALTH MONITORING ===
     
@@ -458,6 +490,15 @@ class DataIntegrityLayer:
     
     def validate_signal(self, signal: Dict, source: str) -> Tuple[bool, List[ValidationResult]]:
         """Validate a generated signal before it can influence decisions"""
+        source_key = str(source).lower()
+        self.metrics.setdefault(source_key, {
+            'total_requests': 0,
+            'total_failures': 0,
+            'avg_latency_ms': 0,
+            'signals_generated': 0,
+            'signals_rejected': 0,
+            'rejection_reasons': {},
+        })
         validations = []
         
         # Required fields
@@ -499,10 +540,12 @@ class DataIntegrityLayer:
         
         # Log if rejected
         if not passed:
-            self.log_rejected_signal(source, signal, "Validation failed", validations)
+            self.log_rejected_signal(source_key, signal, "Validation failed", validations)
+            self._record_validation_failure(source_key, signal, validations)
         else:
             # Update metrics
-            self.metrics[source]['signals_generated'] += 1
+            self.metrics[source_key]['signals_generated'] += 1
+            self._record_recent_signal(signal)
         
         return passed, validations
     

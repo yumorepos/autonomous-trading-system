@@ -13,13 +13,12 @@ This matrix lists the concrete gaps between the current repository and any truth
 | Hyperliquid is also paper-only | `utils/paper_exchange_adapters.py`, `README.md` | Hyperliquid path also stops at paper trade records. | “Integrated” is truthful only with a paper-trading qualifier. | Critical |
 | Mixed mode is not peer/dual execution | `models/exchange_metadata.py`, `scripts/phase1-paper-trader.py`, `scripts/data-integrity-layer.py` | One new entry per cycle; Hyperliquid priority winner; secondary Polymarket health advisory. | Prevents any claim that mixed mode is a mature dual-exchange runtime. | High |
 | CI does not prove live/network-backed end-to-end behavior | `.github/workflows/basic.yml`, `scripts/ci-safe-verification.sh` | CI intentionally excludes blocking network-dependent checks and uses offline fixtures for destructive tests. | The repo is well-tested offline, not live-integrated. | High |
-| Signal-level integrity logic is not in the canonical scanner path | `scripts/data-integrity-layer.py`, `scripts/phase1-signal-scanner.py` | `validate_signal`, duplicate detection, signal decay, rejected-signal logging exist but are unused by the canonical scanner. | Current docs overstate what is enforced before signal persistence. | High |
 | Non-canonical exit monitor duplicates exchange logic | `scripts/exit-monitor.py`, `utils/paper_exchange_adapters.py` | Extra proof/report surface exists outside canonical flow. | Extra maintenance surface and truth confusion. | Medium |
-| Support docs describe stronger guarantees than active runtime | `docs/DATA_INTEGRITY_LAYER.md`, `docs/EXECUTION_SAFETY_LAYER.md` | Documents describe broader behavior than the canonical entrypoint currently executes. | Truthfulness gap even without code bugs. | Medium |
 | Support scripts can be mistaken for active execution | `scripts/live-readiness-validator.py`, `scripts/exit-monitor.py`, `scripts/stability-monitor.py` | Present in active tree, not on canonical path. | Confuses reviewers about what is real. | Medium |
+| Historical archive remains large and grep-visible | `docs/archive/`, `scripts/archive/` | Old conclusions and historical scaffolding remain in-tree. | Reviewers can still confuse historical material with current truth. | Medium |
 | No live integration tests for Polymarket | `tests/`, `.github/workflows/basic.yml` | Strong offline paper tests only. | Paper proof does not imply live integration. | High |
 | No authenticated-client abstraction split between paper and live | `utils/paper_exchange_adapters.py` | Paper adapters are the only exchange adapters. | Makes future live integration harder and keeps nomenclature ambiguous. | Medium |
-| Top truth surfaces are honest, but support-doc truth guard is incomplete | `tests/repo-truth-guard-test.py` | Test protects a few docs, not all active docs. | Allows support-doc drift back into overclaim territory. | Low |
+| Top truth surfaces are honest, but docs truth guard is incomplete | `tests/repo-truth-guard-test.py` | Test protects a few docs, not all active docs. | Allows support-doc drift back into overclaim territory. | Low |
 
 ## Exchange-by-exchange summary
 
