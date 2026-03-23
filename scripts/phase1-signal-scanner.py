@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
+import importlib.util
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,6 +48,20 @@ def trading_mode_summary() -> str:
         if TRADING_MODE == 'polymarket_only'
         else "Mixed Hyperliquid + Polymarket"
     )
+
+
+def load_script_module(script_name: str, module_name: str):
+    script_path = REPO_ROOT / "scripts" / script_name
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load module from {script_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def signal_rank_score(signal: dict) -> float:
+    return float(signal.get('ev_score_decayed', signal.get('ev_score', 0)) or 0)
 
 
 
@@ -278,8 +293,54 @@ def log_signals(signals: list[dict]) -> None:
             )
 
 
+def enforce_signal_integrity(signals: list[dict]) -> tuple[list[dict], dict]:
+    integrity_module = load_script_module("data-integrity-layer.py", "phase1_scanner_data_integrity")
+    integrity = integrity_module.DataIntegrityLayer()
 
-def generate_report(signals: list[dict]) -> None:
+    accepted_signals: list[dict] = []
+    rejected_signals = 0
+    for raw_signal in signals:
+        signal = dict(raw_signal)
+        source_key = str(signal.get('exchange', signal.get('source', 'unknown'))).lower()
+        passed, validations = integrity.validate_signal(signal, source_key)
+        if passed:
+            accepted_signals.append(signal)
+            continue
+
+        rejected_signals += 1
+        append_runtime_event(
+            stage="signal_scanner",
+            exchange=signal.get('exchange', signal.get('source', 'unknown')),
+            lifecycle_stage="signal_rejected",
+            status="WARN",
+            message="Signal rejected by canonical data-integrity validation",
+            metadata={
+                'signal_type': signal.get('signal_type'),
+                'symbol': signal.get('symbol'),
+                'asset': signal.get('asset'),
+                'failed_checks': [result.check_name for result in validations if not result.passed],
+            },
+        )
+
+    integrity.save_state()
+    integrity.save_metrics()
+
+    summary = {'accepted': len(accepted_signals), 'rejected': rejected_signals}
+    append_runtime_event(
+        stage="signal_scanner",
+        exchange="system",
+        lifecycle_stage="signal_integrity",
+        status="WARN" if rejected_signals else "INFO",
+        message=(
+            f"Signal integrity validation accepted {summary['accepted']} signal(s) and rejected {summary['rejected']} signal(s)"
+        ),
+        metadata=summary,
+    )
+    return accepted_signals, summary
+
+
+def generate_report(signals: list[dict], integrity_summary: dict | None = None) -> None:
+    integrity_summary = integrity_summary or {'accepted': len(signals), 'rejected': 0}
     report = f"""# Phase 1 Signal Report -- Paper Scan
 **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}  
 **Mode:** Paper Trading Research Only  
@@ -326,6 +387,9 @@ def generate_report(signals: list[dict]) -> None:
 - Hyperliquid remains the default canonical paper-trading path.
 - Polymarket signals are canonical paper-trading signals when the mode includes Polymarket.
 - Mixed mode remains a limited deterministic one-entry-per-cycle evaluation path and is not a dual-entry runtime.
+- Canonical signal persistence is gated by `DataIntegrityLayer.validate_signal()` before append-only logging.
+- Accepted signals this scan: {integrity_summary['accepted']}
+- Rejected signals this scan: {integrity_summary['rejected']}
 """
 
     with open(REPORT_FILE, 'w') as f:
@@ -349,23 +413,28 @@ def main() -> None:
     if mode_includes_polymarket(TRADING_MODE):
         signals.extend(scan_polymarket_markets())
 
-    signals.sort(key=lambda x: x['ev_score'], reverse=True)
-    top_signals = signals[:8]
+    signals.sort(key=signal_rank_score, reverse=True)
+    validated_signals, integrity_summary = enforce_signal_integrity(signals)
+    validated_signals.sort(key=signal_rank_score, reverse=True)
+    top_signals = validated_signals[:8]
 
     print()
     print(f"[STATS] Total Signals Found: {len(signals)}")
+    print(f"[CHECK] Accepted by canonical integrity validation: {integrity_summary['accepted']}")
+    print(f"[BLOCK] Rejected by canonical integrity validation: {integrity_summary['rejected']}")
     print(f"[TARGET] Top Signals Selected: {len(top_signals)}")
     print()
 
     if top_signals:
         for i, sig in enumerate(top_signals[:5], 1):
             label = sig.get('market_question', sig.get('asset', 'Unknown'))
-            print(f"  {i}. [{sig['exchange']}] {label} - EV: {sig['ev_score']:.2f} ({sig['conviction']})")
+            print(f"  {i}. [{sig['exchange']}] {label} - EV: {signal_rank_score(sig):.2f} ({sig['conviction']})")
         log_signals(top_signals)
-        generate_report(top_signals)
+        generate_report(top_signals, integrity_summary)
         print()
         print("[OK] Scan complete")
     else:
+        generate_report(top_signals, integrity_summary)
         print("[WARN] No high-quality signals found this scan")
 
 

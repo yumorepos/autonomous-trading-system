@@ -29,7 +29,7 @@ That script runs this Phase 1 paper-trading flow:
 
 1. bootstrap/runtime dependency verification
 2. mode-aware data-integrity validation
-3. signal scanning for the enabled exchange set
+3. signal scanning for the enabled exchange set, with signal-level integrity validation before persistence
 4. execution-safety validation
 5. paper-trade planning and persistence
 6. canonical state update in `workspace/logs/`
@@ -75,6 +75,7 @@ The safe verification suite proves:
 - bootstrap dependency checks behave correctly
 - compile/syntax validation succeeds for active Python code
 - mode-aware data-integrity gating respects the selected runtime mode
+- generated paper signals are validated by the data-integrity layer before they are appended to canonical signal history
 - Hyperliquid and Polymarket paper signal schemas normalize into the expected structure
 - isolated paper-trader lifecycle flows persist and clear canonical state correctly
 - offline agency-entrypoint proofs now cover Hyperliquid success, Polymarket success, mixed-mode limitation, and orchestrator negative-path blocking
