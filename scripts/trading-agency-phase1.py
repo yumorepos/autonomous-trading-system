@@ -499,21 +499,18 @@ def compute_cycle_result(stage_index: dict[str, StageResult], trader_data: dict,
     return 'COMPLETED'
 
 
+def _file_entry(path: Path, kind: str) -> dict:
+    entry = {'path': str(path), 'kind': kind}
+    if path.suffix == '.jsonl' and path.exists():
+        entry['records'] = count_jsonl_records(path)
+    return entry
+
+
 def authoritative_files_written(stage_index: dict[str, StageResult]) -> list[dict]:
     files: list[dict] = []
     scanner_stage = stage_index.get('signal_scanner')
     if scanner_stage and scanner_stage.status == StageStatus.SUCCESS.value and (LOGS_DIR / "phase1-signals.jsonl").exists():
-        files.append({
-            'path': str(LOGS_DIR / "phase1-signals.jsonl"),
-            'kind': 'signal_history',
-            'records': count_jsonl_records(LOGS_DIR / "phase1-signals.jsonl"),
-        })
-
-    if (LOGS_DIR / "execution-safety-state.json").exists():
-        files.append({
-            'path': str(LOGS_DIR / "execution-safety-state.json"),
-            'kind': 'safety_state',
-        })
+        files.append(_file_entry(LOGS_DIR / "phase1-signals.jsonl", 'signal_history'))
 
     state_stage = stage_index.get('authoritative_state_update')
     if state_stage and state_stage.status == StageStatus.SUCCESS.value:
@@ -523,12 +520,23 @@ def authoritative_files_written(stage_index: dict[str, StageResult]) -> list[dic
             (LOGS_DIR / "phase1-performance.json", 'performance_summary'),
         ):
             if path.exists():
-                entry = {'path': str(path), 'kind': kind}
-                if path.suffix == '.jsonl':
-                    entry['records'] = count_jsonl_records(path)
-                files.append(entry)
+                files.append(_file_entry(path, kind))
 
-    files.append({'path': str(AGENCY_REPORT), 'kind': 'agency_report'})
+    return files
+
+
+def advisory_files_written() -> list[dict]:
+    files: list[dict] = []
+    for path, kind in (
+        (LOGS_DIR / "execution-safety-state.json", 'safety_state'),
+        (LOGS_DIR / "timeout-history.jsonl", 'timeout_history'),
+        (WORKSPACE / "TIMEOUT_MONITOR_REPORT.md", 'timeout_report'),
+        (AGENCY_CYCLE_SUMMARY_JSON, 'agency_cycle_summary'),
+        (AGENCY_CYCLE_SUMMARY_MD, 'agency_cycle_summary_markdown'),
+    ):
+        if path.exists():
+            files.append(_file_entry(path, kind))
+
     return files
 
 
@@ -538,6 +546,7 @@ def write_cycle_summary_markdown(summary: dict) -> None:
     entry_trade = entry.get('trade') or {}
     exit_outcome = summary.get('exit_outcome') or {}
     files = summary.get('authoritative_files_written', [])
+    advisory_files = summary.get('advisory_files_written', [])
 
     lines = [
         "# Agency Cycle Summary",
@@ -575,6 +584,15 @@ def write_cycle_summary_markdown(summary: dict) -> None:
     ]
     if files:
         lines.extend([f"- `{item['kind']}`: `{item['path']}`" for item in files])
+    else:
+        lines.append("- None")
+    lines.extend([
+        "",
+        "## Advisory Files Written",
+        "",
+    ])
+    if advisory_files:
+        lines.extend([f"- `{item['kind']}`: `{item['path']}`" for item in advisory_files])
     else:
         lines.append("- None")
     lines.extend([
@@ -658,7 +676,11 @@ def build_cycle_summary(stage_results: list[StageResult], performance: dict | No
             'closed_trades': (performance or {}).get('total_trades', 0),
         },
         'authoritative_files_written': authoritative_files_written(stage_index),
+        'advisory_files_written': [],
     }
+    write_json_atomic(AGENCY_CYCLE_SUMMARY_JSON, summary)
+    write_cycle_summary_markdown(summary)
+    summary['advisory_files_written'] = advisory_files_written()
     write_json_atomic(AGENCY_CYCLE_SUMMARY_JSON, summary)
     write_cycle_summary_markdown(summary)
     return summary

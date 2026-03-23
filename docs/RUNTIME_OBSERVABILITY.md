@@ -23,6 +23,7 @@ The cycle summary is intentionally small and operator-focused:
 - exit outcome (`executed`, `checked_none_triggered`, `no_open_positions`, etc.)
 - rejection reason when applicable
 - authoritative files written for that cycle
+- advisory files written for that cycle
 - stage-by-stage status snapshot
 
 ## Recommended Inspection Order
@@ -36,7 +37,8 @@ The cycle summary is intentionally small and operator-focused:
 
 - The summary is derived from the same stage results used to produce `agency-phase1-report.json`.
 - The summary does not claim live fills or real orders.
-- The listed trade/state artifacts remain authoritative; the summary is a navigation and debugging layer.
+- The listed trade/state artifacts remain authoritative; safety state, timeout artifacts, and cycle summaries are advisory.
+- The summary is a navigation and debugging layer, not an authoritative execution surface on its own.
 
 ## Related Proof
 

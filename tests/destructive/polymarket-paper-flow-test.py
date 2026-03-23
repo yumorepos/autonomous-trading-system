@@ -62,7 +62,7 @@ if __name__ == '__main__':
             'conviction': 'MEDIUM',
             'recommended_position_size_usd': 5.0,
             'paper_only': True,
-            'experimental': False,
+            'experimental': True,
         }
         signals_file.parent.mkdir(parents=True, exist_ok=True)
         with open(signals_file, 'a') as handle:
@@ -73,6 +73,7 @@ if __name__ == '__main__':
         assert len(open_positions) == 1, 'Expected one Polymarket open position'
         assert open_positions[0]['exchange'] == 'Polymarket'
         assert open_positions[0]['market_id'] == 'pm-btc-up'
+        assert open_positions[0]['experimental'] is True
 
         trader.get_position_current_price = lambda position: 0.48
         plan = trader.build_execution_plan(allow_new_entries=False)

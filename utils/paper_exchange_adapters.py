@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from models.exchange_metadata import paper_exchange_is_experimental
+
 
 @dataclass(frozen=True)
 class PaperExchangeAdapter:
@@ -75,7 +77,7 @@ class HyperliquidPaperAdapter(PaperExchangeAdapter):
             'take_profit_pct': self.take_profit_pct,
             'timeout_hours': self.timeout_hours,
             'paper_only': True,
-            'experimental': False,
+            'experimental': paper_exchange_is_experimental(self.exchange),
         }
 
     def get_current_price(self, position: dict[str, Any], requests_module: Any) -> float:
@@ -160,7 +162,7 @@ class PolymarketPaperAdapter(PaperExchangeAdapter):
             'take_profit_pct': self.take_profit_pct,
             'timeout_hours': self.timeout_hours,
             'paper_only': True,
-            'experimental': False,
+            'experimental': paper_exchange_is_experimental(self.exchange),
         }
 
     def get_current_price(self, position: dict[str, Any], requests_module: Any) -> float:
