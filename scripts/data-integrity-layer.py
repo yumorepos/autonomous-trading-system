@@ -26,6 +26,7 @@ from config.runtime import (
     mode_includes_hyperliquid,
     mode_includes_polymarket,
 )
+from models.exchange_metadata import mixed_mode_primary_exchange, mixed_mode_secondary_health_is_advisory
 from utils.api_connectivity import fetch_hyperliquid_meta, fetch_polymarket_markets
 from utils.system_health import SystemHealthManager
 from utils.runtime_logging import append_runtime_event
@@ -623,7 +624,9 @@ class DataIntegrityLayer:
                 'polymarket',
                 'https://gamma-api.polymarket.com/markets',
             )
-            polymarket_severity = 'CRITICAL' if trading_mode_requires_polymarket() and not include_hyperliquid else 'WARNING'
+            polymarket_severity = 'CRITICAL'
+            if include_hyperliquid and mixed_mode_secondary_health_is_advisory():
+                polymarket_severity = 'WARNING'
             checks.append(ValidationResult(
                 passed=polymarket_ok,
                 check_name='api_availability',
@@ -647,7 +650,7 @@ class DataIntegrityLayer:
                         passed=market_count_passed,
                         check_name='data_completeness',
                         reason=f"Polymarket markets: {len(markets)} (min: {DATA_QUALITY['min_market_count']})",
-                        severity='CRITICAL' if trading_mode_requires_polymarket() and not market_count_passed else 'WARNING',
+                        severity='CRITICAL' if polymarket_severity == 'CRITICAL' and not market_count_passed else 'WARNING',
                         data={'source': 'polymarket', 'market_count': len(markets)},
                     ))
 
@@ -663,7 +666,7 @@ class DataIntegrityLayer:
                             "Polymarket sample data complete"
                             if sample_failures == 0 else f"Polymarket sample validation failed for {sample_failures} markets"
                         ),
-                        severity='CRITICAL' if trading_mode_requires_polymarket() and sample_failures else 'WARNING',
+                        severity='CRITICAL' if polymarket_severity == 'CRITICAL' and sample_failures else 'WARNING',
                         data={'source': 'polymarket', 'sample_failures': sample_failures},
                     ))
                 except Exception as exc:
@@ -671,7 +674,7 @@ class DataIntegrityLayer:
                         passed=False,
                         check_name='data_completeness',
                         reason=f"Polymarket data validation failed: {exc}",
-                        severity='CRITICAL' if trading_mode_requires_polymarket() and not include_hyperliquid else 'WARNING',
+                        severity='CRITICAL' if polymarket_severity == 'CRITICAL' else 'WARNING',
                         data={'source': 'polymarket', 'error': str(exc)},
                     ))
 
@@ -694,6 +697,10 @@ class DataIntegrityLayer:
                 'checks': [asdict(check) for check in checks],
                 'failed_critical_count': len(failed_critical),
                 'warning_failure_count': len(warning_failures),
+                'mixed_mode_primary_exchange': mixed_mode_primary_exchange() if include_hyperliquid and include_polymarket else None,
+                'mixed_mode_secondary_health_is_advisory': (
+                    mixed_mode_secondary_health_is_advisory() if include_hyperliquid and include_polymarket else None
+                ),
             },
         )
 

@@ -1,170 +1,138 @@
-# Remediation Plan
+# REMEDIATION_PLAN
 
-Date: 2026-03-22
-Goal: make the repo’s claims, architecture, metadata, and tests line up cleanly with what the code actually does.
+Date: 2026-03-23 UTC
+Goal: remove truth ambiguity, tighten canonical architecture, and separate proven paper-trading capability from unsupported live-trading implications.
 
----
+## Phase 0 - truth cleanup
 
-## Phase 0: truth cleanup
+### Task 0.1 - Quarantine or index historical contradiction surfaces
+- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, `docs/REPO_TRUTHFULNESS_AUDIT.md`, add/update `docs/archive/README.md`
+- **Why:** Active docs are mostly truthful, but repo-wide search still lands on historical contradictory material.
+- **Dependency/order:** first
+- **Risk:** low
+- **Done criteria:** active docs point reviewers to authoritative files first and explicitly say archive material is historical/non-authoritative.
 
-### Task 0.1 — remove stale active contradictions
-- **Files to edit:** `docs/SYSTEM_ARCHITECTURE.md`, `SYSTEM_STATUS.md`, `PROOF_MATRIX.md`, `docs/REPO_TRUTHFULNESS_AUDIT.md`
-- **Why:** active docs should agree on what CI now proves and on the exact paper-only scope.
-- **Dependency/order:** first.
-- **Risk:** low.
-- **Done criteria:** no active doc says the agency orchestrator is untested end-to-end in CI if offline agency tests remain in CI.
+### Task 0.2 - Rename misleading test descriptions and comments
+- **Files to edit:** `tests/destructive/*.py`, `scripts/ci-safe-verification.sh`, `PROOF_MATRIX.md`
+- **Why:** many tests are not destructive against real state and are not live integration tests.
+- **Dependency/order:** after 0.1
+- **Risk:** low
+- **Done criteria:** naming and proof language make the offline/fixture-backed nature obvious.
 
-### Task 0.2 — standardize the Polymarket truth label
-- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, `docs/OPERATOR_QUICKSTART.md`, `docs/OPERATOR_EVIDENCE_GUIDE.md`, `docs/POLYMARKET_TESTNET_RESEARCH.md`
-- **Why:** repo messaging should consistently say “canonical paper path, experimental overall, not live-ready.”
-- **Dependency/order:** after 0.1.
-- **Risk:** low.
-- **Done criteria:** active docs use one consistent phrase set for Polymarket and mixed mode.
+### Task 0.3 - Tighten mixed-mode wording
+- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, `docs/SYSTEM_ARCHITECTURE.md`, `PROOF_MATRIX.md`
+- **Why:** docs should explicitly say mixed mode is Hyperliquid-primary, one-entry-per-cycle, and not a symmetric dual runtime.
+- **Dependency/order:** after 0.1
+- **Risk:** low
+- **Done criteria:** no active doc can be read as implying a dual-entry mixed runtime.
 
-### Task 0.3 — quarantine future-scope/support scripts in docs
-- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, `docs/SYSTEM_ARCHITECTURE.md`
-- **Why:** support scripts are easy to mistake for runtime proof surfaces.
-- **Dependency/order:** after 0.1.
-- **Risk:** low.
-- **Done criteria:** every support-only script is clearly labeled non-canonical where it is mentioned.
+## Phase 1 - fix canonical architecture
 
----
+### Task 1.1 - Normalize safety-layer reads through trade schema
+- **Files to edit:** `scripts/execution-safety-layer.py`, maybe `models/trade_schema.py`
+- **Why:** safety currently reads raw recent trades and assumes `entry_time` and nested `signal` exist; other readers normalize first.
+- **Dependency/order:** after Phase 0
+- **Risk:** medium
+- **Done criteria:** safety uses normalized records consistently and handles missing legacy/raw fields without implicit assumptions.
 
-## Phase 1: fix canonical architecture truth and metadata
+### Task 1.2 - Remove duplicated exchange-specific price/spread logic from non-canonical monitors where possible
+- **Files to edit:** `scripts/exit-monitor.py`, `scripts/timeout-monitor.py`, `utils/paper_exchange_adapters.py`
+- **Why:** duplicate exchange logic increases drift risk and confuses which implementation is authoritative.
+- **Dependency/order:** after 1.1
+- **Risk:** medium
+- **Done criteria:** exchange-specific market data access is centralized in adapters or clearly isolated as non-canonical.
 
-### Task 1.1 — unify experimental/canonical metadata semantics
-- **Files to edit:** `models/exchange_metadata.py`, `scripts/phase1-signal-scanner.py`, `utils/paper_exchange_adapters.py`, `utils/runtime_logging.py`, `models/trade_schema.py`
-- **Why:** current code disagrees on whether Polymarket is experimental.
-- **Dependency/order:** after Phase 0 doc cleanup.
-- **Risk:** medium.
-- **Done criteria:** Polymarket experimental status is represented consistently in signals, trades, runtime events, and exchange metadata.
+### Task 1.3 - Make mode semantics explicit in code, not just docs
+- **Files to edit:** `models/exchange_metadata.py`, `scripts/phase1-paper-trader.py`, `scripts/data-integrity-layer.py`, `scripts/trading-agency-phase1.py`
+- **Why:** mixed-mode limitations currently emerge from several places; they should be explicit and inspectable.
+- **Dependency/order:** after 1.1
+- **Risk:** medium
+- **Done criteria:** one clearly defined policy source explains mixed-mode entry count, priority, and failure semantics.
 
-### Task 1.2 — make mixed-mode limitation explicit in code metadata
-- **Files to edit:** `scripts/phase1-paper-trader.py`, `scripts/trading-agency-phase1.py`, `models/exchange_metadata.py`
-- **Why:** mixed mode currently behaves as deterministic one-entry evaluation, but the metadata surface is sparse.
-- **Dependency/order:** after 1.1.
-- **Risk:** low.
-- **Done criteria:** runtime artifacts clearly indicate why one signal won and that mixed mode is not a dual-entry runtime.
+## Phase 2 - repair/add tests
 
-### Task 1.3 — separate authoritative state from advisory state more clearly
-- **Files to edit:** `scripts/trading-agency-phase1.py`, `docs/RUNTIME_OBSERVABILITY.md`, `docs/SYSTEM_ARCHITECTURE.md`
-- **Why:** reports and safety artifacts are helpful but should not be mistaken for canonical execution truth.
-- **Dependency/order:** after 1.2.
-- **Risk:** low.
-- **Done criteria:** docs and report fields clearly distinguish authoritative state from derived summaries.
+### Task 2.1 - Add explicit tests for mixed-mode asymmetry
+- **Files to edit:** add `tests/mixed-mode-policy-test.py` or expand `tests/destructive/trading-agency-mixed-test.py`
+- **Why:** current docs imply limits, but there is no sharply named test proving Hyperliquid-primary data-gate and selection semantics together.
+- **Dependency/order:** after 1.3
+- **Risk:** low
+- **Done criteria:** test proves: (a) Hyperliquid outage blocks mixed mode, (b) Polymarket outage alone does not, (c) one-entry-per-cycle remains enforced.
 
----
+### Task 2.2 - Add safety schema-drift regression tests
+- **Files to edit:** add `tests/execution-safety-schema-test.py`
+- **Why:** safety is the weakest layer for raw-vs-normalized assumptions.
+- **Dependency/order:** after 1.1
+- **Risk:** low
+- **Done criteria:** seeded trade records lacking nested `signal` or using alternate canonical fields do not crash safety validation.
 
-## Phase 2: repair/add tests
+### Task 2.3 - Separate offline end-to-end tests from true integration category
+- **Files to edit:** test filenames and `scripts/ci-safe-verification.sh`
+- **Why:** evidence quality should be visible from the test name alone.
+- **Dependency/order:** after 0.2
+- **Risk:** medium
+- **Done criteria:** CI names clearly distinguish offline fixture tests from any future live/integration tests.
 
-### Task 2.1 — add regression tests for metadata consistency
-- **Files to edit:** add `tests/polymarket-metadata-truth-test.py` (new), update `scripts/ci-safe-verification.sh`
-- **Why:** current docs/code disagreement about Polymarket experimental status can regress silently.
-- **Dependency/order:** after Phase 1 metadata fix.
-- **Risk:** low.
-- **Done criteria:** CI fails if runtime events, signals, and trades disagree on Polymarket experimental labeling.
+## Phase 3 - Polymarket integration completion
 
-### Task 2.2 — add explicit canonical-file contract test for agency outputs
-- **Files to edit:** add `tests/agency-canonical-output-contract-test.py` (new), update `scripts/ci-safe-verification.sh`
-- **Why:** canonical vs non-authoritative output classification should be enforced by test.
-- **Dependency/order:** after 1.3.
-- **Risk:** low.
-- **Done criteria:** CI verifies that canonical trade/state outputs are the ones claimed in docs.
+### Task 3.1 - Decide the product truth: keep paper-only Polymarket or build real Polymarket execution
+- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, maybe add `docs/POLYMARKET_EXECUTION_SCOPE.md`
+- **Why:** the repo currently has real paper integration but no live execution path. This needs a deliberate boundary.
+- **Dependency/order:** before any real implementation work
+- **Risk:** high
+- **Done criteria:** repo states either (a) paper-only Polymarket is final scope, or (b) live Polymarket execution is a tracked future milestone with no present claim.
 
-### Task 2.3 — add doc-truth guard for active docs
-- **Files to edit:** `tests/repo-truth-guard-test.py`
-- **Why:** active docs currently drift more easily than code.
-- **Dependency/order:** after Phase 0 cleanup.
-- **Risk:** low.
-- **Done criteria:** CI fails on stale phrases like “orchestrator path not tested end-to-end” if no longer true.
+### Task 3.2 - If live Polymarket execution is desired, add a real execution adapter instead of extending paper adapter semantics
+- **Files to edit:** add new runtime files rather than overloading `utils/paper_exchange_adapters.py`
+- **Why:** paper simulation and real execution should not share the same abstraction blindly.
+- **Dependency/order:** after 3.1
+- **Risk:** high
+- **Done criteria:** explicit authenticated Polymarket execution path exists with credentials/bootstrap checks, isolated from paper mode.
 
-### Task 2.4 — add live-connectivity test policy guard, not live-connectivity test itself
-- **Files to edit:** add `tests/connectivity-scope-guard-test.py` (new), maybe `README.md`
-- **Why:** ensure CI remains honest about what is offline proof versus live proof.
-- **Dependency/order:** after 2.3.
-- **Risk:** low.
-- **Done criteria:** CI/documentation surface explicitly preserves “offline proof only” truth where applicable.
+### Task 3.3 - Add live-readiness prerequisites only if real execution is implemented
+- **Files to edit:** `scripts/bootstrap-runtime-check.py`, new integration tests/workflows, secrets/config docs
+- **Why:** current bootstrap checks only Python modules; that is correct for paper mode and insufficient for live mode.
+- **Dependency/order:** after 3.2
+- **Risk:** high
+- **Done criteria:** bootstrap can prove live prerequisites for the chosen exchange without conflating them with paper mode.
 
----
+## Phase 4 - observability and docs cleanup
 
-## Phase 3: Polymarket integration completion
+### Task 4.1 - Produce a single authoritative reviewer index
+- **Files to edit:** `README.md`, add `TRUTH_INDEX.md` or repurpose `PROOF_MATRIX.md`
+- **Why:** reviewers should not need to infer authoritative docs from a large repo.
+- **Dependency/order:** after Phase 0
+- **Risk:** low
+- **Done criteria:** one top-level file maps canonical code, canonical state, test evidence, and non-canonical surfaces.
 
-### Task 3.1 — decide whether Polymarket is staying paper-only or moving toward real execution
-- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, `docs/POLYMARKET_TESTNET_RESEARCH.md`, possibly new design doc under `docs/`
-- **Why:** the repo currently mixes “canonical paper path” and “not fully integrated” language. Completion requires a declared target.
-- **Dependency/order:** before any real execution work.
-- **Risk:** medium.
-- **Done criteria:** repo has one explicit Polymarket scope decision.
+### Task 4.2 - Mark runtime artifacts by authority level
+- **Files to edit:** `docs/RUNTIME_OBSERVABILITY.md`, `scripts/trading-agency-phase1.py`, `scripts/timeout-monitor.py`, `scripts/exit-monitor.py`
+- **Why:** not every generated artifact is authoritative state.
+- **Dependency/order:** after Phase 1
+- **Risk:** low
+- **Done criteria:** reports clearly label themselves as authoritative state, derived summary, or monitoring-only output.
 
-### Task 3.2 — if moving beyond paper, add authenticated execution module and state contracts
-- **Files to edit:** likely new files under `utils/` and `scripts/`, plus `models/trade_schema.py`, `models/position_state.py`
-- **Why:** real end-to-end integration requires authenticated order placement and execution-state persistence.
-- **Dependency/order:** after 3.1.
-- **Risk:** high.
-- **Done criteria:** system can represent order intent, exchange order ID, fill status, partial fills, cancellation, and final settlement.
-
-### Task 3.3 — add exchange-specific Polymarket lifecycle support
-- **Files to edit:** new execution module(s), `scripts/phase1-paper-trader.py` or successor runtime, `scripts/timeout-monitor.py`, `models/trade_schema.py`
-- **Why:** Polymarket requires market resolution/settlement semantics that paper marks do not cover.
-- **Dependency/order:** after 3.2.
-- **Risk:** high.
-- **Done criteria:** code can track open order, fill, open position, resolution, settlement, and final realized outcome distinctly.
-
-### Task 3.4 — add real integration tests outside default CI
-- **Files to edit:** add a non-default suite under `tests/integration_live/` or similar, plus docs describing operator-run prerequisites
-- **Why:** completion cannot be claimed from fixture-based tests.
-- **Dependency/order:** after 3.2 and 3.3.
-- **Risk:** high.
-- **Done criteria:** authenticated sandbox/testnet or controlled live-read test proves request/response/order lifecycle for Polymarket.
-
----
-
-## Phase 4: observability and docs cleanup
-
-### Task 4.1 — align observability outputs with canonical truth map
-- **Files to edit:** `docs/RUNTIME_OBSERVABILITY.md`, `scripts/trading-agency-phase1.py`, `scripts/timeout-monitor.py`
-- **Why:** operator-facing artifacts should make canonical versus advisory outputs obvious.
-- **Dependency/order:** after Phase 1 and Phase 2.
-- **Risk:** low.
-- **Done criteria:** every generated report says whether it is authoritative, advisory, or proof-only.
-
-### Task 4.2 — add a single maintained current-state document
-- **Files to edit:** `SYSTEM_STATUS.md`, `README.md`, possibly replace overlapping audit docs with links
-- **Why:** too many overlapping truth surfaces cause drift.
-- **Dependency/order:** after Phase 0.
-- **Risk:** medium.
-- **Done criteria:** one current-state doc becomes the source of truth; other docs point to it instead of rephrasing status.
-
-### Task 4.3 — de-duplicate active root audit artifacts
-- **Files to edit:** active root audit/plan markdown files
-- **Why:** multiple audit files at repo root previously drifted and referenced removed artifacts.
-- **Dependency/order:** after all earlier phases.
-- **Risk:** low.
-- **Done criteria:** root-level audit docs agree with each other and with active code/docs.
-
----
+### Task 4.3 - Remove or clearly annotate stale root audit artifacts
+- **Files to edit:** existing root audit/status markdown files as needed
+- **Why:** multiple status reports at repo root create review ambiguity.
+- **Dependency/order:** after 4.1
+- **Risk:** low
+- **Done criteria:** only one current audit/status path is presented as authoritative; others are historical or superseded.
 
 ## Priority order summary
 
-1. Fix active truth/doc contradictions.
-2. Fix metadata inconsistency around Polymarket experimental status.
-3. Add tests that lock those truths in place.
-4. Decide whether Polymarket remains paper-only or gets real execution work.
-5. Only then pursue production-grade exchange integration claims.
+1. Truth cleanup of archive/test naming/mixed-mode wording
+2. Safety-layer schema normalization and architecture tightening
+3. Better tests for mixed-mode semantics and schema drift
+4. Explicit decision on whether Polymarket remains paper-only or gets a real execution implementation
+5. Observability/doc consolidation
 
----
+## Final repair target
 
-## What completion looks like
+After Phases 0-2, the repo can honestly claim:
+- canonical paper-trading execution exists,
+- Hyperliquid is the strongest supported paper path,
+- Polymarket is a canonical paper path but experimental overall,
+- mixed mode is limited and asymmetric,
+- no live-ready claim is made.
 
-You can truthfully say **both exchanges are fully integrated** only if all of the following become true:
-- authenticated execution exists
-- order IDs/fills are persisted and reconciled
-- settlement lifecycle exists where required
-- non-fixture integration tests exist
-- mixed-mode semantics are explicitly implemented and proven if you want to claim combined runtime support
-- docs, runtime metadata, and reports all agree
-
-Until then, the truthful posture remains:
-- Hyperliquid integrated for the canonical paper path
-- Polymarket integrated for the canonical paper path but still experimental/partial overall
-- paper trading only
+After Phase 3, only if real authenticated execution is implemented and proven, the repo could begin making any narrower live-integration claims.

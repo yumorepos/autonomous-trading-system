@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DESTRUCTIVE TEST -- isolated canonical Polymarket paper flow."""
+"""Offline isolated canonical Polymarket paper flow test."""
 
 import json
 import os
