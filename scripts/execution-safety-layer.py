@@ -20,7 +20,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
-from models.trade_schema import normalize_trade_record, validate_trade_record
+from models.paper_contracts import paper_position_identifier
+from models.trade_schema import is_trade_closed, is_trade_open, normalize_trade_record, validate_trade_record
 from utils.system_health import SystemHealthManager
 from utils.paper_exchange_adapters import get_paper_exchange_adapter
 SAFETY_STATE = LOGS_DIR / "execution-safety-state.json"
@@ -194,7 +195,7 @@ class ExecutionSafetyLayer:
 
     def refresh_breaker_state_from_canonical_history(self) -> Dict:
         trades = self._canonical_trade_history()
-        closed_trades = [trade for trade in trades if trade.get('status') == 'CLOSED']
+        closed_trades = [trade for trade in trades if is_trade_closed(trade)]
         closed_trades.sort(key=lambda trade: trade.get('exit_timestamp') or trade.get('entry_timestamp') or '')
 
         now = datetime.now(timezone.utc)
@@ -373,7 +374,7 @@ class ExecutionSafetyLayer:
 
         duplicates = []
         for trade in self.recent_trades:
-            if trade.get('status') != 'OPEN':
+            if not is_trade_open(trade):
                 continue
             entry_timestamp = trade.get('entry_timestamp')
             if not entry_timestamp:
@@ -381,7 +382,7 @@ class ExecutionSafetyLayer:
             if datetime.fromisoformat(entry_timestamp.replace('Z', '+00:00')) <= cutoff:
                 continue
 
-            trade_asset = trade.get('market_id') if trade.get('exchange') == 'Polymarket' else trade.get('symbol')
+            trade_asset = paper_position_identifier(trade)
             trade_direction = trade.get('side')
             if trade_asset == proposal.asset and trade_direction == proposal.direction:
                 duplicates.append(trade)

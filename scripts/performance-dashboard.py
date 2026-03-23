@@ -16,8 +16,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
+from models.paper_contracts import paper_position_identifier
 from models.position_state import get_open_positions
-from models.trade_schema import normalize_trade_record, validate_trade_record
+from models.trade_schema import is_trade_closed, normalize_trade_record, validate_trade_record
 from utils.json_utils import safe_read_jsonl
 
 class PerformanceDashboard:
@@ -42,7 +43,7 @@ class PerformanceDashboard:
             normalized = normalize_trade_record(record)
             if not validate_trade_record(normalized, context=f'performance-dashboard[{file_path.name}]'):
                 continue
-            if normalized.get('status') == 'CLOSED':
+            if is_trade_closed(normalized):
                 trades.append(normalized)
         return trades
     
@@ -60,7 +61,7 @@ class PerformanceDashboard:
                 'losers': 0
             }
         
-        closed_trades = [t for t in trades if t.get('status') == 'CLOSED']
+        closed_trades = [t for t in trades if is_trade_closed(t)]
 
         winners = [t for t in closed_trades if (t.get('realized_pnl_usd') or 0) > 0]
         losers = [t for t in closed_trades if (t.get('realized_pnl_usd') or 0) < 0]
@@ -142,7 +143,7 @@ class PerformanceDashboard:
             
             for trade in self.open_positions[:10]:  # Show max 10
                 exchange = trade.get('exchange', 'Unknown')
-                asset = trade.get('symbol', 'Unknown')
+                asset = paper_position_identifier(trade) or trade.get('symbol', 'Unknown')
                 entry = trade.get('entry_price', 0) or 0
                 print(f"  [{exchange}] {asset} @ ${entry:.2f}")
 

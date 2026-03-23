@@ -27,9 +27,10 @@ from models.exchange_metadata import (
     paper_exchange_priority,
     paper_exchange_status,
 )
-from utils.paper_exchange_adapters import get_paper_exchange_adapter, paper_position_identifier
+from models.paper_contracts import paper_position_identifier, validate_signal_contract
+from utils.paper_exchange_adapters import get_paper_exchange_adapter
 from models.position_state import apply_trade_to_position_state, get_open_positions
-from models.trade_schema import normalize_trade_record, validate_trade_record
+from models.trade_schema import is_trade_closed, normalize_trade_record, validate_trade_record
 from utils.json_utils import safe_read_jsonl, write_json_atomic
 from utils.runtime_logging import append_runtime_event
 
@@ -58,14 +59,8 @@ def log_non_canonical_signal(signal: dict | None, reason: str) -> None:
 
 
 def validate_canonical_signal(signal: dict | None) -> tuple[bool, str]:
-    if not isinstance(signal, dict):
-        return False, "signal payload is not a dict"
-
-    exchange = signal.get('exchange', signal.get('source'))
-    adapter = get_paper_exchange_adapter(exchange)
-    if adapter is None:
-        return False, f"unsupported exchange={exchange!r}"
-    return adapter.validate_signal(signal)
+    passed, reason, _ = validate_signal_contract(signal)
+    return passed, reason
 
 
 
@@ -185,7 +180,7 @@ def calculate_performance() -> dict:
         normalized = normalize_trade_record(trade)
         if not validate_trade_record(normalized, context='phase1-paper-trader.calculate_performance'):
             continue
-        if normalized.get('status') != 'CLOSED':
+        if not is_trade_closed(normalized):
             continue
         closed_trades.append(normalized)
         exchange = normalized.get('exchange', 'Unknown')

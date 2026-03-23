@@ -16,7 +16,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
-from models.exchange_metadata import paper_exchange_thresholds
+from models.paper_contracts import SIGNAL_CONTRACTS, paper_position_identifier
 from utils.paper_exchange_adapters import get_paper_exchange_adapter
 from models.position_state import get_open_positions
 from models.trade_schema import validate_trade_record
@@ -28,12 +28,16 @@ TIMEOUT_HISTORY = LOGS_DIR / "timeout-history.jsonl"
 TIMEOUT_REPORT = WORKSPACE / "TIMEOUT_MONITOR_REPORT.md"
 
 # Thresholds
-TIMEOUT_HOURS = 24.0
-TAKE_PROFIT_PCT = 10.0
-STOP_LOSS_PCT = -10.0
+TIMEOUT_HOURS = SIGNAL_CONTRACTS['Hyperliquid'].timeout_hours
+TAKE_PROFIT_PCT = SIGNAL_CONTRACTS['Hyperliquid'].take_profit_pct
+STOP_LOSS_PCT = SIGNAL_CONTRACTS['Hyperliquid'].stop_loss_pct
 EXCHANGE_THRESHOLDS = {
-    exchange: paper_exchange_thresholds(exchange)
-    for exchange in ('Hyperliquid', 'Polymarket')
+    exchange: {
+        'timeout_hours': contract.timeout_hours,
+        'take_profit_pct': contract.take_profit_pct,
+        'stop_loss_pct': contract.stop_loss_pct,
+    }
+    for exchange, contract in SIGNAL_CONTRACTS.items()
 }
 
 class TimeoutMonitor:
@@ -58,7 +62,7 @@ class TimeoutMonitor:
     def get_current_price(self, position: Dict) -> Optional[float]:
         """Get current price for any canonical paper-trading exchange via its adapter."""
         exchange = position.get('exchange', position.get('signal', {}).get('exchange', position.get('signal', {}).get('source', 'Hyperliquid')))
-        asset = position.get('symbol') or position.get('market_id') or 'unknown'
+        asset = paper_position_identifier(position) or 'unknown'
         adapter = get_paper_exchange_adapter(exchange)
         if adapter is None:
             return None
@@ -269,7 +273,7 @@ class TimeoutMonitor:
     
     def monitor_position(self, position: Dict) -> Dict:
         """Monitor single position with timeout focus"""
-        asset = position['symbol']
+        asset = paper_position_identifier(position) or position['symbol']
         entry_time = position['entry_timestamp']
         entry_price = position['entry_price']
         
@@ -416,7 +420,7 @@ class TimeoutMonitor:
 ## MONITORING SCHEDULE
 
 - Runs: Every 15 minutes (timeout-monitor)
-- Timeout threshold: exchange-specific (currently 24 hours in both paper modes)
+- Timeout threshold: exchange-specific from canonical paper-trading contract definitions
 - High priority: < 2 hours remaining
 
 ---

@@ -23,6 +23,7 @@ run_step '3/4 script regression tests' bash -lc '
     tests/paper-mode-schema-test.py \
     tests/trade-schema-contract-test.py \
     tests/execution-safety-schema-test.py \
+    tests/paper-contract-centralization-test.py \
     tests/mixed-mode-policy-test.py \
     tests/polymarket-metadata-truth-test.py \
     tests/signal-integrity-canonical-test.py \
