@@ -30,7 +30,8 @@ if __name__ == '__main__':
 
     assert 'Proven at the paper-trading level' in proof, proof
     assert 'does not prove live readiness' in proof, proof
-    assert 'deterministic single-entry selection and Hyperliquid preferred' in proof, proof
+    assert 'deterministic single-entry selection, Hyperliquid preferred' in proof, proof
+    assert 'advisory-only secondary-source health' in proof, proof
 
     assert 'canonical Hyperliquid and Polymarket paper paths' in system_status, system_status
     assert 'Polymarket experimental overall' in system_status, system_status

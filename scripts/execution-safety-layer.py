@@ -296,23 +296,17 @@ class ExecutionSafetyLayer:
         return self.snapshot_state()
     
     def load_recent_trades(self) -> List[Dict]:
-        """Load recent trades for deduplication and circuit breakers"""
-        trades_file = LOGS_DIR / "phase1-paper-trades.jsonl"
-        
-        if not trades_file.exists():
-            return []
-        
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         recent = []
-        
-        with open(trades_file) as f:
-            for line in f:
-                if line.strip():
-                    trade = json.loads(line)
-                    entry_time = datetime.fromisoformat(trade['entry_time'].replace('Z', '+00:00'))
-                    if entry_time > cutoff:
-                        recent.append(trade)
-        
+
+        for trade in self._canonical_trade_history():
+            entry_timestamp = trade.get('entry_timestamp')
+            if not entry_timestamp:
+                continue
+            entry_time = datetime.fromisoformat(entry_timestamp.replace('Z', '+00:00'))
+            if entry_time > cutoff:
+                recent.append(trade)
+
         return recent
     
     def load_incidents(self) -> List[Dict]:
@@ -376,14 +370,21 @@ class ExecutionSafetyLayer:
     def check_duplicate_order(self, proposal: TradeProposal) -> ValidationResult:
         """Prevent duplicate orders"""
         cutoff = datetime.now(timezone.utc) - timedelta(seconds=SAFETY_LIMITS['duplicate_order_window_seconds'])
-        
-        duplicates = [
-            t for t in self.recent_trades
-            if t['signal']['asset'] == proposal.asset
-            and t['signal']['direction'] == proposal.direction
-            and datetime.fromisoformat(t['entry_time'].replace('Z', '+00:00')) > cutoff
-            and t['status'] == 'OPEN'
-        ]
+
+        duplicates = []
+        for trade in self.recent_trades:
+            if trade.get('status') != 'OPEN':
+                continue
+            entry_timestamp = trade.get('entry_timestamp')
+            if not entry_timestamp:
+                continue
+            if datetime.fromisoformat(entry_timestamp.replace('Z', '+00:00')) <= cutoff:
+                continue
+
+            trade_asset = trade.get('market_id') if trade.get('exchange') == 'Polymarket' else trade.get('symbol')
+            trade_direction = trade.get('side')
+            if trade_asset == proposal.asset and trade_direction == proposal.direction:
+                duplicates.append(trade)
         
         passed = len(duplicates) == 0
         

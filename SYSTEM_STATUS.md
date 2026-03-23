@@ -37,7 +37,7 @@
 - no production deployment claim is justified
 - external API reachability is environment-dependent and not guaranteed by CI
 - Polymarket now uses the same canonical paper-trading runtime stages, persistence, and monitors as Hyperliquid, but remains experimental overall
-- mixed mode remains limited and should not be presented as a fully proven side-by-side runtime
+- mixed mode remains limited, Hyperliquid-primary, and should not be presented as a fully proven side-by-side runtime
 - some retained support scripts model future workflows and are **not** canonical execution
 
 ---
@@ -72,8 +72,8 @@ The required CI workflow verifies:
 - bootstrap/runtime dependency checking
 - Python compile/syntax validation
 - script-style regression tests
-- isolated lifecycle integrity for canonical paper-trader flows
-- offline agency-entrypoint coverage for Hyperliquid, Polymarket, mixed-mode limitation, and negative-path reliability checks
+- isolated **offline** lifecycle integrity for canonical paper-trader flows
+- offline agency-entrypoint coverage for Hyperliquid, Polymarket, mixed-mode limitation/asymmetry, and negative-path reliability checks
 - deterministic repeat-cycle stability for the canonical Hyperliquid path
 - canonical dashboard and timeout-monitor reader behavior
 
@@ -112,6 +112,7 @@ Future work, if pursued, should remain clearly separated from the current paper-
 
 Start here for the current truth:
 - `README.md`
+- `TRUTH_INDEX.md`
 - `docs/OPERATOR_QUICKSTART.md`
 - `docs/SYSTEM_ARCHITECTURE.md`
 - `docs/REPO_TRUTHFULNESS_AUDIT.md`

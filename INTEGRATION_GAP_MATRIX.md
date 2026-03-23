@@ -1,99 +1,64 @@
-# Integration Gap Matrix
+# INTEGRATION_GAP_MATRIX
 
-Date: 2026-03-22
+Date: 2026-03-23 UTC
 
-## Current integration summary
+## Matrix legend
 
-| Area | Hyperliquid | Polymarket | Mixed mode |
+- **Present**: code path exists in canonical runtime
+- **Offline-proven**: covered by deterministic isolated tests/CI
+- **Live-proven**: exercised against real exchange/runtime dependencies in a reliable way
+- **Canonical**: actually on the top-level execution path
+
+## Exchange integration matrix
+
+| Capability | Hyperliquid | Polymarket | Notes |
 |---|---|---|---|
-| Runtime mode support | Yes | Yes | Yes |
-| Scanner path | Yes | Yes | Both scanned |
-| Safety gate path | Yes | Yes | Yes |
-| Trader entry path | Yes | Yes | One entry only |
-| Trader exit path | Yes | Yes | Yes |
-| Shared canonical trade history | Yes | Yes | Yes |
-| Shared authoritative position state | Yes | Yes | Yes |
-| Timeout monitor support | Yes | Yes | Reads shared state |
-| Agency-level offline proof | Yes | Yes | Limited proof only |
-| Live order execution | No | No | No |
-| Authenticated exchange integration | No | No | No |
-| Fill reconciliation | No | No | No |
-| Settlement lifecycle | No | No | No |
+| Mode selection in runtime config | Present | Present | `config/runtime.py` supports `hyperliquid_only`, `polymarket_only`, `mixed`. |
+| Data-integrity pre-scan gate | Present | Present | Mixed mode is asymmetric: Hyperliquid failure is critical; Polymarket failure is warning-only. |
+| Scanner emits canonical signals | Present | Present | Shared scanner writes both into the same signal log. |
+| Safety validation via canonical path | Present | Present | Same safety layer, exchange-specific adapter logic. |
+| Paper-trade entry planning | Present | Present | Same paper trader, different adapters. |
+| Paper-trade exit planning | Present | Present | Same paper trader checks exits for open positions across exchanges. |
+| Canonical trade persistence | Present | Present | Shared `phase1-paper-trades.jsonl`. |
+| Canonical open-position state | Present | Present | Shared `position-state.json`. |
+| Performance accounting | Present | Present | Shared `phase1-performance.json`. |
+| Timeout monitoring | Present | Present | Shared monitor reads canonical state. |
+| Agency/offline end-to-end proof | Offline-proven | Offline-proven | Hyperliquid has broader proof depth. |
+| Mixed-mode agency entry in same cycle | Preferred / primary | Limited / secondary | Canonical mixed mode takes at most one new entry per cycle. |
+| Mixed-mode state coexistence | Present | Present | Trader-level tests show both can coexist in canonical state across cycles. |
+| Live connectivity proof in CI | No | No | CI intentionally avoids blocking network checks. |
+| Authenticated order placement | No | No | Not implemented. |
+| Wallet/signing/execution path | No | No | Not implemented. |
+| Live-ready claim supported | No | No | False for both exchanges. |
 
----
+## Specific gaps that keep Polymarket from being "fully integrated" in the broad sense
 
-## Blocking gaps for a “both fully integrated” claim
-
-| Gap | Affects | Severity | Why it blocks the claim |
+| Gap | Exact files | Why it matters | Severity |
 |---|---|---|---|
-| No live execution path | Both exchanges | Critical | The runtime never places or confirms a real order. |
-| No authentication / signing / wallet flow | Both exchanges, especially Polymarket | Critical | Real end-to-end exchange integration requires authenticated execution, not just read-only market data. |
-| No fill/order-status reconciliation | Both exchanges | Critical | The system cannot prove that an intended trade became an executed trade on an exchange. |
-| No settlement handling | Polymarket | Critical | Binary-market lifecycle is not complete without outcome resolution/settlement semantics. |
-| Offline fixtures are the main proof | Both exchanges | High | Tests prove local canonical wiring, not live exchange interoperability. |
-| Mixed mode is one-entry deterministic priority mode | Mixed runtime | High | This is not full concurrent dual-exchange integration. |
-| Experimental-status metadata is inconsistent | Polymarket | Medium | Docs, runtime events, and persisted signals/trades disagree about whether Polymarket is experimental. |
-| Docs still contain stale contradictions | Truth surface | Medium | Some active docs understate proof or retain stale audit language. |
+| No authenticated execution/order path | `utils/paper_exchange_adapters.py`, `utils/api_connectivity.py`, entire repo | Integration stops at public market data plus paper persistence. No real execution exists. | Critical |
+| No live integration test | `.github/workflows/basic.yml`, `scripts/ci-safe-verification.sh`, `tests/support/offline_requests_sitecustomize.py` | All end-to-end proof is fixture-driven/offline. | Critical |
+| Mixed mode is not symmetric | `scripts/data-integrity-layer.py`, `models/exchange_metadata.py`, `scripts/phase1-paper-trader.py`, `scripts/trading-agency-phase1.py` | Mixed mode is limited evaluation, not a fully integrated dual-exchange runtime. | High |
+| Hyperliquid is hard-primary in mixed mode | `models/exchange_metadata.py`, `scripts/phase1-paper-trader.py` | Polymarket can be present, but canonical selection is biased toward Hyperliquid. | Medium |
+| Repo-wide truth surface still contains stale contradictory history | `docs/archive/`, `scripts/archive/` | Reviewers can find obsolete conflicting conclusions and old claims. | Medium |
+| Safety layer reads raw recent trades | `scripts/execution-safety-layer.py` | Schema drift risk if runtime producers change field shape. | Medium |
+| Non-canonical exit monitor duplicates exchange logic | `scripts/exit-monitor.py`, `utils/paper_exchange_adapters.py` | Extra maintenance surface and truth confusion. | Low |
 
----
+## Specific gaps that keep Hyperliquid from being "production integrated"
 
-## State-model agreement matrix
-
-| Subsystem | Uses canonical shared trade schema? | Uses shared open-position state? | Notes |
+| Gap | Exact files | Why it matters | Severity |
 |---|---|---|---|
-| orchestrator (`scripts/trading-agency-phase1.py`) | Yes | Yes | Calls trader helpers and `models.position_state.get_open_positions`. |
-| scanner (`scripts/phase1-signal-scanner.py`) | N/A for trade records | Indirect | Emits normalized signals used by trader/safety. |
-| safety (`scripts/execution-safety-layer.py`) | Yes | Reads trade history, not position state | Breakers derive from canonical trade history. |
-| trader (`scripts/phase1-paper-trader.py`) | Yes | Yes | Persists canonical trades and updates canonical open-position state. |
-| trade schema (`models/trade_schema.py`) | Yes | Yes | Single normalizer/validator for Hyperliquid and Polymarket. |
-| position state (`models/position_state.py`) | Yes | Yes | One authoritative open-position model. |
-| timeout monitor (`scripts/timeout-monitor.py`) | Validates records | Yes | Reads canonical open positions only. |
-| exit monitor (`scripts/exit-monitor.py`) | Reads canonical positions | Yes | Non-canonical; writes proof only. |
-| performance dashboard (`scripts/performance-dashboard.py`) | Yes | Yes | Reads canonical trade history and shared position state. |
+| No real order placement | repo-wide | Hyperliquid path ends at paper-trade records. | Critical |
+| No live integration proof in CI | `.github/workflows/basic.yml`, `scripts/ci-safe-verification.sh` | Runtime connectivity is optional and non-blocking. | Critical |
+| No credential/bootstrap enforcement beyond Python deps | `scripts/bootstrap-runtime-check.py` | Bootstrap does not verify any exchange auth prerequisites because none exist. | High |
+| Support scripts can be mistaken for active execution | `scripts/live-readiness-validator.py`, `scripts/exit-monitor.py`, `scripts/stability-monitor.py` | Confuses reviewers about what is real. | Medium |
 
-### Main agreement issue
+## Truthful classification matrix
 
-The structural state model is mostly unified. The notable mismatch is **metadata semantics**, not storage shape:
-- Polymarket docs are described as experimental.
-- `models/exchange_metadata.py` says `paper_status=canonical`.
-- Polymarket scanner/trader outputs set `experimental: False`.
-- runtime events set `experimental: True` for Polymarket.
-
-That is a truth/observability consistency problem with schema drift risk.
-
----
-
-## Canonical vs non-canonical path matrix
-
-| Path / file | Classification | Reason |
+| Claim | Truthful? | Why |
 |---|---|---|
-| `scripts/trading-agency-phase1.py` | Canonical | Real operator entrypoint. |
-| `scripts/bootstrap-runtime-check.py` | Canonical stage | First enforced stage. |
-| `scripts/data-integrity-layer.py` | Canonical stage | Enforced pre-scan gate. |
-| `scripts/phase1-signal-scanner.py` | Canonical stage | Emits runtime signals. |
-| `scripts/execution-safety-layer.py` | Canonical stage | Enforced critical gating. |
-| `scripts/phase1-paper-trader.py` | Canonical stage | Builds and persists trade records. |
-| `scripts/timeout-monitor.py` | Canonical monitor stage | Only monitor run by orchestrator. |
-| `scripts/exit-monitor.py` | Non-canonical | Writes proof artifacts only; no authoritative close persistence. |
-| `scripts/live-readiness-validator.py` | Non-canonical future-scope | Research validator, not runtime truth. |
-| `scripts/stability-monitor.py` | Non-canonical support | Separate observability helper. |
-| `scripts/archive/*` | Historical | Not part of current runtime. |
-| `docs/archive/*` | Historical | Not part of active truth surface. |
-
----
-
-## Truthful statements you can make today
-
-### Safe to say
-- Hyperliquid is the canonical integrated **paper-trading** path.
-- Polymarket is integrated into the canonical **paper-trading** path as a first-class exchange.
-- Mixed mode exists, but is limited and deterministic.
-- CI proves offline canonical runtime behavior.
-- The repo is paper trading only.
-
-### Not safe to say
-- Both exchanges are fully integrated end-to-end.
-- Polymarket is production-ready.
-- Mixed mode is a true dual-exchange execution runtime.
-- The repo is live-ready.
-- CI proves real exchange integration.
+| "Hyperliquid is integrated." | Yes, if explicitly scoped to canonical paper trading. |
+| "Polymarket is helper/scaffold only." | No. It is wired into the canonical paper flow. |
+| "Polymarket is fully integrated." | No, unless narrowly scoped to the canonical paper-only flow and even then it should still be labeled experimental overall. |
+| "Both exchanges are live-ready." | No. |
+| "Mixed mode is a fully integrated dual-exchange runtime." | No. |
+| "The system is paper-trading only." | Yes. |

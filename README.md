@@ -10,7 +10,7 @@ This repository implements a **Phase 1 paper-trading execution path** for truthf
 Current repo truth:
 - **canonical paper-trading path:** Hyperliquid via `scripts/trading-agency-phase1.py`
 - **canonical paper-trading path:** Polymarket in `polymarket_only`, using the same shared architecture and deterministic offline agency proof, but experimental overall
-- **limited evaluation mode:** `mixed`
+- **limited evaluation mode:** `mixed` with one new entry per cycle, Hyperliquid-primary selection, and advisory-only secondary-source health
 - **live trading:** not implemented
 - **real-money execution:** not supported
 
@@ -43,7 +43,7 @@ That script runs this Phase 1 paper-trading flow:
 |---|---|---|
 | `hyperliquid_only` | Default paper-trading run | canonical and best-supported |
 | `polymarket_only` | Polymarket paper-trading run | canonical paper-trading path with offline proof; experimental overall |
-| `mixed` | Shared-state evaluation across both exchanges | limited experimental mode; not the canonical proof path |
+| `mixed` | Shared-state evaluation across both exchanges | limited experimental mode; one new entry per cycle, Hyperliquid-primary, not the canonical proof path |
 
 ## Canonical Architecture
 
@@ -94,7 +94,7 @@ Run the same suite locally with:
 - runtime connectivity to external APIs is not a blocking CI guarantee
 - no live trading support exists
 - no real-money execution path exists
-- `mixed` is not proven as a simultaneous dual-entry runtime; it remains a limited deterministic evaluation mode
+- `mixed` is not proven as a simultaneous dual-entry runtime; it remains a limited deterministic evaluation mode with one new entry per cycle and Hyperliquid-primary selection semantics
 - Polymarket is canonical at the paper-trading level, experimental overall, and does not imply live readiness
 
 ## Operator Quickstart
@@ -149,6 +149,7 @@ For a copy-paste operator guide, see `docs/OPERATOR_QUICKSTART.md`.
 
 Start here if you need evidence instead of feature descriptions:
 
+- `TRUTH_INDEX.md` — authoritative reviewer index for canonical code, state, tests, and non-canonical surfaces
 - `PROOF_MATRIX.md` — claim-to-test mapping
 - `docs/OPERATOR_EVIDENCE_GUIDE.md` — concise operator review path
 - `docs/RUNTIME_OBSERVABILITY.md` — runtime summary artifact guide
@@ -177,10 +178,16 @@ workspace/   Runtime state, operator controls, logs, and generated artifacts.
 - **Execution mode:** paper trading only
 - **Canonical exchange path:** Hyperliquid
 - **Experimental exchange path:** Polymarket canonical paper trading with deterministic offline agency-level proof, but experimental overall
-- **Mixed mode:** limited experimental evaluation mode
+- **Mixed mode:** limited experimental evaluation mode with one new entry per cycle and Hyperliquid-primary selection
 - **Live trading:** not implemented
 - **Production deployment claim:** unsupported
 - **Audience:** research, audit, portfolio review
+
+## Historical Material
+
+- `docs/archive/` and `scripts/archive/` are historical only.
+- `TRUTH_INDEX.md` lists the current authoritative review path.
+- `docs/POLYMARKET_EXECUTION_SCOPE.md` explains the present paper-only Polymarket boundary.
 
 ## Disclaimer
 
