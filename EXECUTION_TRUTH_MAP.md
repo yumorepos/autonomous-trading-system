@@ -92,12 +92,12 @@ Audit date: 2026-03-23 UTC
 - One authoritative open-position file for both exchanges.
 - Performance is derived from normalized closed trades only.
 - Dashboard and monitors read the same canonical outputs.
-- Scanner integrity now enforces exchange-specific canonical signal contracts before persistence.
+- Scanner integrity now enforces the paper adapter's declared exchange-specific signal contracts before persistence.
 
 ### Where agreement is still imperfect
 
-- The contract is still distributed across data integrity, exchange adapters, trade normalization, and state readers.
-- That is workable, but centralizing more of the contract would further reduce schema-drift risk.
+- Signal executability is enforced at validation time, but the contract definitions are still distributed across data integrity, exchange adapters, trade normalization, and state readers.
+- That is workable, but centralizing more of the contract would further reduce schema-drift risk and make future changes safer.
 
 ## Mode truth map
 

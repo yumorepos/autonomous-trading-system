@@ -185,9 +185,9 @@ Real current canonical flow, as implemented now:
    - **Risk:** medium, because scanner rejection rates may change.
    - **Done criteria:** met — signal integrity rejects exchange-invalid Hyperliquid and Polymarket signals before append-only persistence.
 
-2. **Define canonical state contract in one place and reuse it everywhere**
-   - **Files:** `models/trade_schema.py`, `models/position_state.py`, `scripts/phase1-paper-trader.py`, `scripts/performance-dashboard.py`, `scripts/timeout-monitor.py`
-   - **Why:** trade/state agreement is mostly good now, but still spread across multiple modules with implicit duplication.
+2. **Centralize canonical contract definitions and reuse them everywhere**
+   - **Files:** `scripts/data-integrity-layer.py`, `utils/paper_exchange_adapters.py`, `models/trade_schema.py`, `models/position_state.py`, `scripts/phase1-paper-trader.py`, `scripts/performance-dashboard.py`, `scripts/timeout-monitor.py`
+   - **Why:** scanner acceptance already enforces the paper adapter's exchange-specific contract, but that contract and the downstream trade/state model are still spread across multiple modules with implicit duplication.
    - **Dependency/order:** after exchange-specific validation.
    - **Risk:** medium.
    - **Done criteria:** all readers/producers import one shared contract for canonical open/closed records and exchange-specific optional fields.
@@ -280,7 +280,7 @@ Real current canonical flow, as implemented now:
 1. **`docs/POSITION_TRACKING_REPORT.md` says max open positions is 10, but canonical code sets `MAX_OPEN_POSITIONS = 3`.**
 2. **Active docs root contains generated monitoring/tracking reports that look like current evidence, while the canonical runtime truth lives elsewhere.**
 3. **Polymarket is described as canonical paper-path capable, which is true in code/tests, but mixed mode still hard-codes Hyperliquid priority, so Polymarket is not an equal participant in the main mixed loop.**
-4. **Signal integrity is described as canonical validation before persistence, which is true, but that validation is generic and does not fully guarantee exchange-specific trader executability.**
+4. **Signal integrity is correctly described as canonical validation before persistence, and it now guarantees the paper adapter's declared exchange-specific executability contract at validation time. The remaining architecture gap is that those contracts are still defined in multiple places instead of one centralized source.**
 5. **CI is strong for offline proofs, but any reader equating that with live exchange compatibility would be overclaiming.**
 
 ## Final verdict paragraph
