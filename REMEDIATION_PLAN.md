@@ -1,138 +1,119 @@
-# REMEDIATION_PLAN
+# Remediation Plan
 
 Date: 2026-03-23 UTC
-Goal: remove truth ambiguity, tighten canonical architecture, and separate proven paper-trading capability from unsupported live-trading implications.
 
-## Phase 0 - truth cleanup
+## Phase 0 — truth cleanup
 
-### Task 0.1 - Quarantine or index historical contradiction surfaces
-- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, `docs/REPO_TRUTHFULNESS_AUDIT.md`, add/update `docs/archive/README.md`
-- **Why:** Active docs are mostly truthful, but repo-wide search still lands on historical contradictory material.
-- **Dependency/order:** first
-- **Risk:** low
-- **Done criteria:** active docs point reviewers to authoritative files first and explicitly say archive material is historical/non-authoritative.
+### Task 0.1
+- **Task:** Tighten active support docs to match actual canonical execution.
+- **Files to edit:** `docs/DATA_INTEGRITY_LAYER.md`, `docs/EXECUTION_SAFETY_LAYER.md`, `docs/SYSTEM_ARCHITECTURE.md`, `docs/OPERATOR_QUICKSTART.md`
+- **Why:** active docs still describe stronger behavior than the canonical flow executes.
+- **Dependency/order:** first.
+- **Risk:** low.
+- **Done criteria:** active docs mention only runtime-enforced behavior or clearly label future/support-only concepts.
 
-### Task 0.2 - Rename misleading test descriptions and comments
-- **Files to edit:** `tests/destructive/*.py`, `scripts/ci-safe-verification.sh`, `PROOF_MATRIX.md`
-- **Why:** many tests are not destructive against real state and are not live integration tests.
-- **Dependency/order:** after 0.1
-- **Risk:** low
-- **Done criteria:** naming and proof language make the offline/fixture-backed nature obvious.
+### Task 0.2
+- **Task:** Consolidate canonical vs non-canonical labeling.
+- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, `TRUTH_INDEX.md`
+- **Why:** duplicated status language is manageable now but will drift.
+- **Dependency/order:** after 0.1.
+- **Risk:** low.
+- **Done criteria:** one consistent vocabulary is used everywhere: `canonical paper path`, `experimental overall`, `mixed limited`, `support-only`, `historical`.
 
-### Task 0.3 - Tighten mixed-mode wording
-- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, `docs/SYSTEM_ARCHITECTURE.md`, `PROOF_MATRIX.md`
-- **Why:** docs should explicitly say mixed mode is Hyperliquid-primary, one-entry-per-cycle, and not a symmetric dual runtime.
-- **Dependency/order:** after 0.1
-- **Risk:** low
-- **Done criteria:** no active doc can be read as implying a dual-entry mixed runtime.
+## Phase 1 — fix canonical architecture
 
-## Phase 1 - fix canonical architecture
+**Completed on the current branch:** the canonical scanner now calls `DataIntegrityLayer.validate_signal()` before persisting signals and records accepted/rejected counts in scanner artifacts.
 
-### Task 1.1 - Normalize safety-layer reads through trade schema
-- **Files to edit:** `scripts/execution-safety-layer.py`, maybe `models/trade_schema.py`
-- **Why:** safety currently reads raw recent trades and assumes `entry_time` and nested `signal` exist; other readers normalize first.
-- **Dependency/order:** after Phase 0
-- **Risk:** medium
-- **Done criteria:** safety uses normalized records consistently and handles missing legacy/raw fields without implicit assumptions.
+### Task 1.1
+- **Task:** Either retire `scripts/exit-monitor.py` from the active tree or rewrite it as a pure canonical-state reader.
+- **Files to edit:** `scripts/exit-monitor.py`, `docs/RUNTIME_OBSERVABILITY.md`, `docs/SYSTEM_ARCHITECTURE.md`
+- **Why:** it is intentionally skipped today because it can confuse proof/reporting with authoritative persistence.
+- **Dependency/order:** after Phase 0.
+- **Risk:** medium.
+- **Done criteria:** no active monitor script looks authoritative while being non-authoritative.
 
-### Task 1.2 - Remove duplicated exchange-specific price/spread logic from non-canonical monitors where possible
-- **Files to edit:** `scripts/exit-monitor.py`, `scripts/timeout-monitor.py`, `utils/paper_exchange_adapters.py`
-- **Why:** duplicate exchange logic increases drift risk and confuses which implementation is authoritative.
-- **Dependency/order:** after 1.1
-- **Risk:** medium
-- **Done criteria:** exchange-specific market data access is centralized in adapters or clearly isolated as non-canonical.
+### Task 1.2
+- **Task:** Emit machine-readable mixed-mode policy in cycle/report artifacts.
+- **Files to edit:** `scripts/trading-agency-phase1.py`, `scripts/phase1-paper-trader.py`, `models/exchange_metadata.py`
+- **Why:** reviewers should not have to infer selection asymmetry from code.
+- **Dependency/order:** after 1.1.
+- **Risk:** low.
+- **Done criteria:** agency report includes `primary_exchange`, `max_new_entries_per_cycle`, `secondary_health_is_advisory`, and rejected candidate metadata.
 
-### Task 1.3 - Make mode semantics explicit in code, not just docs
-- **Files to edit:** `models/exchange_metadata.py`, `scripts/phase1-paper-trader.py`, `scripts/data-integrity-layer.py`, `scripts/trading-agency-phase1.py`
-- **Why:** mixed-mode limitations currently emerge from several places; they should be explicit and inspectable.
-- **Dependency/order:** after 1.1
-- **Risk:** medium
-- **Done criteria:** one clearly defined policy source explains mixed-mode entry count, priority, and failure semantics.
+## Phase 2 — repair/add tests
 
-## Phase 2 - repair/add tests
+### Task 2.1
+- **Task:** Add a scanner-path regression test that fails if invalid/stale/duplicate signals are persisted.
+- **Files to edit:** add new test under `tests/`; possibly update `scripts/ci-safe-verification.sh`
+- **Why:** this keeps the newly wired signal-validation path from regressing.
+- **Dependency/order:** completed on the current branch; keep in CI.
+- **Risk:** low.
+- **Done criteria:** CI fails if scanner bypasses integrity enforcement.
 
-### Task 2.1 - Add explicit tests for mixed-mode asymmetry
-- **Files to edit:** add `tests/mixed-mode-policy-test.py` or expand `tests/destructive/trading-agency-mixed-test.py`
-- **Why:** current docs imply limits, but there is no sharply named test proving Hyperliquid-primary data-gate and selection semantics together.
-- **Dependency/order:** after 1.3
-- **Risk:** low
-- **Done criteria:** test proves: (a) Hyperliquid outage blocks mixed mode, (b) Polymarket outage alone does not, (c) one-entry-per-cycle remains enforced.
+### Task 2.2
+- **Task:** Add orchestrator-level multi-cycle mixed-mode proof that accumulates both exchanges over time without breaking the one-entry-per-cycle rule.
+- **Files to edit:** add new destructive test under `tests/destructive/`; update `scripts/ci-safe-verification.sh`
+- **Why:** current mixed-mode proof is correct but still narrow.
+- **Dependency/order:** after 1.2.
+- **Risk:** medium.
+- **Done criteria:** one destructive test proves both shared-state accumulation and selection asymmetry at orchestrator level.
 
-### Task 2.2 - Add safety schema-drift regression tests
-- **Files to edit:** add `tests/execution-safety-schema-test.py`
-- **Why:** safety is the weakest layer for raw-vs-normalized assumptions.
-- **Dependency/order:** after 1.1
-- **Risk:** low
-- **Done criteria:** seeded trade records lacking nested `signal` or using alternate canonical fields do not crash safety validation.
+### Task 2.3
+- **Task:** Add negative-path Polymarket tests for malformed market payloads.
+- **Files to edit:** add new test files under `tests/`
+- **Why:** current Polymarket proof is mostly happy-path.
+- **Dependency/order:** parallel with 2.2.
+- **Risk:** low.
+- **Done criteria:** malformed prices/tokens/market IDs are rejected and covered.
 
-### Task 2.3 - Separate offline end-to-end tests from true integration category
-- **Files to edit:** test filenames and `scripts/ci-safe-verification.sh`
-- **Why:** evidence quality should be visible from the test name alone.
-- **Dependency/order:** after 0.2
-- **Risk:** medium
-- **Done criteria:** CI names clearly distinguish offline fixture tests from any future live/integration tests.
+## Phase 3 — Polymarket integration completion
 
-## Phase 3 - Polymarket integration completion
+### Task 3.1
+- **Task:** Make a product decision: paper-only Polymarket forever, or real execution target.
+- **Files to edit:** `README.md`, `docs/POLYMARKET_EXECUTION_SCOPE.md`, `SYSTEM_STATUS.md`
+- **Why:** current wording is mostly honest but still leaves room for readers to project more than the code supports.
+- **Dependency/order:** before any real execution work.
+- **Risk:** medium.
+- **Done criteria:** docs explicitly state whether live Polymarket execution is in or out of scope.
 
-### Task 3.1 - Decide the product truth: keep paper-only Polymarket or build real Polymarket execution
-- **Files to edit:** `README.md`, `SYSTEM_STATUS.md`, maybe add `docs/POLYMARKET_EXECUTION_SCOPE.md`
-- **Why:** the repo currently has real paper integration but no live execution path. This needs a deliberate boundary.
-- **Dependency/order:** before any real implementation work
-- **Risk:** high
-- **Done criteria:** repo states either (a) paper-only Polymarket is final scope, or (b) live Polymarket execution is a tracked future milestone with no present claim.
+### Task 3.2
+- **Task:** If live Polymarket execution is in scope, split paper adapters from live adapters and implement a real client.
+- **Files to edit:** `utils/paper_exchange_adapters.py` (split), new live client modules, orchestrator wiring, tests, docs
+- **Why:** paper adapter code is not a live execution implementation.
+- **Dependency/order:** after 3.1.
+- **Risk:** high.
+- **Done criteria:** authenticated order placement, signing/wallet flow, fills, settlement, and live integration tests exist.
 
-### Task 3.2 - If live Polymarket execution is desired, add a real execution adapter instead of extending paper adapter semantics
-- **Files to edit:** add new runtime files rather than overloading `utils/paper_exchange_adapters.py`
-- **Why:** paper simulation and real execution should not share the same abstraction blindly.
-- **Dependency/order:** after 3.1
-- **Risk:** high
-- **Done criteria:** explicit authenticated Polymarket execution path exists with credentials/bootstrap checks, isolated from paper mode.
+### Task 3.3
+- **Task:** If live Polymarket execution is out of scope, rename surfaces to reduce ambiguity.
+- **Files to edit:** docs, adapter names, maybe metadata naming
+- **Why:** current `canonical` wording can be misread as broader than `canonical paper path`.
+- **Dependency/order:** after 3.1 if live work is out of scope.
+- **Risk:** low.
+- **Done criteria:** every reference says `paper path` or `paper adapter` where appropriate.
 
-### Task 3.3 - Add live-readiness prerequisites only if real execution is implemented
-- **Files to edit:** `scripts/bootstrap-runtime-check.py`, new integration tests/workflows, secrets/config docs
-- **Why:** current bootstrap checks only Python modules; that is correct for paper mode and insufficient for live mode.
-- **Dependency/order:** after 3.2
-- **Risk:** high
-- **Done criteria:** bootstrap can prove live prerequisites for the chosen exchange without conflating them with paper mode.
+## Phase 4 — observability and docs cleanup
 
-## Phase 4 - observability and docs cleanup
+### Task 4.1
+- **Task:** Add a per-cycle runtime manifest.
+- **Files to edit:** `scripts/trading-agency-phase1.py`
+- **Why:** it should be trivial to see what ran, what was skipped, and which files were written.
+- **Dependency/order:** after Phase 1.
+- **Risk:** low.
+- **Done criteria:** one JSON artifact lists executed stages, skipped scripts, touched files, and active policy flags.
 
-### Task 4.1 - Produce a single authoritative reviewer index
-- **Files to edit:** `README.md`, add `TRUTH_INDEX.md` or repurpose `PROOF_MATRIX.md`
-- **Why:** reviewers should not need to infer authoritative docs from a large repo.
-- **Dependency/order:** after Phase 0
-- **Risk:** low
-- **Done criteria:** one top-level file maps canonical code, canonical state, test evidence, and non-canonical surfaces.
+### Task 4.2
+- **Task:** Move broad support docs out of the active-doc set or relabel them.
+- **Files to edit:** `docs/CAPITAL_ALLOCATION.md`, `docs/THREE_STAGE_GOVERNANCE.md`, `docs/EXIT_TRACKER_REPORT.md`, `docs/POSITION_TRACKING_REPORT.md`, `docs/STABILITY_REPORT.md`
+- **Why:** these docs increase active truth surface without being part of the canonical loop.
+- **Dependency/order:** after Phase 0.
+- **Risk:** low.
+- **Done criteria:** active docs directory is biased toward current runtime truth, not retained subsystem ambition.
 
-### Task 4.2 - Mark runtime artifacts by authority level
-- **Files to edit:** `docs/RUNTIME_OBSERVABILITY.md`, `scripts/trading-agency-phase1.py`, `scripts/timeout-monitor.py`, `scripts/exit-monitor.py`
-- **Why:** not every generated artifact is authoritative state.
-- **Dependency/order:** after Phase 1
-- **Risk:** low
-- **Done criteria:** reports clearly label themselves as authoritative state, derived summary, or monitoring-only output.
-
-### Task 4.3 - Remove or clearly annotate stale root audit artifacts
-- **Files to edit:** existing root audit/status markdown files as needed
-- **Why:** multiple status reports at repo root create review ambiguity.
-- **Dependency/order:** after 4.1
-- **Risk:** low
-- **Done criteria:** only one current audit/status path is presented as authoritative; others are historical or superseded.
-
-## Priority order summary
-
-1. Truth cleanup of archive/test naming/mixed-mode wording
-2. Safety-layer schema normalization and architecture tightening
-3. Better tests for mixed-mode semantics and schema drift
-4. Explicit decision on whether Polymarket remains paper-only or gets a real execution implementation
-5. Observability/doc consolidation
-
-## Final repair target
-
-After Phases 0-2, the repo can honestly claim:
-- canonical paper-trading execution exists,
-- Hyperliquid is the strongest supported paper path,
-- Polymarket is a canonical paper path but experimental overall,
-- mixed mode is limited and asymmetric,
-- no live-ready claim is made.
-
-After Phase 3, only if real authenticated execution is implemented and proven, the repo could begin making any narrower live-integration claims.
+### Task 4.3
+- **Task:** Expand docs truth guards in CI.
+- **Files to edit:** `tests/repo-truth-guard-test.py`, possibly add new guard test; update `scripts/ci-safe-verification.sh`
+- **Why:** current truth guard does not cover all active docs.
+- **Dependency/order:** after 4.2.
+- **Risk:** low.
+- **Done criteria:** CI fails on unsupported live-ready claims, unsupported mixed-mode claims, and unsupported data-integrity claims in active docs.
