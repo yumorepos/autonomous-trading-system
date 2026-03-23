@@ -7,6 +7,7 @@ PRIMARY_MIXED_MODE_EXCHANGE = "Hyperliquid"
 EXCHANGE_RUNTIME_METADATA = {
     "Hyperliquid": {
         "paper_status": "canonical",
+        "experimental": False,
         "entry_priority": 0,
         "take_profit_pct": 10.0,
         "stop_loss_pct": -10.0,
@@ -14,6 +15,7 @@ EXCHANGE_RUNTIME_METADATA = {
     },
     "Polymarket": {
         "paper_status": "canonical",
+        "experimental": True,
         "entry_priority": 1,
         "take_profit_pct": 8.0,
         "stop_loss_pct": -8.0,
@@ -32,3 +34,7 @@ def paper_exchange_priority(exchange: str | None) -> int:
 
 def paper_exchange_status(exchange: str | None) -> str:
     return str(EXCHANGE_RUNTIME_METADATA.get(exchange or DEFAULT_PAPER_EXCHANGE, EXCHANGE_RUNTIME_METADATA[DEFAULT_PAPER_EXCHANGE])["paper_status"])
+
+
+def paper_exchange_is_experimental(exchange: str | None) -> bool:
+    return bool(EXCHANGE_RUNTIME_METADATA.get(exchange or DEFAULT_PAPER_EXCHANGE, EXCHANGE_RUNTIME_METADATA[DEFAULT_PAPER_EXCHANGE])["experimental"])
