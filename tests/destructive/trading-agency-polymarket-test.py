@@ -52,7 +52,7 @@ if __name__ == '__main__':
         assert entry_trade['token_id'] == 'pm-btc-up-YES', entry_trade
         assert entry_trade['side'] == 'YES', entry_trade
         assert entry_trade['paper_only'] is True, entry_trade
-        assert entry_trade['experimental'] is False, entry_trade
+        assert entry_trade['experimental'] is True, entry_trade
 
         position_state = load_json(positions_path)
         open_positions = list(position_state['positions'].values())

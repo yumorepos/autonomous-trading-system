@@ -32,7 +32,8 @@ if __name__ == '__main__':
     assert 'does not prove live readiness' in proof, proof
     assert 'deterministic single-entry selection and Hyperliquid preferred' in proof, proof
 
-    assert 'canonical Hyperliquid and Polymarket paths' in system_status, system_status
+    assert 'canonical Hyperliquid and Polymarket paper paths' in system_status, system_status
+    assert 'Polymarket experimental overall' in system_status, system_status
     assert 'live trading is not implemented' in system_status, system_status
     assert 'real-money execution' not in system_status.lower() or 'not supported' in readme.lower()
 

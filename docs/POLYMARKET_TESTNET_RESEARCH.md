@@ -11,7 +11,7 @@ This repository does **not** implement live Polymarket trading. The current supp
 
 - optional
 - paper trading only
-- experimental
+- experimental overall
 - routed through the same canonical persistence model used by the rest of the system
 
 ## Research Summary
