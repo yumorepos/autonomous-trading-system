@@ -5,6 +5,7 @@ VALIDATE -> QUARANTINE -> PROMOTE -> [Human Approval] -> LIVE (theoretical futur
 
 This script manages research-stage governance metadata only. It does not imply
 that live trading is currently supported in this repository.
+Support-only, not part of the canonical runtime.
 """
 
 import json
@@ -52,7 +53,7 @@ DEMOTION_TRIGGERS = {
 
 
 class StrategyGovernance:
-    """Manages three-stage strategy lifecycle"""
+    """Manages support-only governance metadata outside the canonical runtime."""
     
     VALIDATE = 'VALIDATE'      # Paper trading, collecting data
     QUARANTINE = 'QUARANTINE'  # Performance warning, monitoring closely

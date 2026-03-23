@@ -2,9 +2,9 @@
 
 ## Current truth
 
-Polymarket is currently integrated into the repository's **canonical paper-trading path**.
+Polymarket = canonical paper path, experimental overall, not live-integrated.
 
-That means the repo does support all of the following for `polymarket_only` and limited mixed-mode participation:
+That means the repo does support all of the following for `polymarket_only` and limited mixed-mode participation inside the paper-only runtime:
 - data-integrity gating
 - signal generation
 - safety validation
@@ -26,15 +26,25 @@ Missing pieces include:
 - live execution integration tests
 - any live-readiness or production-readiness basis
 
+## Canonical wording
+
+Use the same wording across repo truth surfaces:
+
+- Hyperliquid = canonical paper-trading path
+- Polymarket = canonical paper path, experimental overall, not live-integrated
+- Mixed mode = limited, asymmetric (one entry per cycle, Hyperliquid priority)
+- CI = offline proof only, not live exchange validation
+
 ## How to describe it truthfully
 
 Use wording like this:
 
-> Polymarket is integrated into the canonical paper-trading runtime, but remains experimental overall and is not live-ready.
+> Polymarket = canonical paper path, experimental overall, not live-integrated.
 
 Avoid wording like this:
 - "Polymarket is fully integrated" without a paper-only qualifier
 - "Polymarket is live-ready"
+- "Polymarket is live-integrated"
 - "Polymarket is only helper/scaffold code"
 
 ## Mixed-mode caveat

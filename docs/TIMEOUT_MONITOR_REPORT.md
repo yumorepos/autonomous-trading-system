@@ -1,3 +1,5 @@
+# NON-CANONICAL – historical/generated example, not current runtime evidence
+
 # Timeout Monitor Report
 **Generated:** 2026-03-21 01:45:29 EDT
 **Purpose:** Enhanced monitoring for timeout-driven exits
