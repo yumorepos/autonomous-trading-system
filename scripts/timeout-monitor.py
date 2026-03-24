@@ -18,7 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
 from models.paper_contracts import SIGNAL_CONTRACTS, paper_position_identifier
 from utils.paper_exchange_adapters import get_paper_exchange_adapter
-from models.position_state import get_open_positions
+from models.position_state import get_open_positions, synchronize_position_state
 from models.trade_schema import validate_trade_record
 from utils.json_utils import safe_read_json, safe_read_jsonl
 from utils.system_health import SystemHealthManager
@@ -113,6 +113,7 @@ class TimeoutMonitor:
     
     def load_positions(self) -> List[Dict]:
         """Load open positions from authoritative position-state.json only."""
+        synchronize_position_state(LOGS_DIR / "position-state.json", PAPER_TRADES)
         positions = []
         for position in get_open_positions(LOGS_DIR / "position-state.json"):
             if not validate_trade_record(position, context=f"timeout-monitor[{position.get('trade_id', 'unknown')}]"):

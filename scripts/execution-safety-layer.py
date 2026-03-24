@@ -24,6 +24,7 @@ from models.paper_contracts import paper_position_identifier
 from models.trade_schema import is_trade_closed, is_trade_open, normalize_trade_record, validate_trade_record
 from utils.system_health import SystemHealthManager
 from utils.paper_exchange_adapters import get_paper_exchange_adapter
+from utils.json_utils import safe_read_jsonl
 SAFETY_STATE = LOGS_DIR / "execution-safety-state.json"
 BLOCKED_ACTIONS = LOGS_DIR / "blocked-actions.jsonl"
 INCIDENT_LOG = LOGS_DIR / "incident-log.jsonl"
@@ -179,18 +180,12 @@ class ExecutionSafetyLayer:
         }
 
     def _canonical_trade_history(self) -> List[Dict]:
-        if not PAPER_TRADES_FILE.exists():
-            return []
-
         trades: List[Dict] = []
-        with open(PAPER_TRADES_FILE) as handle:
-            for line in handle:
-                if not line.strip():
-                    continue
-                record = normalize_trade_record(json.loads(line))
-                if not validate_trade_record(record, context='execution-safety.trade-history'):
-                    continue
-                trades.append(record)
+        for raw_record in safe_read_jsonl(PAPER_TRADES_FILE):
+            record = normalize_trade_record(raw_record)
+            if not validate_trade_record(record, context='execution-safety.trade-history'):
+                continue
+            trades.append(record)
         return trades
 
     def refresh_breaker_state_from_canonical_history(self) -> Dict:

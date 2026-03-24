@@ -46,6 +46,7 @@ python3 scripts/hyperliquid-offline-soak.py --cycles 12
 
 - End-to-end Hyperliquid proof: `tests/destructive/trading-agency-hyperliquid-test.py`
 - Repeat-cycle deterministic stability: `tests/destructive/trading-agency-hyperliquid-repeat-cycle-test.py`
+- Canonical state recovery after malformed/drifted state: `tests/destructive/trading-agency-state-recovery-test.py`
 - Negative-path truthfulness: `tests/destructive/trading-agency-negative-path-test.py`
 - Canonical Polymarket paper path (experimental overall): `tests/destructive/trading-agency-polymarket-test.py`
 - Mixed-mode limited handling: `tests/destructive/trading-agency-mixed-test.py`
