@@ -79,6 +79,7 @@ The safe verification suite proves, offline only:
 - generated paper signals are validated by the data-integrity layer before they are appended to canonical signal history
 - Hyperliquid and Polymarket paper signal schemas normalize into the expected structure
 - isolated paper-trader lifecycle flows persist and clear canonical state correctly
+- canonical position-state recovery can rebuild open positions from append-only trade history after malformed or drifted state
 - offline agency-entrypoint proofs now cover Hyperliquid success, Polymarket success, mixed-mode limitation, and orchestrator negative-path blocking
 - deterministic repeat-cycle Hyperliquid validation confirms stable offline trade/performance/state behavior across multiple cycles
 - the performance dashboard can read canonical mixed-mode trade history
@@ -98,7 +99,7 @@ Run the same suite locally with:
 - no live trading support exists
 - no real-money execution path exists
 - `mixed` is not proven as a simultaneous dual-entry runtime; it remains a limited deterministic evaluation mode with one new entry per cycle and Hyperliquid-primary selection semantics
-- Polymarket is canonical at the paper-trading level, experimental overall, and does not imply live readiness
+- Polymarket is canonical at the paper-trading level, experimental overall, and does not imply live integration or production capability
 
 ## Operator Quickstart
 

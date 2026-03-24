@@ -83,5 +83,5 @@ Canonical files to know:
 ## Notes
 
 - Hyperliquid is the default and best-supported paper-trading path.
-- Polymarket is a canonical paper-trading path, but remains experimental overall; the repository is still paper-only and not live-ready.
+- Polymarket is a canonical paper-trading path, but remains experimental overall; live trading is not implemented and real-money execution is not supported.
 - Live trading is not implemented anywhere in this repository.
