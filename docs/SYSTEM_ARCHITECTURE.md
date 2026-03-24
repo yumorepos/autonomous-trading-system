@@ -30,6 +30,7 @@ The canonical operator entrypoint is `scripts/trading-agency-phase1.py`.
    - `scripts/phase1-paper-trader.py` builds canonical entry/exit records.
 7. **Authoritative state update**
    - Canonical records are persisted to `workspace/logs/phase1-paper-trades.jsonl` and `workspace/logs/position-state.json`.
+   - Canonical readers now synchronize `position-state.json` from append-only trade history when the state file is missing, malformed, or drifted.
 8. **Monitor/report stage**
    - `scripts/timeout-monitor.py` reads canonical open positions and writes paper-trading monitoring artifacts.
 
@@ -80,6 +81,7 @@ The verification suite currently proves, offline only:
 - generated paper signals are validated by the data-integrity layer before persistence
 - Hyperliquid and Polymarket paper signals conform to the expected normalized schema
 - canonical state survives isolated paper-trader lifecycle tests for Hyperliquid, Polymarket, and mixed-mode history accumulation
+- canonical position-state recovery can rebuild open positions from append-only trade history after malformed, missing, or drifted state
 - the full agency orchestrator path is exercised offline in CI for Hyperliquid, Polymarket, mixed-mode limitation handling, and negative-path blocking
 - dashboard and timeout-monitor support scripts can read canonical outputs as expected
 
