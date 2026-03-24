@@ -29,10 +29,10 @@ Supported runtime modes:
 | `models/trade_schema.py` | KEEP_ACTIVE | Canonical normalized trade schema for the paper-trading path. |
 | `models/position_state.py` | KEEP_ACTIVE | Authoritative open-position state model. |
 | `scripts/timeout-monitor.py` | KEEP_ACTIVE | Canonical monitor script run by the orchestrator. |
-| `scripts/performance-dashboard.py` | KEEP_ACTIVE_SUPPORT | Reads canonical trade/state outputs only. |
+| `scripts/support/performance-dashboard.py` | KEEP_ACTIVE_SUPPORT | Reads canonical trade/state outputs only. |
 | `scripts/exit-monitor.py` | KEEP_NON_CANONICAL | Proof/audit generator only; not authoritative close persistence. |
 | `scripts/live-readiness-validator.py` | KEEP_NON_CANONICAL_FUTURE_SCOPE | Research model for hypothetical future criteria only. |
-| `scripts/stability-monitor.py` | KEEP_NON_CANONICAL_SUPPORT | Support monitor; not part of canonical execution. |
+| `scripts/support/stability-monitor.py` | KEEP_NON_CANONICAL_SUPPORT | Support monitor; not part of canonical execution. |
 | `.github/workflows/basic.yml` | KEEP_ACTIVE | Required CI-safe verification workflow for every push and pull request. |
 | `tests/destructive/*.py` | KEEP_ACTIVE_REPAIRED | Isolated temp-workspace lifecycle tests for canonical paper-trader behavior. |
 

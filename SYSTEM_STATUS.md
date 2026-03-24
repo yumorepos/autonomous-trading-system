@@ -62,8 +62,8 @@
 
 - `scripts/exit-monitor.py` — proof/audit only
 - `scripts/live-readiness-validator.py` — future-scope research model only
-- `scripts/exit-safeguards.py` — support utility; not part of the canonical loop
-- `scripts/stability-monitor.py` — support-only observability
+- `scripts/support/exit-safeguards.py` — support utility; not part of the canonical loop
+- `scripts/support/stability-monitor.py` — support-only observability
 - `docs/archive/` and `scripts/archive/` — historical context only
 
 ---

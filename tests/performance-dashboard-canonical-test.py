@@ -100,7 +100,7 @@ if __name__ == '__main__':
                 handle.write(json.dumps(record) + '\n')
                 trader.apply_trade_to_position_state(trader.POSITION_STATE_FILE, record)
 
-        dashboard_module = load_module('performance_dashboard_test', REPO_ROOT / 'scripts' / 'performance-dashboard.py')
+        dashboard_module = load_module('performance_dashboard_test', REPO_ROOT / 'scripts' / 'support' / 'performance-dashboard.py')
         dashboard = dashboard_module.PerformanceDashboard()
 
         assert dashboard.calculate_stats(dashboard.hl_trades)['closed'] == 1

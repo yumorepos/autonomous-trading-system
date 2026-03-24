@@ -27,6 +27,7 @@ from models.exchange_metadata import (
     paper_exchange_priority,
     paper_exchange_status,
 )
+from models.paper_account import DEFAULT_STARTING_BALANCE_USD, synchronize_paper_account_state
 from models.paper_contracts import paper_position_identifier, validate_signal_contract
 from utils.paper_exchange_adapters import get_paper_exchange_adapter
 from models.position_state import apply_trade_to_position_state, get_open_positions, synchronize_position_state
@@ -38,8 +39,9 @@ PAPER_TRADES_FILE = LOGS_DIR / "phase1-paper-trades.jsonl"
 PERFORMANCE_FILE = LOGS_DIR / "phase1-performance.json"
 SIGNALS_FILE = LOGS_DIR / "phase1-signals.jsonl"
 POSITION_STATE_FILE = LOGS_DIR / "position-state.json"
+PAPER_ACCOUNT_FILE = LOGS_DIR / "paper-account.json"
 
-PAPER_BALANCE = 97.80
+PAPER_BALANCE = DEFAULT_STARTING_BALANCE_USD
 MAX_OPEN_POSITIONS = 3
 MIN_EV_SCORE = 4
 
@@ -232,6 +234,7 @@ def log_trade(trade: dict) -> None:
         },
     )
     apply_trade_to_position_state(POSITION_STATE_FILE, trade)
+    synchronize_paper_account_state(PAPER_ACCOUNT_FILE, PAPER_TRADES_FILE, starting_balance_usd=PAPER_BALANCE)
 
 
 

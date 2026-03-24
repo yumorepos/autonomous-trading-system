@@ -52,7 +52,7 @@ This repository is a **well-documented paper-trading research system with a real
 
 - `scripts/exit-monitor.py` — explicitly skipped by the canonical loop.
 - `scripts/live-readiness-validator.py` — future-scope/support-only.
-- `scripts/stability-monitor.py`, `scripts/supervisor-governance.py`, `scripts/performance-dashboard.py`, `scripts/position-exit-tracker.py`, `scripts/enhanced-exit-capture.py`, `scripts/exit-safeguards.py`, `scripts/alpha-intelligence-layer.py`, `scripts/portfolio-allocator.py` — support / research surfaces, not canonical execution.
+- `scripts/support/stability-monitor.py`, `scripts/support/supervisor-governance.py`, `scripts/support/performance-dashboard.py`, `scripts/support/position-exit-tracker.py`, `scripts/support/enhanced-exit-capture.py`, `scripts/support/exit-safeguards.py`, `scripts/support/alpha-intelligence-layer.py`, `scripts/support/portfolio-allocator.py` — support / research surfaces, not canonical execution.
 - `scripts/archive/` and `docs/archive/` — historical only.
 
 ### Ownership / surface-shape reality
@@ -100,7 +100,7 @@ That distinction is mostly documented, but not fully encoded in layout or CI bou
 #### 2. Split canonical runtime code from support-only scripts at the directory level
 - **Problem:** Many support-only scripts live beside canonical runtime files under `scripts/`, which blurs review boundaries.
 - **Why it matters:** Reviewers can still infer importance from filenames and proximity, even when docs warn otherwise.
-- **Exact files likely involved:** move or re-home `scripts/stability-monitor.py`, `scripts/supervisor-governance.py`, `scripts/performance-dashboard.py`, `scripts/position-exit-tracker.py`, `scripts/enhanced-exit-capture.py`, `scripts/exit-safeguards.py`, `scripts/alpha-intelligence-layer.py`, `scripts/portfolio-allocator.py`; update `README.md`, `TRUTH_INDEX.md`, `docs/SYSTEM_ARCHITECTURE.md`, tests that reference paths.
+- **Exact files likely involved:** move or re-home `scripts/support/stability-monitor.py`, `scripts/support/supervisor-governance.py`, `scripts/support/performance-dashboard.py`, `scripts/support/position-exit-tracker.py`, `scripts/support/enhanced-exit-capture.py`, `scripts/support/exit-safeguards.py`, `scripts/support/alpha-intelligence-layer.py`, `scripts/support/portfolio-allocator.py`; update `README.md`, `TRUTH_INDEX.md`, `docs/SYSTEM_ARCHITECTURE.md`, tests that reference paths.
 - **Risk level:** Medium.
 - **Estimated difficulty:** Medium.
 - **Expected impact:** High review clarity; lower truth debt.
@@ -234,7 +234,7 @@ That distinction is mostly documented, but not fully encoded in layout or CI bou
 #### 16. Build a sellable signal/intelligence layer before any execution-commercialization attempt
 - **Problem:** There is no truthful basis yet for selling this as live execution software.
 - **Why it matters:** The current codebase is much closer to “signal research and evidence packaging” than to “automated broker/exchange execution.”
-- **Exact files likely involved:** `scripts/alpha-intelligence-layer.py`, `scripts/performance-dashboard.py`, new export/reporting surfaces, docs.
+- **Exact files likely involved:** `scripts/support/alpha-intelligence-layer.py`, `scripts/support/performance-dashboard.py`, new export/reporting surfaces, docs.
 - **Risk level:** Medium.
 - **Estimated difficulty:** Medium-High.
 - **Expected impact:** High if productized carefully.

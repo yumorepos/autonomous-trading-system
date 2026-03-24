@@ -189,7 +189,7 @@ if __name__ == "__main__":
         os.environ["OPENCLAW_WORKSPACE"] = str(workspace_root)
         os.environ["OPENCLAW_TRADING_MODE"] = "hyperliquid_only"
         sys.modules.pop("config.runtime", None)
-        dashboard_module = load_module("performance_dashboard_agency_test", REPO_ROOT / "scripts" / "performance-dashboard.py")
+        dashboard_module = load_module("performance_dashboard_agency_test", REPO_ROOT / "scripts" / "support" / "performance-dashboard.py")
         dashboard = dashboard_module.PerformanceDashboard()
         assert dashboard.calculate_stats(dashboard.hl_trades)["closed"] == 1
         assert dashboard.calculate_stats(dashboard.pm_trades)["closed"] == 0

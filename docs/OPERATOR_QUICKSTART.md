@@ -54,8 +54,8 @@ Use mixed mode only as a limited deterministic evaluation mode. It is not a dual
 ```bash
 python3 scripts/timeout-monitor.py
 python3 scripts/execution-safety-layer.py
-python3 scripts/performance-dashboard.py
-python3 scripts/supervisor-governance.py
+python3 scripts/support/performance-dashboard.py
+python3 scripts/support/supervisor-governance.py
 ```
 
 The support scripts above are useful for review and reporting, but they are not the canonical operator entrypoint.

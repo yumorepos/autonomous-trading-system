@@ -35,7 +35,7 @@ Standard: production-readiness and truthfulness audit with zero assumptions
 | position state | working | `models/position_state.py`, `tests/trade-schema-contract-test.py`, `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-polymarket-test.py` | One authoritative `position-state.json` is maintained from trade records and supports both exchanges. |
 | timeout monitor | working | `scripts/timeout-monitor.py`, `scripts/trading-agency-phase1.py`, `tests/timeout-monitor-polymarket-threshold-test.py`, destructive agency tests | Monitor reads authoritative open-position state and writes monitoring artifacts. It does not authoritatively close trades. |
 | exit monitor | non-canonical | `scripts/exit-monitor.py`, `scripts/trading-agency-phase1.py` | Explicitly skipped in the canonical loop because it writes proof artifacts without authoritative close persistence. |
-| performance dashboard | working support reader | `scripts/performance-dashboard.py`, `tests/performance-dashboard-canonical-test.py`, `tests/trade-schema-contract-test.py` | Reads canonical trade/state files and splits output by exchange. Support-only reader, not execution proof. |
+| performance dashboard | working support reader | `scripts/support/performance-dashboard.py`, `tests/performance-dashboard-canonical-test.py`, `tests/trade-schema-contract-test.py` | Reads canonical trade/state files and splits output by exchange. Support-only reader, not execution proof. |
 | Hyperliquid path | working | `scripts/phase1-signal-scanner.py`, `utils/paper_exchange_adapters.py`, `scripts/phase1-paper-trader.py`, `tests/destructive/trading-agency-hyperliquid-test.py`, `tests/destructive/trading-agency-hyperliquid-repeat-cycle-test.py` | Hyperliquid is fully wired through the canonical paper path and has the strongest orchestration proof coverage. |
 | Polymarket path | partial | `scripts/phase1-signal-scanner.py`, `utils/paper_exchange_adapters.py`, `scripts/phase1-paper-trader.py`, `tests/destructive/trading-agency-polymarket-test.py`, `tests/destructive/polymarket-paper-flow-test.py`, `tests/polymarket-canonical-path-guard-test.py` | Polymarket is in the canonical paper flow and not helper-only, but remains experimental, public-data-only, paper-only, and lacks authenticated order placement/fill/settlement/live integration coverage. |
 | mixed mode | partial | `config/runtime.py`, `models/exchange_metadata.py`, `scripts/data-integrity-layer.py`, `scripts/phase1-paper-trader.py`, `tests/destructive/trading-agency-mixed-test.py`, `tests/destructive/mixed-mode-integration-test.py`, `tests/mixed-mode-policy-test.py` | Mixed mode scans both exchanges and can store both in canonical state over time, but the agency loop allows only one new entry per cycle and deterministically prefers Hyperliquid. It is not a peer-symmetric dual-entry runtime. |
@@ -170,7 +170,7 @@ Real current canonical flow, as implemented now:
    - **Done criteria:** met — active truth surfaces use the same wording for Hyperliquid, Polymarket, mixed mode, and CI scope.
 
 3. **Label support/future-scope scripts as non-canonical**
-   - **Files:** `scripts/live-readiness-validator.py`, `scripts/supervisor-governance.py`
+   - **Files:** `scripts/live-readiness-validator.py`, `scripts/support/supervisor-governance.py`
    - **Why:** keep support tooling from reading like part of the canonical runtime.
    - **Dependency/order:** completed in parallel with wording cleanup.
    - **Risk:** low.
@@ -186,7 +186,7 @@ Real current canonical flow, as implemented now:
    - **Done criteria:** met — signal integrity rejects exchange-invalid Hyperliquid and Polymarket signals before append-only persistence.
 
 2. **Centralize canonical contract definitions and reuse them everywhere** — **completed**
-   - **Files:** `models/paper_contracts.py`, `scripts/data-integrity-layer.py`, `utils/paper_exchange_adapters.py`, `models/trade_schema.py`, `models/position_state.py`, `scripts/phase1-paper-trader.py`, `scripts/performance-dashboard.py`, `scripts/timeout-monitor.py`, `scripts/execution-safety-layer.py`
+   - **Files:** `models/paper_contracts.py`, `scripts/data-integrity-layer.py`, `utils/paper_exchange_adapters.py`, `models/trade_schema.py`, `models/position_state.py`, `scripts/phase1-paper-trader.py`, `scripts/support/performance-dashboard.py`, `scripts/timeout-monitor.py`, `scripts/execution-safety-layer.py`
    - **Why:** remove distributed field assumptions across validators, producers, persistence, and readers.
    - **Dependency/order:** completed after exchange-specific validation.
    - **Risk:** medium.

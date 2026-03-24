@@ -1,0 +1,29 @@
+{
+  "claims": {
+    "canonical_entrypoint": "scripts/trading-agency-phase1.py",
+    "hyperliquid_scope": "canonical paper-trading path",
+    "polymarket_scope": "canonical paper path, experimental overall, not live-integrated",
+    "mixed_mode_scope": "limited, asymmetric (one entry per cycle, Hyperliquid priority)",
+    "ci_scope": "offline proof only, not live exchange validation",
+    "live_trading_scope": "live trading is not implemented",
+    "real_money_scope": "real-money execution is not supported",
+    "exit_monitor_scope": "Skipped in canonical loop"
+  },
+  "doc_enforcement": {
+    "README.md": [
+      "**Hyperliquid:** canonical paper-trading path",
+      "**Polymarket:** canonical paper path, experimental overall, not live-integrated",
+      "**Mixed mode:** limited, asymmetric (one entry per cycle, Hyperliquid priority)",
+      "**CI:** offline proof only, not live exchange validation",
+      "**Live trading:** not implemented",
+      "**Real-money execution:** not supported"
+    ],
+    "SYSTEM_STATUS.md": [
+      "Hyperliquid = canonical paper-trading path",
+      "Polymarket = canonical paper path, experimental overall, not live-integrated",
+      "Mixed mode = limited, asymmetric (one entry per cycle, Hyperliquid priority)",
+      "CI = offline proof only, not live exchange validation",
+      "live trading is not implemented"
+    ]
+  }
+}

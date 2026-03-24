@@ -146,7 +146,7 @@ if __name__ == "__main__":
             for record in records:
                 handle.write(json.dumps(record) + "\n")
 
-        dashboard_module = load_module("performance_dashboard_schema_contract", REPO_ROOT / "scripts" / "performance-dashboard.py")
+        dashboard_module = load_module("performance_dashboard_schema_contract", REPO_ROOT / "scripts" / "support" / "performance-dashboard.py")
         dashboard = dashboard_module.PerformanceDashboard()
 
         assert len(dashboard.hl_trades) == 1, dashboard.hl_trades
