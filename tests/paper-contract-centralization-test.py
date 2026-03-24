@@ -86,7 +86,7 @@ if __name__ == '__main__':
         from models.trade_schema import normalize_trade_record, validate_trade_record
 
         trader = load_module('paper_contracts_trader_test', REPO_ROOT / 'scripts' / 'phase1-paper-trader.py')
-        dashboard_module = load_module('paper_contracts_dashboard_test', REPO_ROOT / 'scripts' / 'performance-dashboard.py')
+        dashboard_module = load_module('paper_contracts_dashboard_test', REPO_ROOT / 'scripts' / 'support' / 'performance-dashboard.py')
         timeout_module = load_module('paper_contracts_timeout_test', REPO_ROOT / 'scripts' / 'timeout-monitor.py')
         safety_module = load_module('paper_contracts_safety_test', REPO_ROOT / 'scripts' / 'execution-safety-layer.py')
         integrity_module = load_module('paper_contracts_integrity_test', REPO_ROOT / 'scripts' / 'data-integrity-layer.py')

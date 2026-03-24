@@ -21,6 +21,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR, DATA_DIR
 from models.paper_contracts import paper_position_identifier
+from models.paper_account import DEFAULT_STARTING_BALANCE_USD, synchronize_paper_account_state
 from models.trade_schema import is_trade_closed, is_trade_open, normalize_trade_record, validate_trade_record
 from utils.system_health import SystemHealthManager
 from utils.paper_exchange_adapters import get_paper_exchange_adapter
@@ -32,6 +33,7 @@ SAFETY_REPORT = WORKSPACE / "EXECUTION_SAFETY_REPORT.md"
 PORTFOLIO_ALLOCATION = LOGS_DIR / "portfolio-allocation.json"
 STRATEGY_REGISTRY = LOGS_DIR / "strategy-registry.json"
 PAPER_TRADES_FILE = LOGS_DIR / "phase1-paper-trades.jsonl"
+PAPER_ACCOUNT_FILE = LOGS_DIR / "paper-account.json"
 
 # Safety Thresholds
 SAFETY_LIMITS = {
@@ -111,7 +113,7 @@ class ExecutionSafetyLayer:
                 'consecutive_losses': 0,
                 'daily_loss_usd': 0,
                 'hourly_loss_usd': 0,
-                'peak_balance': 97.80,
+                'peak_balance': DEFAULT_STARTING_BALANCE_USD,
                 'last_trade_timestamp': None
             },
             'exchange_health': {},
@@ -128,7 +130,7 @@ class ExecutionSafetyLayer:
                 'last_planned_trade_count': 0,
                 'last_persisted_trade_count': 0,
                 'blocked_actions_count': 0,
-                'breaker_accounting_source': 'advisory_static_defaults',
+                'breaker_accounting_source': 'persisted_trade_history_and_paper_account',
                 'cooldown_enforcement_mode': 'advisory_config_only',
             },
         }
@@ -162,7 +164,7 @@ class ExecutionSafetyLayer:
                 'consecutive_losses': breakers.get('consecutive_losses', 0),
                 'daily_loss_usd': breakers.get('daily_loss_usd', 0),
                 'hourly_loss_usd': breakers.get('hourly_loss_usd', 0),
-                'peak_balance': breakers.get('peak_balance', 97.80),
+                'peak_balance': breakers.get('peak_balance', DEFAULT_STARTING_BALANCE_USD),
                 'last_trade_timestamp': breakers.get('last_trade_timestamp'),
             },
             'runtime_enforcement': {
@@ -189,6 +191,7 @@ class ExecutionSafetyLayer:
         return trades
 
     def refresh_breaker_state_from_canonical_history(self) -> Dict:
+        account_state = synchronize_paper_account_state(PAPER_ACCOUNT_FILE, PAPER_TRADES_FILE, starting_balance_usd=DEFAULT_STARTING_BALANCE_USD)
         trades = self._canonical_trade_history()
         closed_trades = [trade for trade in trades if is_trade_closed(trade)]
         closed_trades.sort(key=lambda trade: trade.get('exit_timestamp') or trade.get('entry_timestamp') or '')
@@ -235,15 +238,17 @@ class ExecutionSafetyLayer:
             'daily_loss_usd': breakers.get('daily_loss_usd', 0.0),
             'hourly_loss_usd': breakers.get('hourly_loss_usd', 0.0),
             'last_trade_timestamp': breakers.get('last_trade_timestamp'),
+            'peak_balance': breakers.get('peak_balance', DEFAULT_STARTING_BALANCE_USD),
         }
 
         breakers['consecutive_losses'] = consecutive_losses
         breakers['daily_loss_usd'] = round(daily_loss_usd, 8)
         breakers['hourly_loss_usd'] = round(hourly_loss_usd, 8)
         breakers['last_trade_timestamp'] = last_trade_timestamp
+        breakers['peak_balance'] = float(account_state.get('peak_balance_usd', DEFAULT_STARTING_BALANCE_USD))
 
         runtime = self.state.setdefault('runtime_enforcement', {})
-        runtime['breaker_accounting_source'] = 'persisted_trade_history'
+        runtime['breaker_accounting_source'] = 'persisted_trade_history_and_paper_account'
         runtime['breaker_accounting_updated_at'] = now.isoformat()
         runtime['cooldown_enforcement_mode'] = 'advisory_config_only'
 
@@ -262,6 +267,13 @@ class ExecutionSafetyLayer:
                 'daily_loss_usd': breakers.get('daily_loss_usd', 0.0),
                 'hourly_loss_usd': breakers.get('hourly_loss_usd', 0.0),
                 'last_trade_timestamp': breakers.get('last_trade_timestamp'),
+                'peak_balance': breakers.get('peak_balance', DEFAULT_STARTING_BALANCE_USD),
+            },
+            'paper_account': {
+                'balance_usd': account_state.get('balance_usd', DEFAULT_STARTING_BALANCE_USD),
+                'peak_balance_usd': account_state.get('peak_balance_usd', DEFAULT_STARTING_BALANCE_USD),
+                'realized_pnl_usd': account_state.get('realized_pnl_usd', 0.0),
+                'closed_trades_count': account_state.get('closed_trades_count', 0),
             },
         }
 

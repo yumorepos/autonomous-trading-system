@@ -62,12 +62,15 @@ Canonical state files:
 - `workspace/logs/phase1-paper-trades.jsonl` — append-only canonical paper trade history
 - `workspace/logs/position-state.json` — authoritative open-position state only
 - `workspace/logs/phase1-performance.json` — normalized closed-trade performance summary
+- `workspace/logs/paper-account.json` — explicit paper-account state derived from closed canonical trades
 - `workspace/logs/agency-cycle-summary.json` — structured per-cycle operator summary
 - `workspace/AGENCY_CYCLE_SUMMARY.md` — human-readable per-cycle summary
+- `workspace/OPERATOR_EVIDENCE_DASHBOARD.md` — one-file operator evidence summary with truth disclaimers
 
 Non-canonical/support-only artifacts:
 - `scripts/exit-monitor.py` — proof/audit generator only; not authoritative close persistence
 - `scripts/live-readiness-validator.py` — future-scope research model only
+- `scripts/support/` — support-only analytics/monitor/report scripts outside canonical execution
 - `docs/archive/` and `scripts/archive/` — historical context only
 
 ## What CI Proves
@@ -84,6 +87,11 @@ The safe verification suite proves, offline only:
 - deterministic repeat-cycle Hyperliquid validation confirms stable offline trade/performance/state behavior across multiple cycles
 - the performance dashboard can read canonical mixed-mode trade history
 - timeout monitoring exposes Polymarket-specific paper thresholds
+- paper-account balance/peak state is synchronized from append-only canonical trade history
+- operator-control negative paths (invalid values and HALT_NEW_TRADES override) are enforced in canonical loop
+
+Machine-checkable truth claim source:
+- `truth/claims.yaml` (JSON-compatible YAML) is validated by `tests/repo-truth-guard-test.py` and enforced in CI.
 
 Run the same suite locally with:
 
