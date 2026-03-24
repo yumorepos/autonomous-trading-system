@@ -9,6 +9,7 @@ This is the shortest authoritative review path for the current repository state.
 3. `docs/SYSTEM_ARCHITECTURE.md` — canonical execution path and state model.
 4. `PROOF_MATRIX.md` — claim-to-test mapping.
 5. `docs/POLYMARKET_EXECUTION_SCOPE.md` — exact current Polymarket boundary.
+6. `truth/claims.yaml` — machine-checkable truth claim manifest enforced by CI.
 
 ## Canonical runtime code
 
@@ -26,6 +27,8 @@ This is the shortest authoritative review path for the current repository state.
 - `workspace/logs/phase1-paper-trades.jsonl`
 - `workspace/logs/position-state.json`
 - `workspace/logs/phase1-performance.json`
+- `workspace/logs/paper-account.json`
+- `workspace/OPERATOR_EVIDENCE_DASHBOARD.md`
 
 ## Current scope in one paragraph
 
@@ -39,4 +42,4 @@ Do not treat the following as current capability statements:
 - `scripts/archive/`
 - `scripts/exit-monitor.py`
 - `scripts/live-readiness-validator.py`
-- support-only monitor/report scripts outside the canonical runtime path
+- `scripts/support/` (support-only monitor/report/analytics scripts outside the canonical runtime path)

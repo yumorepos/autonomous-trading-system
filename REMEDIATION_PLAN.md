@@ -31,7 +31,7 @@ Goal: repair the repository to match a strict, evidence-based description of wha
 ### Task 0.3 — sharpen support/future-scope labeling — completed
 - **Files to edit:**
   - `scripts/live-readiness-validator.py`
-  - `scripts/supervisor-governance.py`
+  - `scripts/support/supervisor-governance.py`
   - docs that mention them
 - **Why:** names and descriptions still suggest broader operational scope than exists.
 - **Dependency/order:** parallel.
@@ -56,7 +56,7 @@ Goal: repair the repository to match a strict, evidence-based description of wha
   - `models/trade_schema.py`
   - `models/position_state.py`
   - `scripts/phase1-paper-trader.py`
-  - `scripts/performance-dashboard.py`
+  - `scripts/support/performance-dashboard.py`
   - `scripts/timeout-monitor.py`
   - `scripts/execution-safety-layer.py`
   - `scripts/data-integrity-layer.py`

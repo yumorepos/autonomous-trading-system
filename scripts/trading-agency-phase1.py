@@ -34,6 +34,7 @@ from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
 AGENCY_REPORT = LOGS_DIR / "agency-phase1-report.json"
 AGENCY_CYCLE_SUMMARY_JSON = LOGS_DIR / "agency-cycle-summary.json"
 AGENCY_CYCLE_SUMMARY_MD = WORKSPACE / "AGENCY_CYCLE_SUMMARY.md"
+OPERATOR_EVIDENCE_DASHBOARD = WORKSPACE / "OPERATOR_EVIDENCE_DASHBOARD.md"
 
 
 class StageStatus(str, Enum):
@@ -543,6 +544,7 @@ def authoritative_files_written(stage_index: dict[str, StageResult]) -> list[dic
                 files.append(entry)
 
     files.append({'path': str(AGENCY_REPORT), 'kind': 'agency_report'})
+    files.append({'path': str(OPERATOR_EVIDENCE_DASHBOARD), 'kind': 'operator_evidence_dashboard'})
     return files
 
 
@@ -598,7 +600,71 @@ def write_cycle_summary_markdown(summary: dict) -> None:
     ])
     for stage_name, status in summary.get('execution_results', {}).items():
         lines.append(f"- `{stage_name}`: `{status}`")
+    lines.extend([
+        "",
+        "## Proven this run (offline paper runtime only)",
+        "",
+        "- Canonical orchestrator stages executed exactly as recorded in the stage status table.",
+        "- Authoritative files listed above were updated in this cycle when their stage succeeded.",
+        "- Any skipped/failed stages are explicit and are not counted as proof of capability.",
+        "",
+        "## Historically proven but not newly proven by this run",
+        "",
+        "- Deterministic offline destructive tests in CI-safe verification.",
+        "- Canonical state recovery from append-only paper-trade history.",
+        "",
+        "## Explicitly unproven / out of scope",
+        "",
+        "- Live exchange integration compatibility in current runtime.",
+        "- Real-money execution.",
+    ])
     AGENCY_CYCLE_SUMMARY_MD.write_text("\n".join(lines) + "\n")
+
+
+def write_operator_evidence_dashboard(report: dict) -> None:
+    runtime_summary = report.get('runtime_summary', {})
+    files = runtime_summary.get('authoritative_files_written', [])
+    monitoring = report.get('monitoring_summary', {})
+    stage_results = report.get('execution_results', {})
+    lines = [
+        "# Operator Evidence Dashboard",
+        "",
+        f"- Timestamp: `{report.get('timestamp')}`",
+        f"- Mode: `{runtime_summary.get('mode')}`",
+        f"- Cycle result: `{runtime_summary.get('cycle_result')}`",
+        "",
+        "## What this run proved",
+        "",
+        "- Offline canonical paper-trading path execution status for each stage.",
+        "- Authoritative persistence updates listed below when state-update succeeded.",
+        "",
+        "## Stage status",
+        "",
+    ]
+    lines.extend([f"- `{name}`: `{status}`" for name, status in stage_results.items()])
+    lines.extend([
+        "",
+        "## Authoritative files",
+        "",
+    ])
+    if files:
+        lines.extend([f"- `{item['kind']}` → `{item['path']}`" for item in files])
+    else:
+        lines.append("- None")
+    lines.extend([
+        "",
+        "## Monitor summary",
+        "",
+        f"- Executed monitor scripts: `{(monitoring.get('executed_scripts') or ['none'])}`",
+        f"- Skipped monitor scripts: `{(monitoring.get('skipped_scripts') or ['none'])}`",
+        f"- Failed monitor scripts: `{(monitoring.get('failed_scripts') or ['none'])}`",
+        "",
+        "## Truth guardrails",
+        "",
+        "- This dashboard is offline operator evidence, not live integration proof.",
+        "- Live trading is not implemented and real-money execution is not supported.",
+    ])
+    OPERATOR_EVIDENCE_DASHBOARD.write_text("\n".join(lines) + "\n")
 
 
 def build_cycle_summary(stage_results: list[StageResult], performance: dict | None, open_positions: list[dict], latest_signals: list[dict]) -> dict:
@@ -893,13 +959,14 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
     AGENCY_REPORT.parent.mkdir(exist_ok=True)
     write_json_atomic(AGENCY_REPORT, report)
 
+    write_operator_evidence_dashboard(report)
     return report
 
 
 def main():
     print("=" * 80)
     print("TRADING AGENCY: PHASE 1 EXECUTION CYCLE")
-    print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S EDT')}")
+    print(f"Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print("=" * 80)
     print()
     print("Agency Role: Execute all Phase 1 operations")

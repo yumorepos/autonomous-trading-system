@@ -16,7 +16,7 @@ echo '==========================================================================
 run_step '1/4 bootstrap runtime check' python3 scripts/bootstrap-runtime-check.py
 run_step '2/4 compile validation' bash -lc '
   set -euo pipefail
-  python3 -m compileall config models utils tests scripts/*.py
+  python3 -m compileall config models utils tests scripts/*.py scripts/support/*.py
 '
 run_step '3/4 script regression tests' bash -lc '
   set -euo pipefail
@@ -26,13 +26,16 @@ run_step '3/4 script regression tests' bash -lc '
     tests/paper-mode-schema-test.py \
     tests/trade-schema-contract-test.py \
     tests/execution-safety-schema-test.py \
+    tests/paper-account-state-test.py \
     tests/paper-contract-centralization-test.py \
     tests/mixed-mode-policy-test.py \
     tests/polymarket-metadata-truth-test.py \
     tests/signal-integrity-canonical-test.py \
     tests/repo-truth-guard-test.py \
     tests/performance-dashboard-canonical-test.py \
-    tests/timeout-monitor-polymarket-threshold-test.py
+    tests/timeout-monitor-polymarket-threshold-test.py \
+    tests/trading-agency-monitor-failure-test.py \
+    tests/trading-agency-operator-controls-test.py
   do
     echo "[TEST] $test_file"
     python3 "$test_file"

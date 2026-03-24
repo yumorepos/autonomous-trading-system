@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Guard the active repo truth surface against overclaims."""
 
+import json
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -12,11 +13,17 @@ ACTIVE_FILES = {
     'docs/OPERATOR_QUICKSTART.md': REPO_ROOT / 'docs' / 'OPERATOR_QUICKSTART.md',
     'docs/REPO_TRUTHFULNESS_AUDIT.md': REPO_ROOT / 'docs' / 'REPO_TRUTHFULNESS_AUDIT.md',
     'scripts/trading-agency-phase1.py': REPO_ROOT / 'scripts' / 'trading-agency-phase1.py',
+    'truth/claims.yaml': REPO_ROOT / 'truth' / 'claims.yaml',
 }
 
 
 def read(path: Path) -> str:
     return path.read_text()
+
+
+def read_manifest() -> dict:
+    # claims.yaml is JSON-compatible YAML so stdlib parsing remains deterministic in CI.
+    return json.loads(read(ACTIVE_FILES['truth/claims.yaml']))
 
 
 if __name__ == '__main__':
@@ -26,7 +33,12 @@ if __name__ == '__main__':
     quickstart = read(ACTIVE_FILES['docs/OPERATOR_QUICKSTART.md'])
     truth_audit = read(ACTIVE_FILES['docs/REPO_TRUTHFULNESS_AUDIT.md'])
     agency = read(ACTIVE_FILES['scripts/trading-agency-phase1.py'])
+    manifest = read_manifest()
 
+    claims = manifest['claims']
+    doc_enforcement = manifest['doc_enforcement']
+
+    assert claims['canonical_entrypoint'] in agency, agency
     assert '**Hyperliquid:** canonical paper-trading path' in readme, readme
     assert '**Polymarket:** canonical paper path, experimental overall, not live-integrated' in readme, readme
     assert '**Mixed mode:** limited, asymmetric (one entry per cycle, Hyperliquid priority)' in readme, readme
@@ -53,5 +65,11 @@ if __name__ == '__main__':
 
     assert agency.count('Truthful mode status: canonical paper-trading path') >= 2, agency
     assert 'experimental mixed-mode evaluation; not the canonical proof path' in agency, agency
+    assert claims['exit_monitor_scope'] in agency, agency
 
-    print('[OK] Active truth surfaces preserve canonical paper-trading wording for Hyperliquid and Polymarket')
+    for relative_path, required_snippets in doc_enforcement.items():
+        text = read(REPO_ROOT / relative_path)
+        for snippet in required_snippets:
+            assert snippet in text, f"Missing snippet in {relative_path}: {snippet}"
+
+    print('[OK] Active truth surfaces preserve canonical paper-trading wording and machine-checkable manifest constraints')

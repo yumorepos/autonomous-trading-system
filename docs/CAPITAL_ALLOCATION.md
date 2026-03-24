@@ -252,7 +252,7 @@ Diversification = 1 / max(Weight_i)
 - Strategy allocations, portfolio metrics, risk limits
 
 **Script:**
-- `scripts/portfolio-allocator.py` — Allocation engine
+- `scripts/support/portfolio-allocator.py` — Allocation engine
 
 ---
 

@@ -81,7 +81,7 @@ Audit date: 2026-03-23 UTC
 - `models/trade_schema.py`
 - `models/position_state.py`
 - `scripts/phase1-paper-trader.py`
-- `scripts/performance-dashboard.py`
+- `scripts/support/performance-dashboard.py`
 - `scripts/execution-safety-layer.py`
 - `scripts/timeout-monitor.py`
 - `scripts/exit-monitor.py` (reader only; non-canonical)
@@ -127,8 +127,8 @@ Audit date: 2026-03-23 UTC
 
 - `scripts/exit-monitor.py`
 - `scripts/live-readiness-validator.py`
-- `scripts/stability-monitor.py`
-- `scripts/supervisor-governance.py`
+- `scripts/support/stability-monitor.py`
+- `scripts/support/supervisor-governance.py`
 
 ### Historical/scaffold surfaces
 

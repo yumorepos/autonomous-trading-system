@@ -98,7 +98,7 @@ The verification suite currently proves, offline only:
 The repository still contains supporting scripts useful for review, but they should not be mistaken for authoritative execution:
 - `scripts/exit-monitor.py` — proof/audit generator, not authoritative close persistence
 - `scripts/live-readiness-validator.py` — future-scope research model only
-- `scripts/stability-monitor.py` — support-only observability
+- `scripts/support/stability-monitor.py` — support-only observability
 - `scripts/archive/` — historical or simulation-only artifacts
 - `docs/archive/` — historical reports and prior audit history
 - `TRUTH_INDEX.md` — authoritative reviewer index for the current repo state
