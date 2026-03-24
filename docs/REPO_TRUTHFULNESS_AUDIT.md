@@ -40,10 +40,10 @@ Supported runtime modes:
 
 - paper trading only
 - Hyperliquid remains the canonical mode
-- Polymarket is canonical at the paper-trading level, experimental overall, and remains non-live-ready
+- Polymarket is canonical at the paper-trading level, experimental overall, and not live-integrated
 - mixed mode remains limited and should not be presented as a fully proven side-by-side runtime
 - live trading is not supported
-- supporting dashboards/reports are not proof of live readiness
+- supporting dashboards/reports are not proof of live integration or production capability
 - CI intentionally avoids flaky network-dependent requirements
 - the offline agency entrypoint is exercised in CI for Hyperliquid, Polymarket, mixed-mode limitation handling, and negative-path blocking
 

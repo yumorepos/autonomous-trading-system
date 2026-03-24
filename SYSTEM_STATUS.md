@@ -27,6 +27,7 @@
 - mode-aware scanning and data-integrity validation
 - normalized paper-trade persistence across Hyperliquid and Polymarket paper records
 - authoritative open-position state in one canonical file
+- canonical position-state recovery from append-only trade history when state is missing, malformed, or drifted
 - monitoring and support reporting for paper-trading operations
 - cycle-level operator summaries in JSON and Markdown for the canonical path
 - deterministic repeat-cycle offline validation for canonical Hyperliquid execution
@@ -75,6 +76,7 @@ The required CI workflow verifies, offline only:
 - script-style regression tests
 - isolated **offline** lifecycle integrity for canonical paper-trader flows
 - offline agency-entrypoint coverage for Hyperliquid, Polymarket, mixed-mode limitation/asymmetry, and negative-path reliability checks
+- offline canonical state-recovery coverage for malformed/drifted position state and malformed trade-history lines
 - deterministic repeat-cycle stability for the canonical Hyperliquid path
 - canonical dashboard and timeout-monitor reader behavior
 
@@ -103,7 +105,7 @@ Use these files to review what is actually proven:
 ## Future Work
 
 Future work, if pursued, should remain clearly separated from the current paper-only claim:
-- continue improving proof coverage without overstating live readiness
+- continue improving proof coverage without overstating live integration or production capability
 - decide whether mixed mode should remain limited or be upgraded with explicit multi-entry semantics
 - continue improving operator reporting and paper-trading analytics
 

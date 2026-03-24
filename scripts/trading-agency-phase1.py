@@ -27,7 +27,7 @@ from config.runtime import (
     mode_includes_hyperliquid,
     mode_includes_polymarket,
 )
-from models.position_state import get_open_positions
+from models.position_state import get_open_positions, synchronize_position_state
 from utils.system_health import SystemHealthManager
 from utils.json_utils import safe_read_json, safe_read_jsonl, write_json_atomic
 
@@ -157,9 +157,22 @@ def run_safety_validation() -> StageResult:
     trader_module = load_script_module("phase1-paper-trader.py", "phase1_paper_trader")
     safety_module = load_script_module("execution-safety-layer.py", "phase1_execution_safety")
 
-    open_positions = trader_module.load_open_positions()
+    open_positions, sync_repair_reasons = trader_module.load_open_positions(include_sync_metadata=True)
     signals = trader_module.load_latest_signals()
-    candidate_signal, selection_reason = trader_module.select_trade_candidate(signals, open_positions)
+    duplicate_guard_requires_safety_recheck = any(
+        reason in {
+            'missing_position_state',
+            'malformed_or_unreadable_position_state',
+            'non_dict_position_state',
+            'schema_version_mismatch',
+        }
+        for reason in sync_repair_reasons
+    )
+    candidate_signal, selection_reason = trader_module.select_trade_candidate(
+        signals,
+        open_positions,
+        ignore_open_position_duplicates=duplicate_guard_requires_safety_recheck,
+    )
 
     if candidate_signal is None:
         return stage_result(
@@ -409,6 +422,7 @@ def load_performance_data():
 
 def load_open_positions():
     """Load current open positions from authoritative state only."""
+    synchronize_position_state(LOGS_DIR / 'position-state.json', LOGS_DIR / 'phase1-paper-trades.jsonl')
     return get_open_positions(LOGS_DIR / 'position-state.json')
 
 

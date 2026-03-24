@@ -14,7 +14,10 @@ echo 'Paper trading only | CI-safe | No blocking network dependency checks'
 echo '================================================================================'
 
 run_step '1/4 bootstrap runtime check' python3 scripts/bootstrap-runtime-check.py
-run_step '2/4 compile validation' python3 -m compileall config models scripts tests utils
+run_step '2/4 compile validation' bash -lc '
+  set -euo pipefail
+  python3 -m compileall config models utils tests scripts/*.py
+'
 run_step '3/4 script regression tests' bash -lc '
   set -euo pipefail
   for test_file in \
@@ -40,6 +43,7 @@ run_step '4/4 offline isolated lifecycle tests' bash -lc '
   for test_file in \
     tests/destructive/trading-agency-hyperliquid-test.py \
     tests/destructive/trading-agency-hyperliquid-repeat-cycle-test.py \
+    tests/destructive/trading-agency-state-recovery-test.py \
     tests/destructive/trading-agency-negative-path-test.py \
     tests/destructive/trading-agency-polymarket-negative-path-test.py \
     tests/destructive/trading-agency-polymarket-test.py \

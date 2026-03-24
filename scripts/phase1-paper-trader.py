@@ -29,7 +29,7 @@ from models.exchange_metadata import (
 )
 from models.paper_contracts import paper_position_identifier, validate_signal_contract
 from utils.paper_exchange_adapters import get_paper_exchange_adapter
-from models.position_state import apply_trade_to_position_state, get_open_positions
+from models.position_state import apply_trade_to_position_state, get_open_positions, synchronize_position_state
 from models.trade_schema import is_trade_closed, normalize_trade_record, validate_trade_record
 from utils.json_utils import safe_read_jsonl, write_json_atomic
 from utils.runtime_logging import append_runtime_event
@@ -153,8 +153,12 @@ def check_exit(position: dict) -> tuple[bool, str | None]:
 
 
 
-def load_open_positions() -> list[dict]:
-    return get_open_positions(POSITION_STATE_FILE)
+def load_open_positions(include_sync_metadata: bool = False):
+    state = synchronize_position_state(POSITION_STATE_FILE, PAPER_TRADES_FILE)
+    positions = list(state.get("positions", {}).values()) if isinstance(state, dict) else get_open_positions(POSITION_STATE_FILE)
+    if include_sync_metadata:
+        return positions, list((state or {}).get("repair_reasons", []))
+    return positions
 
 
 
@@ -269,7 +273,13 @@ def evaluate_exit_trades(open_positions: list[dict]) -> list[dict]:
 
 
 
-def select_trade_candidate(signals: list[dict], open_positions: list[dict], allowed_signal_timestamp: str | None = None, allow_new_entries: bool = True) -> tuple[dict | None, str]:
+def select_trade_candidate(
+    signals: list[dict],
+    open_positions: list[dict],
+    allowed_signal_timestamp: str | None = None,
+    allow_new_entries: bool = True,
+    ignore_open_position_duplicates: bool = False,
+) -> tuple[dict | None, str]:
     if not allow_new_entries:
         return None, 'New entries disabled for this cycle'
     if len(open_positions) >= MAX_OPEN_POSITIONS:
@@ -291,7 +301,7 @@ def select_trade_candidate(signals: list[dict], open_positions: list[dict], allo
             log_non_canonical_signal(signal, reason)
             continue
         identifier = _position_identifier(signal)
-        if identifier and identifier in open_identifiers:
+        if not ignore_open_position_duplicates and identifier and identifier in open_identifiers:
             continue
         good_signals.append(signal)
 
