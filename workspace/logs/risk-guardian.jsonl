@@ -1,1 +1,5 @@
 {"event": "guardian_run", "timestamp": "2026-03-26T00:41:10.648492+00:00", "positions": 0, "closes": 0, "actions": [], "circuit_breaker_ok": true, "logged_at": "2026-03-26T00:41:14.615336+00:00"}
+{"event": "guardian_run", "timestamp": "2026-03-26T00:53:10.842985+00:00", "positions": 0, "closes": 0, "actions": [], "circuit_breaker_ok": true, "logged_at": "2026-03-26T00:53:17.437359+00:00"}
+{"event": "guardian_run", "timestamp": "2026-03-26T00:55:10.711338+00:00", "positions": 0, "closes": 0, "actions": [], "circuit_breaker_ok": true, "logged_at": "2026-03-26T00:55:15.217860+00:00"}
+{"event": "guardian_skipped", "reason": "lock_held", "timestamp": "2026-03-26T00:55:23.621481+00:00", "logged_at": "2026-03-26T00:55:23.622080+00:00"}
+{"event": "guardian_run", "timestamp": "2026-03-26T00:55:49.655682+00:00", "positions": 0, "closes": 0, "actions": [], "circuit_breaker_ok": true, "logged_at": "2026-03-26T00:55:53.554148+00:00"}

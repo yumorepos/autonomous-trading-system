@@ -50,6 +50,7 @@ MAX_RETRIES = 1                 # Retry once on execution failure
 GUARDIAN_LOG = LOGS_DIR / "risk-guardian.jsonl"
 GUARDIAN_STATE = LOGS_DIR / "risk-guardian-state.json"
 GUARDIAN_REPORT = WORKSPACE / "RISK_GUARDIAN_REPORT.md"
+GUARDIAN_LOCK = LOGS_DIR / "risk-guardian.lock"
 
 
 # ---------------------------------------------------------------------------
@@ -196,11 +197,24 @@ class HLClient:
                 "margin_used": float(p.get("marginUsed", 0)),
                 "cum_funding": float(p.get("cumFunding", {}).get("sinceOpen", 0)),
             })
+        # Spot balances
+        spot_usd = 0.0
+        try:
+            spot = self.info.spot_user_state(self.address)
+            for b in spot.get("balances", []):
+                if b.get("coin") in ("USDC", "USDT0", "USDE"):
+                    spot_usd += float(b.get("total", 0))
+        except Exception:
+            pass
+
         return {
             "address": self.address,
             "account_value": float(margin.get("accountValue", 0)),
             "total_notional": float(margin.get("totalNtlPos", 0)),
             "withdrawable": float(state.get("withdrawable", 0)),
+            "spot_usd": spot_usd,
+            "wallet_funded": spot_usd > 0 or float(margin.get("accountValue", 0)) > 0,
+            "perps_allocated": float(margin.get("accountValue", 0)) > 0,
             "positions": positions,
         }
 
@@ -233,10 +247,24 @@ def evaluate_position(pos: dict[str, Any]) -> dict[str, Any]:
         triggers.append(f"STOP_LOSS: ROE {roe:+.1%} <= {STOP_LOSS_ROE:.0%}")
         action = "CLOSE"
 
+    # Timeout (if opened_at is tracked — future positions will have this)
+    opened_at = pos.get("opened_at")
+    if opened_at:
+        try:
+            from datetime import datetime as dt_cls
+            opened = dt_cls.fromisoformat(opened_at)
+            if opened.tzinfo is None:
+                opened = opened.replace(tzinfo=timezone.utc)
+            age_h = (datetime.now(timezone.utc) - opened).total_seconds() / 3600
+            if age_h > TIMEOUT_HOURS:
+                triggers.append(f"TIMEOUT: {age_h:.1f}h > {TIMEOUT_HOURS}h")
+                action = "CLOSE"
+        except (ValueError, TypeError):
+            pass
+
     # Exposure check
     if value > MAX_EXPOSURE_PER_TRADE:
         triggers.append(f"OVER_EXPOSURE: ${value:.2f} > ${MAX_EXPOSURE_PER_TRADE:.2f}")
-        # Don't auto-close for over-exposure, just alert
         if action == "HOLD":
             action = "ALERT"
 
@@ -374,7 +402,7 @@ def write_report(
         "",
         f"**Run:** {now.isoformat()}  ",
         f"**Account:** `{account.get('address', '?')[:12]}...`  ",
-        f"**Value:** ${account.get('account_value', 0):.6f}  ",
+        f"**Wallet:** ${account.get('spot_usd', 0) + account.get('account_value', 0):.2f} (spot: ${account.get('spot_usd', 0):.2f} | perps: ${account.get('account_value', 0):.6f})  ",
         f"**Peak:** ${state.data.get('peak_account_value', 0):.6f}  ",
         f"**Circuit Breaker:** {'🔴 HALTED: ' + (state.data.get('halt_reason') or '') if state.data.get('halted') else '🟢 OK'}  ",
         f"**Consecutive Losses:** {state.data.get('consecutive_losses', 0)} / {CIRCUIT_BREAKER_LOSSES}",
@@ -429,9 +457,52 @@ def write_report(
 # Main
 # ---------------------------------------------------------------------------
 
+def _acquire_lock() -> bool:
+    """Prevent overlapping runs. Returns True if lock acquired."""
+    if GUARDIAN_LOCK.exists():
+        try:
+            lock_data = json.loads(GUARDIAN_LOCK.read_text())
+            lock_time = datetime.fromisoformat(lock_data.get("locked_at", ""))
+            if lock_time.tzinfo is None:
+                lock_time = lock_time.replace(tzinfo=timezone.utc)
+            age = (datetime.now(timezone.utc) - lock_time).total_seconds()
+            if age < 300:  # 5 min stale lock threshold
+                return False
+        except (json.JSONDecodeError, ValueError, OSError):
+            pass
+    GUARDIAN_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    GUARDIAN_LOCK.write_text(json.dumps({
+        "locked_at": datetime.now(timezone.utc).isoformat(),
+        "pid": os.getpid(),
+    }))
+    return True
+
+
+def _release_lock() -> None:
+    try:
+        GUARDIAN_LOCK.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def run_guardian(dry_run: bool = False, status_only: bool = False) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     mode = "DRY RUN" if dry_run else "🔴 LIVE"
+
+    if not status_only and not _acquire_lock():
+        msg = "Another guardian instance is running (lock held < 5 min). Exiting."
+        print(f"⚠️ {msg}")
+        log_event({"event": "guardian_skipped", "reason": "lock_held", "timestamp": now.isoformat()})
+        return {"status": "SKIPPED", "reason": "lock_held"}
+
+    try:
+        return _run_guardian_inner(dry_run, status_only, now, mode)
+    finally:
+        if not status_only:
+            _release_lock()
+
+
+def _run_guardian_inner(dry_run: bool, status_only: bool, now: datetime, mode: str) -> dict[str, Any]:
     print(f"\n{'='*60}")
     print(f"  RISK GUARDIAN — {mode}")
     print(f"  {now.isoformat()}")
@@ -442,9 +513,15 @@ def run_guardian(dry_run: bool = False, status_only: bool = False) -> dict[str, 
 
     # 1. Read account
     acct = client.get_state()
-    state.update_peak(acct["account_value"])
+    perp_value = acct["account_value"]
+    spot_usd = acct.get("spot_usd", 0)
+    total_value = perp_value + spot_usd
+    if total_value > 0:
+        state.update_peak(total_value)
     positions = acct["positions"]
-    print(f"[1/4] Account: ${acct['account_value']:.6f} | Positions: {len(positions)}")
+
+    print(f"[1/4] Wallet: ${total_value:.2f} (spot: ${spot_usd:.2f} | perps: ${perp_value:.6f})")
+    print(f"       Funded: {'✅' if acct.get('wallet_funded') else '❌'} | Perps allocated: {'✅' if acct.get('perps_allocated') else '❌'} | Positions: {len(positions)}")
 
     if status_only:
         for p in positions:

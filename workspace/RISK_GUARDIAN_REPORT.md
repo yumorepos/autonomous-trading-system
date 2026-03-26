@@ -2,10 +2,10 @@
 
 > ⚠️ AUTONOMOUS PROTECTION — 🔴 LIVE
 
-**Run:** 2026-03-26T00:41:14.612375+00:00  
+**Run:** 2026-03-26T00:55:53.553683+00:00  
 **Account:** `0x8743f51c57...`  
-**Value:** $0.000000  
-**Peak:** $0.000000  
+**Wallet:** $97.89 (spot: $97.89 | perps: $0.000000)  
+**Peak:** $97.889606  
 **Circuit Breaker:** 🟢 OK  
 **Consecutive Losses:** 0 / 5
 
@@ -22,4 +22,4 @@ _No open positions._
 - Circuit breaker: 5 losses
 
 ---
-_Risk Guardian v1 — 2026-03-26T00:41:14.612375+00:00_
+_Risk Guardian v1 — 2026-03-26T00:55:53.553683+00:00_
