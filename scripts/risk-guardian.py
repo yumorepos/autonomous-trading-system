@@ -286,7 +286,35 @@ def evaluate_position(pos: dict[str, Any]) -> dict[str, Any]:
             triggers.append(f"TRAILING_STOP: ROE {roe:+.1%} fell below trail {trail_level:+.1%} (peak: {peak_roe:+.1%})")
             action = "CLOSE"
 
-    # 4. Timeout
+    # 4. Thesis degradation (CEO DOCTRINE: exit if funding decays >40% and ROE < 0)
+    if action == "HOLD" and roe < 0:
+        try:
+            thesis_file = LOGS_DIR / "entry-thesis.json"
+            if thesis_file.exists():
+                thesis_data = json.loads(thesis_file.read_text())
+                entry_thesis = thesis_data.get(coin, {})
+                entry_funding = abs(entry_thesis.get("entry_funding_rate", 0))
+                if entry_funding > 0:
+                    # Get current funding
+                    import urllib.request
+                    meta_resp = json.loads(urllib.request.urlopen(
+                        urllib.request.Request('https://api.hyperliquid.xyz/info',
+                            data=json.dumps({'type': 'metaAndAssetCtxs'}).encode(),
+                            headers={'Content-Type': 'application/json'}),
+                        timeout=5
+                    ).read())
+                    for u, ctx in zip(meta_resp[0].get('universe', []), meta_resp[1]):
+                        if u['name'] == coin:
+                            current_funding = abs(float(ctx.get('funding', 0) or 0))
+                            decay_pct = (1 - current_funding / entry_funding) * 100 if entry_funding > 0 else 0
+                            if decay_pct > 40:
+                                triggers.append(f"THESIS_DECAY: funding decayed {decay_pct:.0f}% (entry: {entry_funding:.6f}, now: {current_funding:.6f})")
+                                action = "CLOSE"
+                            break
+        except Exception:
+            pass  # Non-critical — don't crash guardian on thesis check failure
+
+    # 5. Timeout
     opened_at = pos.get("opened_at")
     if opened_at:
         try:
@@ -301,7 +329,7 @@ def evaluate_position(pos: dict[str, Any]) -> dict[str, Any]:
         except (ValueError, TypeError):
             pass
 
-    # 5. Exposure check
+    # 6. Exposure check
     if value > MAX_EXPOSURE_PER_TRADE:
         triggers.append(f"OVER_EXPOSURE: ${value:.2f} > ${MAX_EXPOSURE_PER_TRADE:.2f}")
         if action == "HOLD":

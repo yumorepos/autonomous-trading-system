@@ -54,14 +54,14 @@ ENTRY_MODE = os.environ.get("ENTRY_MODE", "paper").lower()  # paper | live
 MAX_POSITION_SIZE_USD = 15.0    # $15 per trade (CEO PROFIT MODE — 7-day deadline)
 MAX_TOTAL_EXPOSURE_USD = 40.0   # $40 total (~40% of capital, keep 60% cash)
 MAX_CONCURRENT = 2              # Max 2 concurrent positions
-MIN_SIGNAL_SCORE = 6.0          # Minimum multi-factor score (was 5.0 single-factor)
+MIN_SIGNAL_SCORE = 6.0          # Minimum multi-factor score (A+ standard)
 SIGNAL_FRESHNESS_MIN = 60       # Signal must be < 60 min old
 ENTRY_COOLDOWN_MIN = 45         # 45 min between entries (PROFIT MODE — fast re-entry)
 MIN_PERP_MARGIN_USD = 10.0      # Need at least $10 in perp margin
 SPOT_TRANSFER_AMOUNT = 20.0     # Transfer $20 from spot when needed
 MAX_SLIPPAGE = 0.03             # 3% max slippage for entries (tighter than closes)
-MIN_VOLUME_24H = 100_000        # $100k min daily volume
-MIN_FUNDING_ANNUALIZED = 0.50   # 50% annualized funding rate minimum
+MIN_VOLUME_24H = 1_000_000      # $1M min daily volume (A+ standard — must exit cleanly)
+MIN_FUNDING_ANNUALIZED = 2.00   # 200% annualized funding rate minimum (A+ standard)
 
 ENTRY_LOG = LOGS_DIR / "hl-entry.jsonl"
 ENTRY_STATE = LOGS_DIR / "hl-entry-state.json"
@@ -279,6 +279,11 @@ def check_all_gates(
         if direction == "short" and fr < 0:
             return False, f"Funding direction mismatch: short but funding {fr:+.6f} (would pay, not earn)", ctx
 
+    # 12. Premium check (A+ standard: perp price must be below oracle for longs)
+    premium = signal.get("composite", {}).get("premium", signal.get("premium", None))
+    if premium is not None and signal.get("direction") == "long" and premium > -0.01:
+        return False, f"Premium {premium*100:+.2f}% > -1% — no reversion pressure for longs", ctx
+
     return True, "ALL GATES PASSED", ctx
 
 
@@ -372,6 +377,20 @@ def execute_entry(
         if filled:
             result["result"] = "FILLED"
             entry_state.record_entry()
+            # Record entry thesis for guardian degradation checks
+            try:
+                thesis_file = LOGS_DIR / "entry-thesis.json"
+                thesis_data = json.loads(thesis_file.read_text()) if thesis_file.exists() else {}
+                thesis_data[signal["asset"]] = {
+                    "entry_funding_rate": signal.get("funding_rate_8h", signal.get("funding", {}).get("raw", 0) if isinstance(signal.get("funding"), dict) else 0),
+                    "entry_funding_annual": signal.get("annualized_rate", 0),
+                    "entry_score": signal.get("score", 0),
+                    "entry_timestamp": datetime.now(timezone.utc).isoformat(),
+                    "entry_price": mid,
+                }
+                thesis_file.write_text(json.dumps(thesis_data, indent=2))
+            except Exception:
+                pass  # Non-critical — don't block the trade
             # Verify position
             time.sleep(1)
             new_state = client.get_perp_state()
