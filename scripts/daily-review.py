@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Daily Position Review & Signal Scan — Paper Trading Only.
+Daily Position Review & Signal Scan.
 
-Reads current paper positions, evaluates hold/exit decisions against live
-market data, scans for new signal candidates, executes paper trades, and
-writes an auditable daily report.
+Reads REAL positions from Hyperliquid (if HL_PRIVATE_KEY set) and paper
+positions from local state. Evaluates risk, scans signals, executes paper
+trades only. Real execution requires explicit --live flag (NOT IMPLEMENTED).
 
 Usage:
     python scripts/daily-review.py
@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -48,7 +49,7 @@ DEFAULT_TIMEOUT_HOURS = 72
 DEFAULT_STOP_LOSS_PCT = 0.15
 DEFAULT_TAKE_PROFIT_PCT = 0.25
 
-BANNER = "⚠️ PAPER TRADING ONLY — no real funds, no live execution"
+BANNER = "⚠️ PAPER TRADING ONLY — no real funds at risk, no live execution"
 
 
 # ---------------------------------------------------------------------------
@@ -76,16 +77,77 @@ def age_hours(opened_at: str | None) -> float:
     dt = parse_iso(opened_at)
     if dt is None:
         return 0.0
-    delta = utcnow() - dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else utcnow() - dt
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    delta = utcnow() - dt
     return max(delta.total_seconds() / 3600, 0.0)
 
 
 # ---------------------------------------------------------------------------
-# Position Loading
+# Hyperliquid Real Position Reader
 # ---------------------------------------------------------------------------
 
-def load_open_positions() -> list[dict[str, Any]]:
-    """Load open positions from position-state.json."""
+def read_hyperliquid_positions() -> dict[str, Any]:
+    """Read real Hyperliquid account state. Returns raw dict or error."""
+    key = os.environ.get("HL_PRIVATE_KEY", "")
+    if not key:
+        return {"status": "NO_CREDENTIALS", "positions": [], "account": {}}
+
+    try:
+        from hyperliquid.info import Info
+        from hyperliquid.utils import constants
+        from eth_account import Account
+
+        info = Info(constants.MAINNET_API_URL, skip_ws=True)
+        account = Account.from_key(key)
+        address = account.address
+
+        user_state = info.user_state(address)
+        open_orders = info.open_orders(address)
+
+        positions = []
+        for ap in user_state.get("assetPositions", []):
+            p = ap.get("position", {})
+            coin = p.get("coin", "")
+            szi = float(p.get("szi", 0))
+            if szi == 0:
+                continue
+            positions.append({
+                "exchange": "Hyperliquid",
+                "asset": coin,
+                "direction": "long" if szi > 0 else "short",
+                "size": abs(szi),
+                "entry_price": float(p.get("entryPx", 0)),
+                "position_value": float(p.get("positionValue", 0)),
+                "unrealized_pnl": float(p.get("unrealizedPnl", 0)),
+                "roe": float(p.get("returnOnEquity", 0)),
+                "leverage": p.get("leverage", {}).get("value", 1),
+                "margin_used": float(p.get("marginUsed", 0)),
+                "cum_funding": float(p.get("cumFunding", {}).get("sinceOpen", 0)),
+                "source": "LIVE_EXCHANGE",
+            })
+
+        margin = user_state.get("marginSummary", {})
+        return {
+            "status": "CONNECTED",
+            "address": address,
+            "account_value": float(margin.get("accountValue", 0)),
+            "total_notional": float(margin.get("totalNtlPos", 0)),
+            "withdrawable": float(user_state.get("withdrawable", 0)),
+            "positions": positions,
+            "open_orders": len(open_orders),
+            "raw_orders": open_orders[:5],
+        }
+    except Exception as e:
+        return {"status": f"ERROR: {type(e).__name__}: {e}", "positions": [], "account": {}}
+
+
+# ---------------------------------------------------------------------------
+# Paper Position Loading
+# ---------------------------------------------------------------------------
+
+def load_paper_positions() -> list[dict[str, Any]]:
+    """Load open paper positions from position-state.json."""
     if not POSITION_STATE_FILE.exists():
         return []
     state = safe_read_json(POSITION_STATE_FILE)
@@ -98,15 +160,9 @@ def load_open_positions() -> list[dict[str, Any]]:
     for pid, pos in positions.items():
         if isinstance(pos, dict) and pos.get("status", "").upper() == "OPEN":
             pos["trade_id"] = pos.get("trade_id", pid)
+            pos["source"] = "PAPER"
             result.append(pos)
     return result
-
-
-def load_paper_trades() -> list[dict[str, Any]]:
-    """Load all paper trades from JSONL."""
-    if not PAPER_TRADES_FILE.exists():
-        return []
-    return safe_read_jsonl(PAPER_TRADES_FILE)
 
 
 # ---------------------------------------------------------------------------
@@ -130,24 +186,37 @@ def fetch_hyperliquid_prices() -> dict[str, float]:
     return prices
 
 
-def fetch_polymarket_active_markets(limit: int = 50) -> list[dict[str, Any]]:
-    """Fetch active Polymarket markets."""
-    result, markets = fetch_polymarket_markets(timeout=10, limit=limit, closed=False)
-    if not result.ok:
-        return []
-    return [m for m in markets if m.get("active") and not m.get("closed")]
-
-
 # ---------------------------------------------------------------------------
 # Position Evaluation
 # ---------------------------------------------------------------------------
 
 def evaluate_position(pos: dict[str, Any], hl_prices: dict[str, float]) -> dict[str, Any]:
-    """Evaluate a single open position and return enriched record with decision."""
+    """Evaluate a single position and return enriched record with decision."""
     exchange = pos.get("exchange", "").lower()
     entry_price = float(pos.get("entry_price", 0))
     asset = pos.get("asset", pos.get("condition_id", "unknown"))
     direction = pos.get("direction", "long").lower()
+    source = pos.get("source", "PAPER")
+
+    # For live positions, use the exchange-provided P&L
+    if source == "LIVE_EXCHANGE":
+        pnl_pct = float(pos.get("roe", 0))
+        current_price = hl_prices.get(asset)
+        hours = 0  # We don't have opened_at for live positions
+        decision = "HOLD"
+        reason = f"Live position: ROE {pnl_pct:+.1%}, ${pos.get('position_value', 0):.2f} notional"
+
+        if pnl_pct <= -DEFAULT_STOP_LOSS_PCT:
+            decision = "REVIEW_STOPLOSS"
+            reason = f"⚠️ ROE {pnl_pct:+.1%} near stop-loss threshold (live position — manual action required)"
+        elif pnl_pct >= DEFAULT_TAKE_PROFIT_PCT:
+            decision = "REVIEW_TAKEPROFIT"
+            reason = f"💰 ROE {pnl_pct:+.1%} above take-profit threshold (live position — consider taking profit)"
+
+        return {**pos, "current_price": current_price, "pnl_pct": pnl_pct,
+                "age_hours": hours, "decision": decision, "decision_reason": reason}
+
+    # Paper positions
     opened_at = pos.get("opened_at") or pos.get("entry_timestamp")
     hours = age_hours(opened_at)
     timeout_h = float(pos.get("timeout_hours", DEFAULT_TIMEOUT_HOURS))
@@ -165,7 +234,6 @@ def evaluate_position(pos: dict[str, Any], hl_prices: dict[str, float]) -> dict[
         else:
             pnl_pct = (entry_price - current_price) / entry_price
 
-    # Decision logic
     decision = "HOLD"
     reason = "Within thresholds"
     if hours > timeout_h:
@@ -181,14 +249,8 @@ def evaluate_position(pos: dict[str, Any], hl_prices: dict[str, float]) -> dict[
         decision = "STALE"
         reason = f"No live price available, position age {hours:.1f}h"
 
-    return {
-        **pos,
-        "current_price": current_price,
-        "pnl_pct": pnl_pct,
-        "age_hours": hours,
-        "decision": decision,
-        "decision_reason": reason,
-    }
+    return {**pos, "current_price": current_price, "pnl_pct": pnl_pct,
+            "age_hours": hours, "decision": decision, "decision_reason": reason}
 
 
 # ---------------------------------------------------------------------------
@@ -214,8 +276,8 @@ def scan_hyperliquid_signals(universe: list, contexts: list, existing_assets: se
         except (ValueError, TypeError):
             continue
 
-        annualized = funding_rate * 3 * 365  # 8h funding * 3 * 365
-        if abs(annualized) > 0.5 and vol > 100_000:  # >50% annualized, >$100k daily volume
+        annualized = funding_rate * 3 * 365
+        if abs(annualized) > 0.5 and vol > 100_000:
             direction = "short" if funding_rate > 0 else "long"
             signals.append({
                 "exchange": "Hyperliquid",
@@ -229,7 +291,6 @@ def scan_hyperliquid_signals(universe: list, contexts: list, existing_assets: se
                 "score": abs(annualized) * min(vol / 1_000_000, 5.0),
                 "scanned_at": iso(utcnow()),
             })
-
     signals.sort(key=lambda s: s["score"], reverse=True)
     return signals[:5]
 
@@ -242,7 +303,6 @@ def scan_polymarket_signals(markets: list[dict[str, Any]], existing_ids: set[str
         if cid in existing_ids:
             continue
         question = m.get("question", "")
-        volume = m.get("volumeNum", 0) or 0
         volume_24h = m.get("volume24hr", 0) or 0
         try:
             outcome_prices = json.loads(m.get("outcomePrices", "[]"))
@@ -262,11 +322,9 @@ def scan_polymarket_signals(markets: list[dict[str, Any]], existing_ids: set[str
                 "entry_price": yes_price if yes_price < 0.5 else 1 - yes_price,
                 "yes_price": yes_price,
                 "volume_24h": volume_24h,
-                "total_volume": volume,
                 "score": score,
                 "scanned_at": iso(utcnow()),
             })
-
     signals.sort(key=lambda s: s["score"], reverse=True)
     return signals[:5]
 
@@ -276,60 +334,43 @@ def scan_polymarket_signals(markets: list[dict[str, Any]], existing_ids: set[str
 # ---------------------------------------------------------------------------
 
 def paper_close_position(pos: dict[str, Any], reason: str) -> dict[str, Any]:
-    """Create a paper close record."""
     return {
-        "event": "paper_close",
-        "trade_id": pos.get("trade_id", "unknown"),
+        "event": "paper_close", "trade_id": pos.get("trade_id", "unknown"),
         "exchange": pos.get("exchange", "unknown"),
         "asset": pos.get("asset", pos.get("condition_id", "unknown")),
-        "entry_price": pos.get("entry_price"),
-        "exit_price": pos.get("current_price"),
-        "pnl_pct": pos.get("pnl_pct", 0),
-        "reason": reason,
-        "closed_at": iso(utcnow()),
+        "entry_price": pos.get("entry_price"), "exit_price": pos.get("current_price"),
+        "pnl_pct": pos.get("pnl_pct", 0), "reason": reason, "closed_at": iso(utcnow()),
     }
 
 
 def paper_open_position(signal: dict[str, Any], position_count: int) -> dict[str, Any] | None:
-    """Create a paper open record if within limits."""
     if position_count >= MAX_CONCURRENT_POSITIONS:
         return None
-    position_size = min(MAX_POSITION_SIZE_USD, 50.0)
     entry_price = signal.get("entry_price", 0)
     if entry_price <= 0:
         return None
     return {
         "event": "paper_open",
         "trade_id": f"daily-{signal['exchange'].lower()}-{signal.get('asset', signal.get('condition_id', 'unk'))}-{utcnow().strftime('%Y%m%d%H%M')}",
-        "exchange": signal["exchange"],
-        "asset": signal.get("asset", signal.get("condition_id", "")),
-        "direction": signal.get("direction", "long"),
-        "entry_price": entry_price,
-        "position_size_usd": position_size,
-        "signal_type": signal.get("signal_type", ""),
-        "signal_score": signal.get("score", 0),
-        "stop_loss_pct": DEFAULT_STOP_LOSS_PCT,
-        "take_profit_pct": DEFAULT_TAKE_PROFIT_PCT,
-        "timeout_hours": DEFAULT_TIMEOUT_HOURS,
-        "opened_at": iso(utcnow()),
-        "status": "OPEN",
+        "exchange": signal["exchange"], "asset": signal.get("asset", signal.get("condition_id", "")),
+        "direction": signal.get("direction", "long"), "entry_price": entry_price,
+        "position_size_usd": min(MAX_POSITION_SIZE_USD, 50.0),
+        "signal_type": signal.get("signal_type", ""), "signal_score": signal.get("score", 0),
+        "stop_loss_pct": DEFAULT_STOP_LOSS_PCT, "take_profit_pct": DEFAULT_TAKE_PROFIT_PCT,
+        "timeout_hours": DEFAULT_TIMEOUT_HOURS, "opened_at": iso(utcnow()), "status": "OPEN",
     }
 
 
 # ---------------------------------------------------------------------------
-# Reporting
+# Report Generation
 # ---------------------------------------------------------------------------
 
 def generate_report(
-    positions: list[dict[str, Any]],
-    exits: list[dict[str, Any]],
-    new_entries: list[dict[str, Any]],
-    hl_signals: list[dict[str, Any]],
-    pm_signals: list[dict[str, Any]],
-    hl_ok: bool,
-    pm_ok: bool,
-    hl_asset_count: int,
-    pm_market_count: int,
+    live_hl: dict[str, Any], paper_positions: list[dict[str, Any]],
+    all_evaluated: list[dict[str, Any]], exits: list[dict[str, Any]],
+    new_entries: list[dict[str, Any]], hl_signals: list[dict[str, Any]],
+    pm_signals: list[dict[str, Any]], hl_ok: bool, pm_ok: bool,
+    hl_asset_count: int, pm_market_count: int,
 ) -> str:
     now = utcnow()
     lines = [
@@ -343,33 +384,67 @@ def generate_report(
         f"",
     ]
 
-    # Positions
-    lines.append("## Open Positions")
-    if not positions:
-        lines.append("_No open positions._\n")
+    # Live Hyperliquid Account
+    hl_status = live_hl.get("status", "UNKNOWN")
+    if hl_status == "CONNECTED":
+        lines.extend([
+            "## 🔴 LIVE Hyperliquid Account",
+            f"- **Address:** `{live_hl.get('address', '?')}`",
+            f"- **Account Value:** ${live_hl.get('account_value', 0):.6f}",
+            f"- **Total Notional:** ${live_hl.get('total_notional', 0):.4f}",
+            f"- **Withdrawable:** ${live_hl.get('withdrawable', 0):.6f}",
+            f"- **Open Orders:** {live_hl.get('open_orders', 0)}",
+            "",
+        ])
+        live_positions = [p for p in all_evaluated if p.get("source") == "LIVE_EXCHANGE"]
+        if live_positions:
+            lines.append("### Live Positions")
+            lines.append("| Asset | Dir | Size | Entry | Current | P&L | ROE | Leverage | Decision |")
+            lines.append("|-------|-----|------|-------|---------|-----|-----|----------|----------|")
+            for p in live_positions:
+                cur = f"${p.get('current_price', 0):,.2f}" if p.get("current_price") else "N/A"
+                lines.append(
+                    f"| {p['asset']} | {p['direction']} | {p.get('size', 0):.4f} "
+                    f"| ${p['entry_price']:,.2f} | {cur} "
+                    f"| ${p.get('unrealized_pnl', 0):+.4f} | {p.get('roe', 0):+.1%} "
+                    f"| {p.get('leverage', '?')}x | **{p['decision']}** |"
+                )
+            lines.append("")
+        lines.append("> ⚠️ Live position management requires manual action. This system is read-only for live positions.")
+        lines.append("")
     else:
-        lines.append("| Exchange | Asset | Direction | Entry | Current | P&L | Age (h) | Decision |")
-        lines.append("|----------|-------|-----------|-------|---------|-----|---------|----------|")
-        for p in positions:
+        lines.extend([
+            f"## Hyperliquid Account",
+            f"- **Status:** {hl_status}",
+            "",
+        ])
+
+    # Paper Positions
+    paper_eval = [p for p in all_evaluated if p.get("source") == "PAPER"]
+    lines.append("## Paper Positions")
+    if not paper_eval:
+        lines.append("_No open paper positions._\n")
+    else:
+        lines.append("| Exchange | Asset | Dir | Entry | Current | P&L | Age (h) | Decision |")
+        lines.append("|----------|-------|-----|-------|---------|-----|---------|----------|")
+        for p in paper_eval:
             cur = f"${p.get('current_price', 0):.4f}" if p.get("current_price") else "N/A"
             lines.append(
-                f"| {p.get('exchange', '?')} | {p.get('asset', p.get('condition_id', '?'))} "
-                f"| {p.get('direction', '?')} | ${p.get('entry_price', 0):.4f} "
-                f"| {cur} | {p.get('pnl_pct', 0):+.1%} "
-                f"| {p.get('age_hours', 0):.1f} | **{p.get('decision', '?')}** |"
+                f"| {p.get('exchange', '?')} | {p.get('asset', '?')} | {p.get('direction', '?')} "
+                f"| ${p.get('entry_price', 0):.4f} | {cur} | {p.get('pnl_pct', 0):+.1%} "
+                f"| {p.get('age_hours', 0):.1f} | **{p['decision']}** |"
             )
         lines.append("")
 
-    # Exits
-    lines.append("## Exits Executed")
+    # Exits & Entries
+    lines.append("## Paper Exits Executed")
     if not exits:
         lines.append("_No exits this cycle._\n")
     else:
         for e in exits:
-            lines.append(f"- **{e['asset']}** ({e['exchange']}): {e['reason']} | P&L: {e.get('pnl_pct', 0):+.1%}")
+            lines.append(f"- **{e['asset']}** ({e['exchange']}): {e['reason']}")
         lines.append("")
 
-    # New Entries
     lines.append("## New Paper Entries")
     if not new_entries:
         lines.append("_No new entries this cycle._\n")
@@ -378,31 +453,35 @@ def generate_report(
             lines.append(f"- **{n['asset']}** ({n['exchange']}): {n['direction']} @ ${n['entry_price']:.4f} | Score: {n.get('signal_score', 0):.2f}")
         lines.append("")
 
-    # Signal Candidates
-    lines.append("## Signal Candidates (Top Scored)")
+    # Signals
     if hl_signals:
-        lines.append("### Hyperliquid — Funding Anomalies")
+        lines.append("## Hyperliquid Signals — Funding Anomalies")
         for s in hl_signals[:3]:
-            lines.append(f"- **{s['asset']}**: {s['annualized_rate']:+.0%} annualized | Vol: ${s['volume_24h']:,.0f} | Score: {s['score']:.2f}")
+            lines.append(f"- **{s['asset']}**: {s['annualized_rate']:+.0%} ann. | Vol: ${s['volume_24h']:,.0f} | Score: {s['score']:.2f}")
         lines.append("")
     if pm_signals:
-        lines.append("### Polymarket — Volume Movers")
+        lines.append("## Polymarket Signals — Volume Movers")
         for s in pm_signals[:3]:
             lines.append(f"- **{s['question'][:60]}**: YES@{s['yes_price']:.2f} | Vol24h: ${s['volume_24h']:,.0f} | Score: {s['score']:.2f}")
         lines.append("")
 
-    # Risk Summary
-    open_count = sum(1 for p in positions if p.get("decision") == "HOLD")
-    total_exposure = sum(float(p.get("position_size_usd", 0)) for p in positions if p.get("decision") == "HOLD")
+    # Execution Status
     lines.extend([
-        "## Risk Summary",
-        f"- Open positions after review: **{open_count}** / {MAX_CONCURRENT_POSITIONS} max",
-        f"- Total paper exposure: **${total_exposure:,.2f}** / ${MAX_CONCURRENT_POSITIONS * MAX_POSITION_SIZE_USD:,.2f} max",
-        f"- New entries this cycle: **{len(new_entries)}**",
-        f"- Exits this cycle: **{len(exits)}**",
+        "## Execution Status",
+        "",
+        "| Exchange | Data Feed | Position Reading | Live Execution | Status |",
+        "|----------|-----------|-----------------|----------------|--------|",
+        f"| Hyperliquid | {'✅ Public API' if hl_ok else '❌'} | {'✅ SDK + Key' if hl_status == 'CONNECTED' else '❌ No credentials'} | ❌ NOT IMPLEMENTED | **{'PARTIAL' if hl_status == 'CONNECTED' else 'PAPER ONLY'}** |",
+        f"| Polymarket | {'✅ Gamma API' if pm_ok else '❌'} | ❌ No CLOB key | ❌ NOT IMPLEMENTED | **PAPER ONLY** |",
+        "",
+        "## Scheduling",
+        "```",
+        "# Not installed — run manually or add to crontab:",
+        f"0 20 * * * cd {REPO_ROOT} && python3 scripts/daily-review.py >> workspace/logs/cron.log 2>&1",
+        "```",
         "",
         "---",
-        f"_Report generated by autonomous-trading-system daily-review.py_",
+        f"_Generated by autonomous-trading-system/scripts/daily-review.py_",
     ])
 
     return "\n".join(lines)
@@ -413,7 +492,6 @@ def generate_report(
 # ---------------------------------------------------------------------------
 
 def run_daily_review() -> dict[str, Any]:
-    """Execute the full daily review workflow. Returns summary dict."""
     now = utcnow()
     print(f"\n{'='*60}")
     print(f"  DAILY REVIEW — {iso(now)}")
@@ -421,17 +499,31 @@ def run_daily_review() -> dict[str, Any]:
     print(f"  Mode: {TRADING_MODE}")
     print(f"{'='*60}\n")
 
-    # 1. Load positions
-    positions = load_open_positions()
-    print(f"[1/5] Loaded {len(positions)} open position(s)")
+    # 1. Read live Hyperliquid positions
+    live_hl: dict[str, Any] = {"status": "SKIPPED", "positions": []}
+    if mode_includes_hyperliquid():
+        live_hl = read_hyperliquid_positions()
+        hl_status = live_hl["status"]
+        live_pos = live_hl.get("positions", [])
+        print(f"[1/6] Hyperliquid account: {hl_status}")
+        if hl_status == "CONNECTED":
+            print(f"       Account value: ${live_hl.get('account_value', 0):.6f}")
+            print(f"       Live positions: {len(live_pos)}")
+            for p in live_pos:
+                print(f"         {p['asset']} {p['direction']} {p['size']} @ ${p['entry_price']:,.2f} | PnL: ${p['unrealized_pnl']:+.4f} ({p['roe']:+.1%})")
+    else:
+        print(f"[1/6] Hyperliquid: skipped (mode={TRADING_MODE})")
 
-    # 2. Fetch live prices
+    # 2. Load paper positions
+    paper_positions = load_paper_positions()
+    print(f"[2/6] Paper positions: {len(paper_positions)}")
+
+    # 3. Fetch market data
     hl_prices = {}
     hl_asset_count = 0
-    pm_markets: list[dict[str, Any]] = []
-    pm_market_count = 0
     hl_universe: list = []
     hl_contexts: list = []
+    hl_ok = False
 
     if mode_includes_hyperliquid():
         hl_result, hl_universe, hl_contexts = fetch_hyperliquid_meta(timeout=10)
@@ -439,86 +531,74 @@ def run_daily_review() -> dict[str, Any]:
         hl_asset_count = hl_result.record_count
         if hl_ok:
             hl_prices = fetch_hyperliquid_prices()
-        print(f"[2/5] Hyperliquid: {'✅' if hl_ok else '❌'} ({hl_asset_count} assets, {len(hl_prices)} prices)")
-    else:
-        hl_ok = False
-        print(f"[2/5] Hyperliquid: skipped (mode={TRADING_MODE})")
+        print(f"[3/6] Hyperliquid data: {'✅' if hl_ok else '❌'} ({hl_asset_count} assets, {len(hl_prices)} prices)")
 
+    pm_markets: list[dict[str, Any]] = []
+    pm_ok = False
+    pm_market_count = 0
     if mode_includes_polymarket():
         pm_result, pm_markets = fetch_polymarket_markets(timeout=10, limit=50, closed=False)
         pm_ok = pm_result.ok
         pm_market_count = pm_result.record_count
         pm_markets = [m for m in pm_markets if m.get("active") and not m.get("closed")]
-        print(f"[2/5] Polymarket: {'✅' if pm_ok else '❌'} ({pm_market_count} markets, {len(pm_markets)} active)")
-    else:
-        pm_ok = False
-        print(f"[2/5] Polymarket: skipped (mode={TRADING_MODE})")
+        print(f"[3/6] Polymarket data: {'✅' if pm_ok else '❌'} ({pm_market_count} markets)")
 
-    # 3. Evaluate positions
-    evaluated = [evaluate_position(p, hl_prices) for p in positions]
-    exits_needed = [p for p in evaluated if p["decision"].startswith("EXIT")]
-    holds = [p for p in evaluated if p["decision"] in ("HOLD", "STALE")]
-    print(f"[3/5] Position review: {len(holds)} hold, {len(exits_needed)} exit")
+    # 4. Evaluate ALL positions (live + paper)
+    all_positions = live_hl.get("positions", []) + paper_positions
+    evaluated = [evaluate_position(p, hl_prices) for p in all_positions]
 
-    # Execute paper exits
-    exits_executed = []
-    for p in exits_needed:
-        close_record = paper_close_position(p, p["decision_reason"])
-        exits_executed.append(close_record)
-        print(f"  EXIT: {close_record['asset']} — {close_record['reason']}")
+    # Only paper positions can be auto-exited
+    paper_exits = [p for p in evaluated if p.get("source") == "PAPER" and p["decision"].startswith("EXIT")]
+    paper_holds = [p for p in evaluated if p.get("source") == "PAPER" and p["decision"] in ("HOLD", "STALE")]
+    live_alerts = [p for p in evaluated if p.get("source") == "LIVE_EXCHANGE" and p["decision"].startswith("REVIEW")]
 
-    # 4. Scan signals
-    existing_hl_assets = {p.get("asset", "") for p in holds if "hyperliquid" in p.get("exchange", "").lower()}
-    existing_pm_ids = {p.get("condition_id", "") for p in holds if "polymarket" in p.get("exchange", "").lower()}
+    print(f"[4/6] Evaluation: {len(evaluated)} total | Paper exits: {len(paper_exits)} | Live alerts: {len(live_alerts)}")
+    for a in live_alerts:
+        print(f"  ⚠️ LIVE ALERT: {a['asset']} — {a['decision_reason']}")
 
-    hl_signals = scan_hyperliquid_signals(hl_universe, hl_contexts, existing_hl_assets) if hl_ok else []
-    pm_signals = scan_polymarket_signals(pm_markets, existing_pm_ids) if pm_ok else []
-    print(f"[4/5] Signals: {len(hl_signals)} Hyperliquid, {len(pm_signals)} Polymarket")
+    exits_executed = [paper_close_position(p, p["decision_reason"]) for p in paper_exits]
 
-    # Execute paper entries (best signal only per exchange)
+    # 5. Scan signals
+    existing_hl = {p.get("asset", "") for p in all_positions}
+    existing_pm = {p.get("condition_id", "") for p in all_positions}
+    hl_signals = scan_hyperliquid_signals(hl_universe, hl_contexts, existing_hl) if hl_ok else []
+    pm_signals = scan_polymarket_signals(pm_markets, existing_pm) if pm_ok else []
+    print(f"[5/6] Signals: {len(hl_signals)} HL, {len(pm_signals)} PM")
+
+    # Paper entries (best signal per exchange)
     new_entries = []
-    current_count = len(holds)
+    current_count = len(paper_holds)
     for signal in (hl_signals[:1] + pm_signals[:1]):
         entry = paper_open_position(signal, current_count)
         if entry:
             new_entries.append(entry)
             current_count += 1
-            print(f"  NEW: {entry['asset']} ({entry['exchange']}) @ ${entry['entry_price']:.4f}")
+            print(f"  📝 PAPER ENTRY: {entry['asset']} ({entry['exchange']}) @ ${entry['entry_price']:.4f}")
 
-    # 5. Generate report & logs
-    report = generate_report(evaluated, exits_executed, new_entries, hl_signals, pm_signals, hl_ok, pm_ok, hl_asset_count, pm_market_count)
+    # 6. Write report
+    report = generate_report(live_hl, paper_positions, evaluated, exits_executed, new_entries,
+                              hl_signals, pm_signals, hl_ok, pm_ok, hl_asset_count, pm_market_count)
     DAILY_REPORT_FILE.write_text(report, encoding="utf-8")
-    print(f"\n[5/5] Report written to {DAILY_REPORT_FILE}")
 
-    # Append to daily review log
     log_entry = {
-        "timestamp": iso(now),
-        "mode": TRADING_MODE,
-        "positions_reviewed": len(evaluated),
-        "exits": len(exits_executed),
-        "new_entries": len(new_entries),
-        "hl_signals": len(hl_signals),
-        "pm_signals": len(pm_signals),
-        "hl_connected": hl_ok,
-        "pm_connected": pm_ok,
-        "exits_detail": exits_executed,
-        "entries_detail": new_entries,
+        "timestamp": iso(now), "mode": TRADING_MODE,
+        "hl_status": live_hl.get("status"), "hl_account_value": live_hl.get("account_value"),
+        "hl_live_positions": len(live_hl.get("positions", [])),
+        "paper_positions": len(paper_positions), "exits": len(exits_executed),
+        "new_entries": len(new_entries), "hl_signals": len(hl_signals), "pm_signals": len(pm_signals),
+        "live_alerts": [{"asset": a["asset"], "decision": a["decision"]} for a in live_alerts],
+        "exits_detail": exits_executed, "entries_detail": new_entries,
     }
     with open(DAILY_REVIEW_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(log_entry) + "\n")
-
-    # Append paper trades
-    for entry in new_entries:
+    for entry in new_entries + exits_executed:
         with open(PAPER_TRADES_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
-    for exit_rec in exits_executed:
-        with open(PAPER_TRADES_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(exit_rec) + "\n")
 
-    print(f"\n{'='*60}")
-    print(f"  REVIEW COMPLETE — {len(holds)} positions held, {len(exits_executed)} exits, {len(new_entries)} new entries")
+    print(f"\n[6/6] Report: {DAILY_REPORT_FILE}")
+    print(f"{'='*60}")
+    print(f"  COMPLETE — Live: {len(live_hl.get('positions', []))} | Paper: {len(paper_holds)} held, {len(exits_executed)} exited, {len(new_entries)} new")
     print(f"{'='*60}\n")
-
     return log_entry
 
 

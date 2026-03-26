@@ -86,9 +86,9 @@ check("PM volume mover detected", len(sigs) == 1)
 
 # --- Report ---
 print("\n=== Report Generation ===")
-report = dr.generate_report([], [], [], [], [], True, True, 229, 50)
+report = dr.generate_report({"status": "NO_CREDENTIALS", "positions": []}, [], [], [], [], [], [], True, True, 229, 50)
 check("Report has paper banner", "PAPER TRADING ONLY" in report)
-check("Report has no positions msg", "No open positions" in report)
+check("Report has no paper positions msg", "No open paper positions" in report)
 
 # --- Summary ---
 print(f"\n{'='*40}")
