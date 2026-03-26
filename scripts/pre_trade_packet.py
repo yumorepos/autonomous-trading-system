@@ -19,14 +19,22 @@ LOG_DIR = WORKSPACE / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
 PACKET_FILE = LOG_DIR / "pre-trade-packets.jsonl"
+LEDGER_FILE = LOG_DIR / "trade-ledger.jsonl"
 
 
 def generate_packet(signal: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """Generate a pre-trade decision packet for CANARY_PROTOCOL."""
-    from scripts.trade_ledger import get_trade_count
-
-    # Trade count + 2 (0-indexed + next trade)
-    trade_count = get_trade_count() + 1
+    
+    # Count trades from ledger
+    trade_count = 0
+    if LEDGER_FILE.exists():
+        with open(LEDGER_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip():
+                    trade_count += 1
+    
+    # Trade count + 1 (0-indexed + next trade)
+    trade_count = trade_count + 1
 
     # Extract signal components
     funding = signal.get("funding", {})
