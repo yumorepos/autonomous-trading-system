@@ -35,10 +35,10 @@ from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR
 
 STOP_LOSS_ROE = -0.15           # -15% ROE
 TIMEOUT_HOURS = 24              # 24h max hold
-DRAWDOWN_PCT = 0.20             # 20% from peak account value
+DRAWDOWN_PCT = 0.15             # 15% from peak account value (CANARY_PROTOCOL)
 MAX_CONCURRENT = 5              # Max open positions
-MAX_EXPOSURE_PER_TRADE = 20.0   # $20 per trade
-MAX_SLIPPAGE = 0.05             # 5% max slippage
+MAX_EXPOSURE_PER_TRADE = 12.0   # $12 per trade (CANARY_PROTOCOL)
+MAX_SLIPPAGE = 0.03             # 3% max slippage (CANARY_PROTOCOL)
 EXECUTION_COOLDOWN_SEC = 120    # 2 min between same-coin executions
 CIRCUIT_BREAKER_LOSSES = 3      # Halt after 3 consecutive losses (tightened for small bankroll)
 MAX_RETRIES = 1                 # Retry once on execution failure

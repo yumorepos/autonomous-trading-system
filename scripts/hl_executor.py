@@ -44,10 +44,10 @@ from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR
 EXECUTION_LOG = LOGS_DIR / "hl-execution.jsonl"
 CIRCUIT_BREAKER_STATE = LOGS_DIR / "circuit-breaker-state.json"
 
-MAX_SLIPPAGE = 0.05        # 5% max slippage from mid price
-MAX_LOSSES_BEFORE_HALT = 5
-MAX_DAILY_LOSS_USD = 10.0
-MAX_DRAWDOWN_PCT = 0.20    # 20% drawdown from peak
+MAX_SLIPPAGE = 0.03        # 3% max slippage from mid price
+MAX_LOSSES_BEFORE_HALT = 3
+MAX_DAILY_LOSS_USD = 3.0
+MAX_DRAWDOWN_PCT = 0.15    # 15% drawdown from peak (CANARY_PROTOCOL)
 
 BANNER = "⚠️ HYPERLIQUID EXECUTOR — CLOSE/REDUCE ONLY — NO NEW POSITIONS"
 

@@ -44,18 +44,18 @@ cb.reset()
 check("Reset clears halt", not cb.state["halted"])
 
 # Consecutive losses
-for i in range(5):
+for i in range(3):
     cb.record_loss(1.0)
 allowed, reason = cb.check(10.0)
-check("5 losses halts", not allowed)
+check("3 losses halts", not allowed)
 
 cb.reset()
 
 # Daily loss
-for i in range(11):
+for i in range(3):
     cb.record_loss(1.0)
 allowed, reason = cb.check(100.0)
-check("$11 daily loss halts", not allowed)
+check("$3 daily loss halts", not allowed)
 
 cb.reset()
 
@@ -68,10 +68,10 @@ check("Win resets consecutive", cb.state["consecutive_losses"] == 0)
 
 # --- Constants ---
 print("\n=== Safety Constants ===")
-check("Max slippage 5%", ex.MAX_SLIPPAGE == 0.05)
-check("Max losses 5", ex.MAX_LOSSES_BEFORE_HALT == 5)
-check("Max daily loss $10", ex.MAX_DAILY_LOSS_USD == 10.0)
-check("Max drawdown 20%", ex.MAX_DRAWDOWN_PCT == 0.20)
+check("Max slippage 3%", ex.MAX_SLIPPAGE == 0.03)
+check("Max losses 3", ex.MAX_LOSSES_BEFORE_HALT == 3)
+check("Max daily loss $3", ex.MAX_DAILY_LOSS_USD == 3.0)
+check("Max drawdown 15%", ex.MAX_DRAWDOWN_PCT == 0.15)
 check("Banner mentions close only", "CLOSE" in ex.BANNER)
 
 print(f"\n{'='*40}")

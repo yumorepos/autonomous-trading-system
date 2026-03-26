@@ -110,11 +110,11 @@ check("Max exposure blocked", not passed)
 
 # --- Constants ---
 print("\n=== Entry Constants ===")
-check("Max per trade $15", entry.MAX_POSITION_SIZE_USD == 15.0)
-check("Max total $50", entry.MAX_TOTAL_EXPOSURE_USD == 50.0)
-check("Max concurrent 3", entry.MAX_CONCURRENT == 3)
-check("Min signal score 5", entry.MIN_SIGNAL_SCORE == 5.0)
-check("Cooldown 30 min", entry.ENTRY_COOLDOWN_MIN == 30)
+check("Max per trade $12", entry.MAX_POSITION_SIZE_USD == 12.0)
+check("Max total $30", entry.MAX_TOTAL_EXPOSURE_USD == 30.0)
+check("Max concurrent 1", entry.MAX_CONCURRENT == 1)
+check("Min signal score 6", entry.MIN_SIGNAL_SCORE == 6.0)
+check("Cooldown 240 min", entry.ENTRY_COOLDOWN_MIN == 240)
 check("Default mode is paper", entry.ENTRY_MODE == "paper")
 check("Slippage 3%", entry.MAX_SLIPPAGE == 0.03)
 

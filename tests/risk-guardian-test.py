@@ -58,7 +58,7 @@ check("-14% → HOLD", r["action"] == "HOLD")
 # ALERT: over-exposure
 pos_over = {**pos_hold, "position_value": 25.0}
 r = rg.evaluate_position(pos_over)
-check("Over $20 exposure → ALERT", r["action"] == "ALERT")
+check("Over $12 exposure → ALERT", r["action"] == "ALERT")
 check("Trigger mentions OVER_EXPOSURE", any("OVER_EXPOSURE" in t for t in r["triggers"]))
 
 # CLOSE takes priority over ALERT
@@ -110,10 +110,10 @@ check("Different coin not in cooldown", not state.is_in_cooldown("BTC"))
 print("\n=== Risk Parameters ===")
 check("Stop-loss -15%", rg.STOP_LOSS_ROE == -0.15)
 check("Timeout 24h", rg.TIMEOUT_HOURS == 24)
-check("Drawdown 20%", rg.DRAWDOWN_PCT == 0.20)
-check("Max exposure $20", rg.MAX_EXPOSURE_PER_TRADE == 20.0)
-check("Max slippage 5%", rg.MAX_SLIPPAGE == 0.05)
-check("Circuit breaker 5 losses", rg.CIRCUIT_BREAKER_LOSSES == 5)
+check("Drawdown 15%", rg.DRAWDOWN_PCT == 0.15)
+check("Max exposure $12", rg.MAX_EXPOSURE_PER_TRADE == 12.0)
+check("Max slippage 3%", rg.MAX_SLIPPAGE == 0.03)
+check("Circuit breaker 3 losses", rg.CIRCUIT_BREAKER_LOSSES == 3)
 check("Cooldown 120s", rg.EXECUTION_COOLDOWN_SEC == 120)
 
 # --- Simulated Stop-Loss Trigger ---

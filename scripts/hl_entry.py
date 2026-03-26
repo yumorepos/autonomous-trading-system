@@ -52,11 +52,11 @@ _sig_spec.loader.exec_module(_signal_engine)
 ENTRY_MODE = os.environ.get("ENTRY_MODE", "paper").lower()  # paper | live
 
 MAX_POSITION_SIZE_USD = 12.0    # $12 per trade (tightened for small bankroll)
-MAX_TOTAL_EXPOSURE_USD = 25.0   # $25 total (keep 75% cash)
-MAX_CONCURRENT = 2              # Max 2 positions
-MIN_SIGNAL_SCORE = 5.0          # Minimum signal score to consider
+MAX_TOTAL_EXPOSURE_USD = 30.0   # $30 total (keep 70% cash)
+MAX_CONCURRENT = 1              # Max 1 concurrent position (CANARY_PROTOCOL)
+MIN_SIGNAL_SCORE = 6.0          # Minimum multi-factor score (was 5.0 single-factor)
 SIGNAL_FRESHNESS_MIN = 60       # Signal must be < 60 min old
-ENTRY_COOLDOWN_MIN = 30         # 30 min between entries
+ENTRY_COOLDOWN_MIN = 240        # 4h between entries (CANARY_PROTOCOL)
 MIN_PERP_MARGIN_USD = 10.0      # Need at least $10 in perp margin
 SPOT_TRANSFER_AMOUNT = 20.0     # Transfer $20 from spot when needed
 MAX_SLIPPAGE = 0.03             # 3% max slippage for entries (tighter than closes)
@@ -431,6 +431,14 @@ def run_entry(status_only: bool = False) -> dict[str, Any]:
     # Try best signal
     best = signals[0]
     print(f"\n[3/4] Evaluating best: {best['asset']} (score: {best['score']:.1f})")
+    
+    # CANARY PROTOCOL: Generate pre-trade packet
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    from pre_trade_packet import generate_packet
+    packet = generate_packet(best, {})
+    print(f"  📋 Pre-trade packet: {packet['packet_id']}")
+    
     passed, reason, ctx = check_all_gates(best, client, entry_state)
 
     if not passed:
@@ -439,6 +447,7 @@ def run_entry(status_only: bool = False) -> dict[str, Any]:
         return {"action": "blocked", "reason": reason}
 
     print(f"  ✅ {reason}")
+    print(f"  📋 Packet compliance: valid")
     result = execute_entry(best, client, entry_state, ctx)
     print(f"\n[4/4] Result: {result.get('result', '?')}")
     if result.get("message"):
