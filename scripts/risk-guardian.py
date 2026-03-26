@@ -35,9 +35,9 @@ from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR
 
 STOP_LOSS_ROE = -0.10           # -10% ROE (tightened for capital preservation)
 TIMEOUT_HOURS = 12              # 12h max hold (capture funding, don't overstay)
-TAKE_PROFIT_ROE = 0.08          # +8% ROE take profit
-TRAILING_STOP_ACTIVATE = 0.04   # Activate trailing stop at +4% ROE
-TRAILING_STOP_DISTANCE = 0.03   # Trail 3% behind peak ROE
+TAKE_PROFIT_ROE = 0.15          # +15% ROE hard cap (let runners run)
+TRAILING_STOP_ACTIVATE = 0.02   # Activate trailing stop at +2% ROE (lock profit early)
+TRAILING_STOP_DISTANCE = 0.02   # Trail 2% behind peak (tight trail captures moves)
 DRAWDOWN_PCT = 0.15             # 15% from peak account value (CANARY_PROTOCOL)
 MAX_CONCURRENT = 5              # Max open positions
 MAX_EXPOSURE_PER_TRADE = 20.0   # $20 per trade (CEO PROFIT MODE)
