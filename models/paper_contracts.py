@@ -24,9 +24,9 @@ HYPERLIQUID_SIGNAL_CONTRACT = SignalContract(
     required_signal_fields=('asset', 'direction', 'entry_price'),
     position_identifier_fields=('asset', 'symbol'),
     default_position_size_usd=1.96,
-    take_profit_pct=10.0,
-    stop_loss_pct=-10.0,
-    timeout_hours=24.0,
+    take_profit_pct=2.0,
+    stop_loss_pct=-2.0,
+    timeout_hours=1.5,
 )
 
 POLYMARKET_SIGNAL_CONTRACT = SignalContract(
@@ -36,9 +36,9 @@ POLYMARKET_SIGNAL_CONTRACT = SignalContract(
     required_signal_fields=('market_id', 'market_question', 'side', 'entry_price'),
     position_identifier_fields=('market_id', 'symbol', 'asset'),
     default_position_size_usd=5.0,
-    take_profit_pct=8.0,
-    stop_loss_pct=-8.0,
-    timeout_hours=24.0,
+    take_profit_pct=2.0,
+    stop_loss_pct=-2.0,
+    timeout_hours=1.5,
 )
 
 SIGNAL_CONTRACTS: dict[str, SignalContract] = {

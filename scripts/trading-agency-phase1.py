@@ -418,7 +418,15 @@ def run_state_update(trader_stage: StageResult) -> StageResult:
 
 def load_performance_data():
     """Load latest performance metrics"""
-    return safe_read_json(LOGS_DIR / "phase1-performance.json")
+    data = safe_read_json(LOGS_DIR / "phase1-performance.json")
+    if isinstance(data, dict):
+        return data
+    return {
+        'total_trades': 0,
+        'trade_count': 0,
+        'win_rate': 0,
+        'total_pnl_usd': 0,
+    }
 
 
 def load_open_positions():
@@ -702,6 +710,12 @@ def build_cycle_summary(stage_results: list[StageResult], performance: dict | No
         exit_status = 'no_open_positions'
         exit_reason = 'No open positions were available for exit evaluation'
 
+    performance_record = performance or {
+        'total_trades': 0,
+        'trade_count': 0,
+        'win_rate': 0,
+        'total_pnl_usd': 0,
+    }
     summary = {
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'mode': TRADING_MODE,
@@ -735,9 +749,10 @@ def build_cycle_summary(stage_results: list[StageResult], performance: dict | No
         'current_state': {
             'open_positions': len(open_positions),
             'latest_signals_count': len(latest_signals),
-            'closed_trades': (performance or {}).get('total_trades', 0),
+            'closed_trades': performance_record.get('total_trades', performance_record.get('trade_count', 0)),
         },
         'authoritative_files_written': authoritative_files_written(stage_index),
+        'performance_summary': performance_record,
     }
     write_json_atomic(AGENCY_CYCLE_SUMMARY_JSON, summary)
     write_cycle_summary_markdown(summary)
@@ -940,7 +955,7 @@ def generate_agency_report(stage_results: list[StageResult], optional_components
                 })
         
         # Check if overall performance is poor
-        if performance['total_trades'] >= 20 and performance['win_rate'] < 40:
+        if performance.get('total_trades', performance.get('trade_count', 0)) >= 20 and performance.get('win_rate', 0) < 40:
             report['supervisor_action_required'].append({
                 'type': 'performance_alert',
                 'reason': f"Low win rate: {performance['win_rate']}% over {performance['total_trades']} trades",

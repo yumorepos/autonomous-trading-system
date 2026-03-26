@@ -41,7 +41,7 @@ W_VOLUME = 0.20       # Volume confirms liquidity
 MIN_FUNDING_ANNUALIZED = 0.30     # 30% annualized (lowered from 50% for multi-factor)
 MIN_VOLUME_24H = 300_000          # $300k daily volume
 MIN_COMPOSITE_SCORE = 6.0         # Higher than old 5.0 — multi-factor should be more selective
-MIN_CONFIRMATIONS = 2             # At least 2 of 3 signals must agree
+MIN_CONFIRMATIONS = 1             # At least 1 of 3 signals (CEO: increased frequency for compounding)
 MAX_SIGNALS = 3                   # Return top 3 candidates only
 
 # Momentum

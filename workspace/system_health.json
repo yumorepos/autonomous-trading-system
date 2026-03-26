@@ -1,10 +1,6 @@
 {
-  "timestamp": "2026-03-26T17:11:13.476171+00:00",
-  "current_health_status": "CRITICAL",
-  "observed_health_status": "CRITICAL",
-  "recovery_state": "INCIDENT_ACTIVE",
-  "cooldown_remaining": 0,
-  "cooldown_target": null,
+  "overall_status": "CRITICAL",
+  "observed_status": "CRITICAL",
   "active_incidents": [
     {
       "incident_id": "execution-safety:safety_warning:2026-03-26T06:55:28.905512+00:00",
@@ -566,28 +562,22 @@
       }
     }
   ],
-  "recently_resolved_incidents": [],
-  "operator_overrides": {
-    "manual_mode": "OFF",
-    "trading_override": "ALLOW",
-    "recovery_override": "AUTO",
-    "notes": "",
-    "updated_at": null,
-    "validation_errors": [],
-    "override_effects": []
-  },
-  "current_action": "HALT_NEW_TRADES",
-  "alert": {
-    "level": "CRITICAL",
-    "reasons": [
-      "HALT_NEW_TRADES active",
-      "Unresolved CRITICAL incident present"
-    ]
-  },
-  "trading_permissions": {
-    "allow_new_trades": false,
-    "allow_monitoring": true,
-    "allow_exits": true
-  },
-  "reason": "Liquidity check failed: 'coin'"
+  "resolved_incidents": [],
+  "last_updated": "2026-03-26T17:11:13.473946+00:00",
+  "affected_components": [
+    "execution_safety",
+    "trade_entry"
+  ],
+  "cooldown_start_time": null,
+  "cooldown_remaining": 0,
+  "cooldown_target": null,
+  "stable_since": "2026-03-26T16:44:01.336517+00:00",
+  "recovery_state": "INCIDENT_ACTIVE",
+  "anti_flapping_until": null,
+  "transition_history": [
+    {
+      "status": "CRITICAL",
+      "timestamp": "2026-03-26T17:11:08.779401+00:00"
+    }
+  ]
 }

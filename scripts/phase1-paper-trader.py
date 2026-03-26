@@ -42,8 +42,9 @@ POSITION_STATE_FILE = LOGS_DIR / "position-state.json"
 PAPER_ACCOUNT_FILE = LOGS_DIR / "paper-account.json"
 
 PAPER_BALANCE = DEFAULT_STARTING_BALANCE_USD
-MAX_OPEN_POSITIONS = 3
+MAX_OPEN_POSITIONS = 5
 MIN_EV_SCORE = 4
+MAX_SIGNAL_AGE_SECONDS = 300
 
 def log_non_canonical_signal(signal: dict | None, reason: str) -> None:
     signal_type = (signal or {}).get('signal_type', 'unknown')
@@ -241,6 +242,12 @@ def log_trade(trade: dict) -> None:
 def evaluate_exit_trades(open_positions: list[dict]) -> list[dict]:
     planned_closes = []
     for position in open_positions:
+        exchange = position.get('exchange', 'Hyperliquid')
+        adapter = get_paper_exchange_adapter(exchange)
+        if adapter:
+            position['take_profit_pct'] = adapter.take_profit_pct
+            position['stop_loss_pct'] = adapter.stop_loss_pct
+            position['timeout_hours'] = adapter.timeout_hours
         should_exit, reason = check_exit(position)
         if not should_exit:
             continue
@@ -291,8 +298,12 @@ def select_trade_candidate(
     good_signals = []
     unconsumed = filter_unconsumed_signals(signals)
     open_identifiers = {_position_identifier(position) for position in open_positions}
+    now_ts = datetime.now(timezone.utc)
     for signal in unconsumed:
         if signal.get('ev_score', 0) < MIN_EV_SCORE or not signal.get('timestamp'):
+            continue
+        signal_age = now_ts - datetime.fromisoformat(signal['timestamp'])
+        if signal_age.total_seconds() > MAX_SIGNAL_AGE_SECONDS:
             continue
         exchange = signal.get('exchange', signal.get('source'))
         if exchange == 'Hyperliquid' and not mode_includes_hyperliquid(TRADING_MODE):

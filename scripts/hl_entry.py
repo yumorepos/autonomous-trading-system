@@ -39,9 +39,9 @@ if str(REPO_ROOT) not in sys.path:
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR
 from utils.api_connectivity import fetch_hyperliquid_meta
 
-# Multi-factor signal engine
+# CEO OVERRIDE: Use simple scanner (multi-factor engine was returning 0)
 import importlib.util as _ilu
-_sig_spec = _ilu.spec_from_file_location("signal_engine", Path(__file__).parent / "signal_engine.py")
+_sig_spec = _ilu.spec_from_file_location("signal_engine", Path(__file__).parent / "simple_scanner.py")
 _signal_engine = _ilu.module_from_spec(_sig_spec)
 _sig_spec.loader.exec_module(_signal_engine)
 
@@ -192,8 +192,8 @@ class HLClient:
 # ---------------------------------------------------------------------------
 
 def scan_signals() -> list[dict[str, Any]]:
-    """Scan using multi-factor signal engine (funding + momentum + volume)."""
-    return _signal_engine.scan_multifactor_signals()
+    """Scan using simple scanner (CEO override — multi-factor was broken)."""
+    return _signal_engine.scan_simple()
 
 
 # ---------------------------------------------------------------------------
