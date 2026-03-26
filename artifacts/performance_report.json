@@ -1,0 +1,178 @@
+{
+  "generated_at": "2026-03-26T21:23:51.359921+00:00",
+  "data_source": "/Users/yumo/Projects/autonomous-trading-system/workspace/logs/phase1-paper-trades.jsonl",
+  "sample_size": 7,
+  "disclaimer": "Paper trading only. Sample size too small for statistical significance.",
+  "summary": {
+    "total_trades": 7,
+    "wins": 4,
+    "losses": 3,
+    "win_rate_pct": 57.1,
+    "total_pnl_usd": 0.9664,
+    "avg_pnl_usd": 0.1381,
+    "avg_pnl_pct": 7.04,
+    "avg_win_usd": 0.2502,
+    "avg_loss_usd": -0.0114,
+    "profit_factor": 29.28,
+    "expectancy_per_trade_usd": 0.1381,
+    "max_drawdown_from_peak_pct": 0.0346,
+    "starting_balance_usd": 97.8,
+    "ending_balance_usd": 98.77
+  },
+  "duration": {
+    "avg_trade_duration_min": 72.2,
+    "min_trade_duration_min": 3.7,
+    "max_trade_duration_min": 105.6
+  },
+  "exit_reasons": {
+    "take_profit": 2,
+    "timeout": 5
+  },
+  "strategies": {
+    "funding_arbitrage": {
+      "count": 7,
+      "pnl_usd": 0.9664
+    }
+  },
+  "position_sizing": {
+    "avg_position_usd": 1.96,
+    "total_capital_deployed_usd": 13.72
+  },
+  "equity_curve": [
+    {
+      "trade_id": "08db0d92",
+      "symbol": "PROVE",
+      "exit_timestamp": "2026-03-26T07:04:42.486851+00:00",
+      "pnl_usd": 0.4900000000000002,
+      "cumulative_balance": 98.29
+    },
+    {
+      "trade_id": "e3b848b2",
+      "symbol": "SUPER",
+      "exit_timestamp": "2026-03-26T07:04:42.487573+00:00",
+      "pnl_usd": 0.48999999999999994,
+      "cumulative_balance": 98.78
+    },
+    {
+      "trade_id": "ad6f647a",
+      "symbol": "PROVE",
+      "exit_timestamp": "2026-03-26T16:40:09.825426+00:00",
+      "pnl_usd": 0.017114514182256763,
+      "cumulative_balance": 98.7971
+    },
+    {
+      "trade_id": "99ef35c8",
+      "symbol": "SUPER",
+      "exit_timestamp": "2026-03-26T16:40:10.643204+00:00",
+      "pnl_usd": -0.010913505819308363,
+      "cumulative_balance": 98.7862
+    },
+    {
+      "trade_id": "fac9d9da",
+      "symbol": "REZ",
+      "exit_timestamp": "2026-03-26T16:40:11.156951+00:00",
+      "pnl_usd": -0.011228874248066486,
+      "cumulative_balance": 98.775
+    },
+    {
+      "trade_id": "7e18bece",
+      "symbol": "TRUMP",
+      "exit_timestamp": "2026-03-26T16:40:11.769350+00:00",
+      "pnl_usd": -0.012027998849362145,
+      "cumulative_balance": 98.7629
+    },
+    {
+      "trade_id": "e12ef372",
+      "symbol": "STABLE",
+      "exit_timestamp": "2026-03-26T16:43:56.684531+00:00",
+      "pnl_usd": 0.0034889240506329037,
+      "cumulative_balance": 98.7664
+    }
+  ],
+  "trades": [
+    {
+      "trade_id": "08db0d92",
+      "symbol": "PROVE",
+      "side": "LONG",
+      "entry_price": 0.28052,
+      "exit_price": 0.35065,
+      "position_size_usd": 1.96,
+      "pnl_usd": 0.4900000000000002,
+      "pnl_pct": 25.00000000000001,
+      "exit_reason": "take_profit",
+      "duration_min": 9.2
+    },
+    {
+      "trade_id": "e3b848b2",
+      "symbol": "SUPER",
+      "side": "LONG",
+      "entry_price": 0.1272,
+      "exit_price": 0.159,
+      "position_size_usd": 1.96,
+      "pnl_usd": 0.48999999999999994,
+      "pnl_pct": 24.999999999999993,
+      "exit_reason": "take_profit",
+      "duration_min": 3.7
+    },
+    {
+      "trade_id": "ad6f647a",
+      "symbol": "PROVE",
+      "side": "LONG",
+      "entry_price": 0.26512,
+      "exit_price": 0.267435,
+      "position_size_usd": 1.96,
+      "pnl_usd": 0.017114514182256763,
+      "pnl_pct": 0.8731894990947329,
+      "exit_reason": "timeout",
+      "duration_min": 105.6
+    },
+    {
+      "trade_id": "99ef35c8",
+      "symbol": "SUPER",
+      "side": "LONG",
+      "entry_price": 0.11943,
+      "exit_price": 0.118765,
+      "position_size_usd": 1.96,
+      "pnl_usd": -0.010913505819308363,
+      "pnl_pct": -0.5568115213932838,
+      "exit_reason": "timeout",
+      "duration_min": 103.2
+    },
+    {
+      "trade_id": "fac9d9da",
+      "symbol": "REZ",
+      "side": "LONG",
+      "entry_price": 0.003491,
+      "exit_price": 0.003471,
+      "position_size_usd": 1.96,
+      "pnl_usd": -0.011228874248066486,
+      "pnl_pct": -0.5729017473503308,
+      "exit_reason": "timeout",
+      "duration_min": 101.5
+    },
+    {
+      "trade_id": "7e18bece",
+      "symbol": "TRUMP",
+      "side": "LONG",
+      "entry_price": 3.1287,
+      "exit_price": 3.1095,
+      "position_size_usd": 1.96,
+      "pnl_usd": -0.012027998849362145,
+      "pnl_pct": -0.613673410681742,
+      "exit_reason": "timeout",
+      "duration_min": 91.2
+    },
+    {
+      "trade_id": "e12ef372",
+      "symbol": "STABLE",
+      "side": "LONG",
+      "entry_price": 0.02528,
+      "exit_price": 0.025325,
+      "position_size_usd": 1.96,
+      "pnl_usd": 0.0034889240506329037,
+      "pnl_pct": 0.17800632911392367,
+      "exit_reason": "timeout",
+      "duration_min": 90.7
+    }
+  ]
+}
