@@ -1,0 +1,93 @@
+{
+  "generated_at": "2026-03-26T02:48:34.747634+00:00",
+  "overall": {
+    "status": "INSUFFICIENT_DATA",
+    "trade_count": 1,
+    "wins": 0,
+    "losses": 1,
+    "win_rate": 0.0,
+    "total_pnl_usd": -0.4984,
+    "avg_win_usd": 0,
+    "avg_loss_usd": -0.4984,
+    "reward_risk_ratio": 0.0,
+    "profit_factor": 0.0,
+    "expectancy_per_dollar": -0.033452,
+    "max_drawdown_usd": 0.4984,
+    "avg_hold_minutes": 94.7,
+    "avg_position_size": 14.9
+  },
+  "by_strategy": {
+    "funding_arb": {
+      "status": "INSUFFICIENT_DATA",
+      "trade_count": 1,
+      "wins": 0,
+      "losses": 1,
+      "win_rate": 0.0,
+      "total_pnl_usd": -0.4984,
+      "avg_win_usd": 0,
+      "avg_loss_usd": -0.4984,
+      "reward_risk_ratio": 0.0,
+      "profit_factor": 0.0,
+      "expectancy_per_dollar": -0.033452,
+      "max_drawdown_usd": 0.4984,
+      "avg_hold_minutes": 94.7,
+      "avg_position_size": 14.9
+    }
+  },
+  "by_score_bucket": {
+    "5-7": {
+      "status": "INSUFFICIENT_DATA",
+      "trade_count": 1,
+      "wins": 0,
+      "losses": 1,
+      "win_rate": 0.0,
+      "total_pnl_usd": -0.4984,
+      "avg_win_usd": 0,
+      "avg_loss_usd": -0.4984,
+      "reward_risk_ratio": 0.0,
+      "profit_factor": 0.0,
+      "expectancy_per_dollar": -0.033452,
+      "max_drawdown_usd": 0.4984,
+      "avg_hold_minutes": 94.7,
+      "avg_position_size": 14.9
+    }
+  },
+  "by_exit_reason": {
+    "thesis_invalidated": {
+      "status": "INSUFFICIENT_DATA",
+      "trade_count": 1,
+      "wins": 0,
+      "losses": 1,
+      "win_rate": 0.0,
+      "total_pnl_usd": -0.4984,
+      "avg_win_usd": 0,
+      "avg_loss_usd": -0.4984,
+      "reward_risk_ratio": 0.0,
+      "profit_factor": 0.0,
+      "expectancy_per_dollar": -0.033452,
+      "max_drawdown_usd": 0.4984,
+      "avg_hold_minutes": 94.7,
+      "avg_position_size": 14.9
+    }
+  },
+  "decisions": {
+    "funding_arb": {
+      "verdict": "INSUFFICIENT_DATA",
+      "action": "CONTINUE_TESTING",
+      "reason": "Only 1/10 trades. Need more data."
+    },
+    "_overall": {
+      "verdict": "INSUFFICIENT_DATA",
+      "action": "CONTINUE_TESTING",
+      "reason": "Only 1/10 trades. Need more data."
+    }
+  },
+  "thresholds": {
+    "min_trades_eval": 10,
+    "min_trades_scaling": 20,
+    "viable_expectancy": 0.005,
+    "kill_expectancy": -0.02,
+    "viable_win_rate": 0.45,
+    "viable_profit_factor": 1.2
+  }
+}
