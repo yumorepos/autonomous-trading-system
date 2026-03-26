@@ -177,9 +177,9 @@ def fetch_polymarket_markets(timeout: float = 5.0, limit: int = 100, closed: boo
                 status_code=response.status_code,
                 latency_ms=elapsed_ms,
             ), []
-        if "tokens" not in market or not isinstance(market.get("tokens"), list):
+        if "question" not in market or "conditionId" not in market:
             return _schema_error(
-                f"market[{index}] missing tokens list",
+                f"market[{index}] missing question or conditionId",
                 source="polymarket",
                 endpoint=POLYMARKET_MARKETS_URL,
                 status_code=response.status_code,

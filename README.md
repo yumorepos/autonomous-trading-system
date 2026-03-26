@@ -205,3 +205,43 @@ workspace/   Runtime state, operator controls, logs, and generated artifacts.
 ## Disclaimer
 
 This repository is for research, auditing, and portfolio presentation. It is **not** a production trading system, does **not** provide live execution support, and does **not** constitute financial advice.
+
+---
+
+## Daily Review
+
+The daily review system (`scripts/daily-review.py`) is an auditable subsystem that runs the complete position review + signal scan workflow.
+
+### What it does
+
+1. **Position Review** — Loads open paper positions, fetches live prices from Hyperliquid and Polymarket, evaluates each against stop-loss/take-profit/timeout thresholds
+2. **Signal Scan** — Scans Hyperliquid funding rate anomalies and Polymarket volume movers for new entry candidates
+3. **Paper Execution** — Exits breached positions and opens new paper trades (max 5 concurrent, $50 max per position)
+4. **Reporting** — Writes `workspace/DAILY_REVIEW_REPORT.md` and appends to `workspace/logs/daily-review.jsonl`
+
+### Usage
+
+```bash
+# Default (Hyperliquid only)
+python scripts/daily-review.py
+
+# Both exchanges
+OPENCLAW_TRADING_MODE=mixed python scripts/daily-review.py
+
+# Polymarket only
+OPENCLAW_TRADING_MODE=polymarket_only python scripts/daily-review.py
+```
+
+### Output files
+
+- `workspace/DAILY_REVIEW_REPORT.md` — Human-readable daily report
+- `workspace/logs/daily-review.jsonl` — Machine-readable audit log
+- `workspace/logs/phase1-paper-trades.jsonl` — Paper trade records
+
+### Tests
+
+```bash
+python tests/daily-review-test.py  # 17 offline tests
+```
+
+> ⚠️ This is paper trading only. No real funds, no live execution, no API keys required.
