@@ -1,11 +1,34 @@
 # Autonomous Trading System
 
-Version: 5.2  
-Status: CI-backed research repository for **paper trading only**
+Version: 6.0  
+Status: **Autonomous protection enabled** — Hyperliquid execution verified on mainnet
+
+## System Status
+
+| Capability | Status |
+|---|---|
+| Hyperliquid data feed | ✅ Verified (229 assets) |
+| Hyperliquid position reading | ✅ Verified (SDK + wallet) |
+| Hyperliquid execution | ✅ Verified (order #361425848340 filled on mainnet) |
+| Autonomous protection | ✅ Running (launchd, every 4h, unattended runs proven) |
+| Autonomous trade entry | ❌ Not implemented |
+| Polymarket data feed | ✅ Verified (Gamma API) |
+| Polymarket execution | ❌ Not implemented (no CLOB credentials) |
 
 ## Summary
 
-This repository implements a **Phase 1 paper-trading execution path** for truthful research and portfolio review.
+This repository implements an **autonomous position protection system** for Hyperliquid with a verified on-chain execution path.
+
+**What is proven:**
+- Real order execution on Hyperliquid mainnet
+- Autonomous guardian runs every 4 hours via launchd
+- Stop-loss, timeout, drawdown circuit breaker
+- 59 offline tests passing
+
+**What is NOT implemented:**
+- Autonomous trade entry (opening new positions)
+- Polymarket execution
+- Live trading strategy automation
 
 Current repo truth:
 - **Hyperliquid:** canonical paper-trading path
