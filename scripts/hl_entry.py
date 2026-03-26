@@ -39,6 +39,12 @@ if str(REPO_ROOT) not in sys.path:
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR
 from utils.api_connectivity import fetch_hyperliquid_meta
 
+# Multi-factor signal engine
+import importlib.util as _ilu
+_sig_spec = _ilu.spec_from_file_location("signal_engine", Path(__file__).parent / "signal_engine.py")
+_signal_engine = _ilu.module_from_spec(_sig_spec)
+_sig_spec.loader.exec_module(_signal_engine)
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -186,44 +192,8 @@ class HLClient:
 # ---------------------------------------------------------------------------
 
 def scan_signals() -> list[dict[str, Any]]:
-    """Scan Hyperliquid for entry-worthy funding anomalies."""
-    result, universe, contexts = fetch_hyperliquid_meta(timeout=10)
-    if not result.ok:
-        return []
-
-    signals = []
-    now = datetime.now(timezone.utc)
-    for asset, ctx in zip(universe, contexts):
-        name = asset.get("name", "")
-        funding = ctx.get("funding")
-        mid_px = ctx.get("midPx")
-        volume = ctx.get("dayNtlVlm")
-        if not funding or not mid_px:
-            continue
-        try:
-            fr = float(funding)
-            price = float(mid_px)
-            vol = float(volume) if volume else 0
-        except (ValueError, TypeError):
-            continue
-
-        annualized = fr * 3 * 365
-        if abs(annualized) < MIN_FUNDING_ANNUALIZED or vol < MIN_VOLUME_24H:
-            continue
-
-        direction = "short" if fr > 0 else "long"
-        score = abs(annualized) * min(vol / 1_000_000, 5.0)
-        if score < MIN_SIGNAL_SCORE:
-            continue
-
-        signals.append({
-            "asset": name, "direction": direction, "price": price,
-            "funding_8h": fr, "annualized": annualized, "volume_24h": vol,
-            "score": score, "scanned_at": now.isoformat(),
-        })
-
-    signals.sort(key=lambda s: s["score"], reverse=True)
-    return signals[:3]
+    """Scan using multi-factor signal engine (funding + momentum + volume)."""
+    return _signal_engine.scan_multifactor_signals()
 
 
 # ---------------------------------------------------------------------------
