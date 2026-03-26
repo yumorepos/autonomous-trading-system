@@ -298,6 +298,17 @@ def check_all_gates(
     if signal["volume_24h"] < MIN_VOLUME_24H:
         return False, f"Volume ${signal['volume_24h']:,.0f} < ${MIN_VOLUME_24H:,.0f} min", ctx
 
+    # 11. Funding direction gate (PROVE lesson: don't pay funding on a funding arb trade)
+    if signal.get("signal_type") == "funding_anomaly":
+        fr = signal.get("funding_8h", 0)
+        direction = signal.get("direction", "")
+        # Long should earn funding (funding negative = shorts pay longs)
+        # Short should earn funding (funding positive = longs pay shorts)
+        if direction == "long" and fr > 0:
+            return False, f"Funding direction mismatch: long but funding {fr:+.6f} (would pay, not earn)", ctx
+        if direction == "short" and fr < 0:
+            return False, f"Funding direction mismatch: short but funding {fr:+.6f} (would pay, not earn)", ctx
+
     return True, "ALL GATES PASSED", ctx
 
 
