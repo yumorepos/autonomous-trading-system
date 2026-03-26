@@ -1,1 +1,15 @@
 __pycache__/
+
+# === SECURITY: Runtime artifacts ===
+*.jsonl
+*.log
+workspace/logs/
+logs/
+*.state.json
+circuit-breaker-state.json
+risk-guardian-state.json
+hl-entry-state.json
+*.key
+*.secret
+.env
+.env.*
