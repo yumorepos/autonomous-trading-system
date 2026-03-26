@@ -61,7 +61,7 @@ MIN_PERP_MARGIN_USD = 10.0      # Need at least $10 in perp margin
 SPOT_TRANSFER_AMOUNT = 20.0     # Transfer $20 from spot when needed
 MAX_SLIPPAGE = 0.03             # 3% max slippage for entries (tighter than closes)
 MIN_VOLUME_24H = 1_000_000      # $1M min daily volume (A+ standard — must exit cleanly)
-MIN_FUNDING_ANNUALIZED = 2.00   # 200% annualized funding rate minimum (A+ standard)
+MIN_FUNDING_ANNUALIZED = 1.50   # 150% annualized funding rate minimum (A standard — balanced for throughput)
 
 ENTRY_LOG = LOGS_DIR / "hl-entry.jsonl"
 ENTRY_STATE = LOGS_DIR / "hl-entry-state.json"

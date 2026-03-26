@@ -8,13 +8,15 @@
 
 $97 is the entire bankroll. Every dollar lost is 1% of everything. Act accordingly.
 
-## A+ Signal Standard
+## A Signal Standard (Relaxed 2026-03-26 for Throughput)
 Only enter trades that meet ALL of these criteria:
 1. **Composite signal score ≥ 6.0** (multi-factor: funding + momentum + volume)
-2. **Funding rate > 200% annualized** (the core edge — we earn funding as longs)
+2. **Funding rate > 150% annualized** (was 200% — relaxed for trade frequency, still strong edge)
 3. **Volume > $1M / 24h** (enough liquidity to exit cleanly)
 4. **Premium < -1%** (perp price below oracle = bullish reversion pressure)
 5. **No conflicting momentum** (last 3 hourly candles not all red)
+
+**Rationale:** 200% funding yielded 0 trades/day. 150% captures markets like PROVE (181% funding) while maintaining quality. Expected signal rate: ~1-2%/scan → 0.5-1 trade/day → 2-5% daily return.
 
 If ANY criterion fails → NO TRADE. Wait for the next cycle.
 
