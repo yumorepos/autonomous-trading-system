@@ -7,9 +7,9 @@ Bypasses broken multi-factor engine.
 import json
 import urllib.request
 
-MIN_FUNDING_TIER1 = 1.50  # 150% annual
-MIN_VOLUME_TIER1 = 1_000_000
-MIN_PREMIUM_TIER1 = -0.01
+MIN_FUNDING_TIER1 = 0.75  # 75% annual (CEO: relaxed for capital utilization)
+MIN_VOLUME_TIER1 = 500_000        # $500k (was $1M)
+MIN_PREMIUM_TIER1 = -0.005        # -0.5% (was -1%)
 
 MIN_PREMIUM_TIER2 = -0.025
 MIN_VOLUME_TIER2 = 500_000

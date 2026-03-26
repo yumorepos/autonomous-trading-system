@@ -56,7 +56,7 @@ MAX_TOTAL_EXPOSURE_USD = 40.0   # $40 total (~40% of capital, keep 60% cash)
 MAX_CONCURRENT = 2              # Max 2 concurrent positions
 MIN_SIGNAL_SCORE = 6.0          # Minimum multi-factor score (A+ standard)
 SIGNAL_FRESHNESS_MIN = 60       # Signal must be < 60 min old
-ENTRY_COOLDOWN_MIN = 45         # 45 min between entries (PROFIT MODE — fast re-entry)
+ENTRY_COOLDOWN_MIN = 2          # 2 min (CEO: removed for capital utilization >70%)
 MIN_PERP_MARGIN_USD = 10.0      # Need at least $10 in perp margin
 SPOT_TRANSFER_AMOUNT = 20.0     # Transfer $20 from spot when needed
 MAX_SLIPPAGE = 0.03             # 3% max slippage for entries (tighter than closes)
@@ -461,6 +461,15 @@ def run_entry(status_only: bool = False) -> dict[str, Any]:
         print(f"[3/4] No entry — no qualifying signals")
         log_entry_event({"action": "scan_only", "signals": 0, "timestamp": now.isoformat()})
         return {"action": "no_signal", "signals": 0}
+
+    # CEO FIX: Filter out assets we already hold
+    state = client.get_perp_state()
+    held_assets = {p['coin'] for p in state.get('positions', [])}
+    signals = [s for s in signals if s['asset'] not in held_assets]
+    
+    if not signals:
+        print(f"[3/4] No entry — all signals are in existing positions")
+        return {"action": "all_held", "signals": 0}
 
     # Try best signal
     best = signals[0]
