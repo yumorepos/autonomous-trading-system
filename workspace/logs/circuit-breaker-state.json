@@ -1,5 +1,5 @@
 {
-  "peak_value": 2.0,
+  "peak_value": 4.494761,
   "daily_losses": [
     {
       "date": "2026-03-26",
@@ -8,10 +8,14 @@
     {
       "date": "2026-03-26",
       "amount": 1.0
+    },
+    {
+      "date": "2026-03-26",
+      "amount": 0.48246
     }
   ],
-  "consecutive_losses": 0,
+  "consecutive_losses": 1,
   "halted": false,
   "halt_reason": null,
-  "updated_at": "2026-03-26T01:00:15.809561+00:00"
+  "updated_at": "2026-03-26T02:44:01.376401+00:00"
 }

@@ -45,9 +45,9 @@ from utils.api_connectivity import fetch_hyperliquid_meta
 
 ENTRY_MODE = os.environ.get("ENTRY_MODE", "paper").lower()  # paper | live
 
-MAX_POSITION_SIZE_USD = 15.0    # $15 per trade
-MAX_TOTAL_EXPOSURE_USD = 50.0   # $50 total across all positions
-MAX_CONCURRENT = 3              # Max 3 positions
+MAX_POSITION_SIZE_USD = 12.0    # $12 per trade (tightened for small bankroll)
+MAX_TOTAL_EXPOSURE_USD = 25.0   # $25 total (keep 75% cash)
+MAX_CONCURRENT = 2              # Max 2 positions
 MIN_SIGNAL_SCORE = 5.0          # Minimum signal score to consider
 SIGNAL_FRESHNESS_MIN = 60       # Signal must be < 60 min old
 ENTRY_COOLDOWN_MIN = 30         # 30 min between entries

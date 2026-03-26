@@ -40,7 +40,7 @@ MAX_CONCURRENT = 5              # Max open positions
 MAX_EXPOSURE_PER_TRADE = 20.0   # $20 per trade
 MAX_SLIPPAGE = 0.05             # 5% max slippage
 EXECUTION_COOLDOWN_SEC = 120    # 2 min between same-coin executions
-CIRCUIT_BREAKER_LOSSES = 5      # Halt after 5 consecutive losses
+CIRCUIT_BREAKER_LOSSES = 3      # Halt after 3 consecutive losses (tightened for small bankroll)
 MAX_RETRIES = 1                 # Retry once on execution failure
 
 # ---------------------------------------------------------------------------
