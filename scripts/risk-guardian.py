@@ -33,11 +33,14 @@ from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR
 # Risk Parameters
 # ---------------------------------------------------------------------------
 
-STOP_LOSS_ROE = -0.15           # -15% ROE
-TIMEOUT_HOURS = 24              # 24h max hold
+STOP_LOSS_ROE = -0.10           # -10% ROE (tightened for capital preservation)
+TIMEOUT_HOURS = 12              # 12h max hold (capture funding, don't overstay)
+TAKE_PROFIT_ROE = 0.08          # +8% ROE take profit
+TRAILING_STOP_ACTIVATE = 0.04   # Activate trailing stop at +4% ROE
+TRAILING_STOP_DISTANCE = 0.03   # Trail 3% behind peak ROE
 DRAWDOWN_PCT = 0.15             # 15% from peak account value (CANARY_PROTOCOL)
 MAX_CONCURRENT = 5              # Max open positions
-MAX_EXPOSURE_PER_TRADE = 12.0   # $12 per trade (CANARY_PROTOCOL)
+MAX_EXPOSURE_PER_TRADE = 20.0   # $20 per trade (CEO PROFIT MODE)
 MAX_SLIPPAGE = 0.03             # 3% max slippage (CANARY_PROTOCOL)
 EXECUTION_COOLDOWN_SEC = 120    # 2 min between same-coin executions
 CIRCUIT_BREAKER_LOSSES = 3      # Halt after 3 consecutive losses (tightened for small bankroll)
@@ -233,6 +236,22 @@ class HLClient:
 # Risk Evaluation
 # ---------------------------------------------------------------------------
 
+# Peak ROE tracker (persisted in guardian state)
+_PEAK_ROE_FILE = LOGS_DIR / "peak-roe-tracker.json"
+
+def _load_peak_roe() -> dict[str, float]:
+    try:
+        if _PEAK_ROE_FILE.exists():
+            return json.loads(_PEAK_ROE_FILE.read_text())
+    except (json.JSONDecodeError, OSError):
+        pass
+    return {}
+
+def _save_peak_roe(peaks: dict[str, float]) -> None:
+    _PEAK_ROE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _PEAK_ROE_FILE.write_text(json.dumps(peaks, indent=2))
+
+
 def evaluate_position(pos: dict[str, Any]) -> dict[str, Any]:
     """Evaluate a position against all risk rules. Returns enriched record."""
     roe = pos["roe"]
@@ -242,12 +261,32 @@ def evaluate_position(pos: dict[str, Any]) -> dict[str, Any]:
     triggers: list[str] = []
     action = "HOLD"
 
-    # Stop-loss
+    # Track peak ROE for trailing stop
+    peaks = _load_peak_roe()
+    peak_roe = peaks.get(coin, 0)
+    if roe > peak_roe:
+        peak_roe = roe
+        peaks[coin] = peak_roe
+        _save_peak_roe(peaks)
+
+    # 1. Hard stop-loss
     if roe <= STOP_LOSS_ROE:
         triggers.append(f"STOP_LOSS: ROE {roe:+.1%} <= {STOP_LOSS_ROE:.0%}")
         action = "CLOSE"
 
-    # Timeout (if opened_at is tracked — future positions will have this)
+    # 2. Take profit (hard cap)
+    if roe >= TAKE_PROFIT_ROE:
+        triggers.append(f"TAKE_PROFIT: ROE {roe:+.1%} >= {TAKE_PROFIT_ROE:.0%}")
+        action = "CLOSE"
+
+    # 3. Trailing stop (only if peak was above activation threshold)
+    if peak_roe >= TRAILING_STOP_ACTIVATE and action == "HOLD":
+        trail_level = peak_roe - TRAILING_STOP_DISTANCE
+        if roe <= trail_level:
+            triggers.append(f"TRAILING_STOP: ROE {roe:+.1%} fell below trail {trail_level:+.1%} (peak: {peak_roe:+.1%})")
+            action = "CLOSE"
+
+    # 4. Timeout
     opened_at = pos.get("opened_at")
     if opened_at:
         try:
@@ -262,16 +301,22 @@ def evaluate_position(pos: dict[str, Any]) -> dict[str, Any]:
         except (ValueError, TypeError):
             pass
 
-    # Exposure check
+    # 5. Exposure check
     if value > MAX_EXPOSURE_PER_TRADE:
         triggers.append(f"OVER_EXPOSURE: ${value:.2f} > ${MAX_EXPOSURE_PER_TRADE:.2f}")
         if action == "HOLD":
             action = "ALERT"
 
+    # Clean up peak tracker on close
+    if action == "CLOSE" and coin in peaks:
+        del peaks[coin]
+        _save_peak_roe(peaks)
+
     return {
         **pos,
         "triggers": triggers,
         "action": action,
+        "peak_roe": peak_roe,
     }
 
 
@@ -437,6 +482,8 @@ def write_report(
     lines.extend([
         "## Risk Parameters",
         f"- Stop-loss: {STOP_LOSS_ROE:.0%} ROE",
+        f"- Take-profit: {TAKE_PROFIT_ROE:.0%} ROE",
+        f"- Trailing stop: activates at {TRAILING_STOP_ACTIVATE:.0%}, trails {TRAILING_STOP_DISTANCE:.0%}",
         f"- Timeout: {TIMEOUT_HOURS}h",
         f"- Drawdown halt: {DRAWDOWN_PCT:.0%}",
         f"- Max exposure/trade: ${MAX_EXPOSURE_PER_TRADE}",

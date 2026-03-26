@@ -51,9 +51,9 @@ _sig_spec.loader.exec_module(_signal_engine)
 
 ENTRY_MODE = os.environ.get("ENTRY_MODE", "paper").lower()  # paper | live
 
-MAX_POSITION_SIZE_USD = 12.0    # $12 per trade (tightened for small bankroll)
-MAX_TOTAL_EXPOSURE_USD = 30.0   # $30 total (keep 70% cash)
-MAX_CONCURRENT = 1              # Max 1 concurrent position (CANARY_PROTOCOL)
+MAX_POSITION_SIZE_USD = 15.0    # $15 per trade (CEO PROFIT MODE — 7-day deadline)
+MAX_TOTAL_EXPOSURE_USD = 40.0   # $40 total (~40% of capital, keep 60% cash)
+MAX_CONCURRENT = 2              # Max 2 concurrent positions
 MIN_SIGNAL_SCORE = 6.0          # Minimum multi-factor score (was 5.0 single-factor)
 SIGNAL_FRESHNESS_MIN = 60       # Signal must be < 60 min old
 ENTRY_COOLDOWN_MIN = 240        # 4h between entries (CANARY_PROTOCOL)
@@ -421,7 +421,7 @@ def run_entry(status_only: bool = False) -> dict[str, Any]:
     signals = scan_signals()
     print(f"[2/4] Signals: {len(signals)} above threshold")
     for s in signals:
-        print(f"  {s['asset']}: {s['direction']} | {s['annualized']:+.0%} ann. | Vol: ${s['volume_24h']:,.0f} | Score: {s['score']:.1f}")
+        print(f"  {s['asset']}: {s['direction']} | {s.get('annualized_rate', s.get('annualized', 0)):+.0%} ann. | Vol: ${s['volume_24h']:,.0f} | Score: {s['score']:.1f}")
 
     if not signals:
         print(f"[3/4] No entry — no qualifying signals")
