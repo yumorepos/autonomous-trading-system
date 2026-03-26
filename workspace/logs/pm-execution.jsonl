@@ -1,0 +1,2 @@
+{"test": "polymarket_live_order", "market": "BitBoy convicted?", "token_id": "75467129615908319583...", "price": -0.02, "size": 10.0, "order_id": null, "timestamp": "2026-03-26T01:52:37.664491+00:00"}
+{"result":"VERIFIED_LIVE","order_id":"0x5e75...f19c [REDACTED]1e4cca25fc34652ca97996b3","sig_type":2,"funder":"0x7D80...03c1 [REDACTED]","price":0.01,"size":5.0,"placed":true,"cancelled":true,"timestamp":"2026-03-26T02:31:00+00:00"}
