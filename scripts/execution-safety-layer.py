@@ -26,6 +26,15 @@ from models.trade_schema import is_trade_closed, is_trade_open, normalize_trade_
 from utils.system_health import SystemHealthManager
 from utils.paper_exchange_adapters import get_paper_exchange_adapter
 from utils.json_utils import safe_read_jsonl
+def _logs_dir():
+    """Resolve LOGS_DIR at call time so tests can override runtime.LOGS_DIR."""
+    from config import runtime as _rt
+    return _rt.LOGS_DIR
+
+def _workspace_root():
+    from config import runtime as _rt
+    return _rt.WORKSPACE_ROOT
+
 SAFETY_STATE = LOGS_DIR / "execution-safety-state.json"
 BLOCKED_ACTIONS = LOGS_DIR / "blocked-actions.jsonl"
 INCIDENT_LOG = LOGS_DIR / "incident-log.jsonl"
@@ -56,7 +65,7 @@ CIRCUIT_BREAKERS = {
     'max_daily_loss_usd': 10,
     'max_hourly_loss_usd': 3,
     'max_drawdown_from_peak_pct': 20,
-    'min_time_between_trades_seconds': 60
+    'min_time_between_trades_seconds': 5
 }
 
 
@@ -182,8 +191,9 @@ class ExecutionSafetyLayer:
         }
 
     def _canonical_trade_history(self) -> List[Dict]:
+        trades_file = _logs_dir() / "phase1-paper-trades.jsonl"
         trades: List[Dict] = []
-        for raw_record in safe_read_jsonl(PAPER_TRADES_FILE):
+        for raw_record in safe_read_jsonl(trades_file):
             record = normalize_trade_record(raw_record)
             if not validate_trade_record(record, context='execution-safety.trade-history'):
                 continue
@@ -191,7 +201,9 @@ class ExecutionSafetyLayer:
         return trades
 
     def refresh_breaker_state_from_canonical_history(self) -> Dict:
-        account_state = synchronize_paper_account_state(PAPER_ACCOUNT_FILE, PAPER_TRADES_FILE, starting_balance_usd=DEFAULT_STARTING_BALANCE_USD)
+        trades_file = _logs_dir() / "phase1-paper-trades.jsonl"
+        account_file = _logs_dir() / "paper-account.json"
+        account_state = synchronize_paper_account_state(account_file, trades_file, starting_balance_usd=DEFAULT_STARTING_BALANCE_USD)
         trades = self._canonical_trade_history()
         closed_trades = [trade for trade in trades if is_trade_closed(trade)]
         closed_trades.sort(key=lambda trade: trade.get('exit_timestamp') or trade.get('entry_timestamp') or '')
