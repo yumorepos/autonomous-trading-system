@@ -2,17 +2,17 @@
 
 > ⚠️ AUTONOMOUS PROTECTION — 🔴 LIVE
 
-**Run:** 2026-03-26T01:14:38.628074+00:00  
+**Run:** 2026-03-26T01:24:14.062309+00:00  
 **Account:** `0x8743f51c57...`  
-**Wallet:** $102.77 (spot: $97.85 | perps: $4.925920)  
-**Peak:** $102.773899  
+**Wallet:** $102.73 (spot: $97.83 | perps: $4.903990)  
+**Peak:** $102.775939  
 **Circuit Breaker:** 🟢 OK  
 **Consecutive Losses:** 0 / 5
 
 ## Positions
 | Coin | Dir | Size | Entry | ROE | PnL | Action | Triggers |
 |------|-----|------|-------|-----|-----|--------|----------|
-| PROVE | long | 51.0 | $0.29 | -0.7% | $-0.0352 | **HOLD** | — |
+| PROVE | long | 51.0 | $0.29 | -1.2% | $-0.0571 | **HOLD** | — |
 
 ## Risk Parameters
 - Stop-loss: -15% ROE
@@ -24,4 +24,4 @@
 - Circuit breaker: 5 losses
 
 ---
-_Risk Guardian v1 — 2026-03-26T01:14:38.628074+00:00_
+_Risk Guardian v1 — 2026-03-26T01:24:14.062309+00:00_

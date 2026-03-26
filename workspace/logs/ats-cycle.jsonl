@@ -1,0 +1,2 @@
+{"event": "cycle_complete", "timestamp": "2026-03-26T01:23:41.799032+00:00", "entry_mode": "paper", "entry": {"result": "blocked", "asset": null}, "guardian": {"positions": 1, "closes": 0, "circuit_breaker_ok": true}, "logged_at": "2026-03-26T01:23:50.963338+00:00"}
+{"event": "cycle_complete", "timestamp": "2026-03-26T01:24:06.815977+00:00", "entry_mode": "live", "entry": {"result": "blocked", "asset": null}, "guardian": {"positions": 1, "closes": 0, "circuit_breaker_ok": true}, "logged_at": "2026-03-26T01:24:14.064462+00:00"}

@@ -1,0 +1,11 @@
+{
+  "peak_account_value": 102.77593900000001,
+  "consecutive_losses": 0,
+  "halted": false,
+  "halt_reason": null,
+  "recent_executions": [],
+  "total_closes": 0,
+  "total_losses_usd": 0.0,
+  "created_at": "2026-03-26T01:23:49.042214+00:00",
+  "updated_at": "2026-03-26T01:24:14.063577+00:00"
+}
