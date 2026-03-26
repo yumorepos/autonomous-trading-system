@@ -281,8 +281,23 @@ def check_all_gates(
 
     # 12. Premium check (A+ standard: perp price must be below oracle for longs)
     premium = signal.get("composite", {}).get("premium", signal.get("premium", None))
-    if premium is not None and signal.get("direction") == "long" and premium > -0.01:
-        return False, f"Premium {premium*100:+.2f}% > -1% — no reversion pressure for longs", ctx
+    
+    # TIER 2: Premium Reversion (alternative to Tier 1 funding)
+    # If premium < -2.5%, accept with lower thresholds
+    tier = 1  # Default to Tier 1
+    if premium is not None and premium < -0.025:
+        tier = 2
+        # Tier 2 has relaxed requirements
+        MIN_FUNDING_TIER2 = 0.50  # 50% annualized (vs 150% for Tier 1)
+        MIN_VOLUME_TIER2 = 500_000  # $500k (vs $1M for Tier 1)
+        signal["tier"] = 2
+        signal["position_size_usd"] = 10.0  # Smaller size for Tier 2
+    
+    # Apply tier-specific gates
+    if tier == 1:
+        # Tier 1: Premium must be < -1%
+        if premium is not None and signal.get("direction") == "long" and premium > -0.01:
+            return False, f"Premium {premium*100:+.2f}% > -1% — no reversion pressure for longs", ctx
 
     return True, "ALL GATES PASSED", ctx
 
