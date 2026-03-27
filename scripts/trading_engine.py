@@ -279,7 +279,7 @@ def log_to_ledger(trade_id: str, action: str, **kwargs) -> None:
                 trade_id=trade_id,
                 exit_price=kwargs.get("exit_price", 0),
                 exit_reason=kwargs.get("exit_reason", "UNKNOWN"),
-                pnl_usd=kwargs.get("pnl_usd", 0),
+                # Note: TradeLogger calculates PnL internally
             )
     except Exception as e:
         log_event({"event": "ledger_error", "error": str(e)})
@@ -377,7 +377,7 @@ def execute_exit(client: HyperliquidClient, pos: dict, triggers: list[str], stat
             action="exit",
             exit_price=mid,
             exit_reason=triggers[0] if triggers else "MANUAL",
-            pnl_usd=pos["unrealized_pnl"],
+            # Note: TradeLogger calculates PnL internally, doesn't accept pnl_usd param
         )
     else:
         result["result"] = "FAILED"
