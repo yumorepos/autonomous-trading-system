@@ -1,18 +1,41 @@
 {
-  "mission_id": "degraded-test",
-  "objective": "Safe degraded mode - awaiting recovery",
-  "mode": "degraded",
-  "status": "degraded",
+  "mission_id": "live-trade-audit-2026-03-27",
+  "objective": "Audit first 10 live trades against reliability improvements",
+  "mode": "continuous_monitoring",
+  "status": "active",
+  "created": "2026-03-27T18:00:00Z",
+  "updated": "2026-03-27T18:40:43.550111Z",
   "progress": {
     "trades_audited": 0,
-    "trades_required": 0,
-    "last_check": "2026-03-27T18:38:38.953954+00:00"
+    "trades_required": 10,
+    "last_check": "2026-03-27T18:40:43.550516Z",
+    "next_check": "2026-03-27T19:00:00Z"
   },
-  "audit_requirements": {},
-  "monitoring_protocol": {},
+  "audit_requirements": {
+    "per_trade_checks": [
+      "entry_execution",
+      "heartbeat_freshness",
+      "retry_timing_jitter",
+      "retry_budget_compliance",
+      "max_backoff_cap",
+      "settle_time_effectiveness",
+      "error_context_logging",
+      "exit_execution",
+      "state_consistency"
+    ]
+  },
+  "monitoring_protocol": {
+    "check_interval_minutes": 60,
+    "log_file": "workspace/logs/trading_engine.jsonl"
+  },
   "next_session_actions": [
-    "DEGRADED MODE: Mission file was corrupted",
-    "Manual recovery required"
+    "Read CURRENT_MISSION.json to resume context",
+    "Check engine status",
+    "Review logs since last_check for new trades",
+    "Audit any completed trades",
+    "Continue until trades_audited >= trades_required"
   ],
-  "degraded_reason": "Test degraded mode"
+  "token_efficiency_mode": {
+    "enabled": true
+  }
 }
