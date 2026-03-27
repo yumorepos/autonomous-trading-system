@@ -1,0 +1,143 @@
+# CEO DISCIPLINE LOCK
+
+**Status:** ENGAGED  
+**Timestamp:** 2026-03-26 20:31 UTC  
+**Authority:** CEO (Yumo)
+
+---
+
+## LOCKED ACTIONS (Until 20 Closed Trades)
+
+The following actions are PROHIBITED until validation is complete:
+
+### ❌ NO Optimization
+- [ ] Threshold adjustments
+- [ ] Entry filter changes
+- [ ] Signal scoring modifications
+- [ ] Capital allocation rule changes
+- [ ] Position sizing tweaks
+- [ ] Exit trigger modifications (SL/TP/trailing/timeout percentages)
+
+### ❌ NO Forced Actions
+- [ ] Forced capital deployment to hit utilization targets
+- [ ] Forced rebalancing of existing positions
+- [ ] Forced exits for "better opportunities"
+- [ ] Low-quality entries below Tier 2 minimum
+
+### ❌ NO Performance Overfitting
+- [ ] Cherry-picking signals to improve win rate
+- [ ] Adjusting thresholds based on incomplete data (<20 trades)
+- [ ] Scaling position sizes before validation
+- [ ] Adding new strategies before core strategy is proven
+
+### ❌ NO Framework Changes
+- [ ] Changing tier definitions
+- [ ] Modifying risk controls
+- [ ] Altering circuit breakers
+- [ ] Updating CEO mandate before review
+
+---
+
+## ALLOWED ACTIONS
+
+The following actions are PERMITTED during validation:
+
+### ✅ System Operation
+- [x] Continuous 30-min scanning (automated)
+- [x] Entry on valid Tier 1/2 signals (automated)
+- [x] Exit via guardian triggers (automated)
+- [x] Trade logging (automated)
+- [x] Position monitoring (automated)
+
+### ✅ Maintenance
+- [x] Bug fixes (if system breaks)
+- [x] Log file cleanup (if disk space issue)
+- [x] Launchd restart (if job crashes)
+- [x] Emergency manual exit (if exchange issue)
+
+### ✅ Monitoring
+- [x] Check `STATUS.md` (read-only)
+- [x] Run `trade_logger.py` (read-only)
+- [x] View `tiered_scanner.py` output (read-only)
+- [x] Review positions (read-only)
+
+---
+
+## UNLOCK CONDITIONS
+
+This discipline lock will be RELEASED when ANY of the following occur:
+
+### Condition 1: Validation Complete ✅
+- **Requirement:** ≥20 closed trades logged
+- **Metrics:** Win rate, expectancy, tier performance calculated
+- **Action:** Full performance review, optimization unlocked
+
+### Condition 2: Emergency Stop ⚠️
+- **Trigger:** Circuit breaker trips (5 losses / $10 loss / 20% drawdown)
+- **Metrics:** System performance below acceptable threshold
+- **Action:** Manual review required, system may be halted
+
+### Condition 3: System Failure 🔴
+- **Trigger:** Critical bug, exchange API failure, data corruption
+- **Metrics:** System unable to operate safely
+- **Action:** Fix issue, resume validation, extend timeline
+
+---
+
+## ACCOUNTABILITY
+
+### Daily Check-In (Optional)
+- Review `STATUS.md` for current state
+- No action unless circuit breaker trips
+
+### Weekly Review (Recommended)
+- Run `trade_logger.py` for performance summary
+- Check closed trade count progress (X / 20)
+- Verify launchd job is running
+- No changes unless system failure
+
+### After 20 Trades (Mandatory)
+1. Run full performance analysis
+2. Calculate: Win rate, expectancy, avg win/loss, tier performance
+3. Review CEO mandate unlock conditions
+4. Decide: Scale up / Continue / Reduce / Halt
+
+---
+
+## COMMITMENT
+
+By engaging this discipline lock, I commit to:
+
+1. **Execute consistently** — Let the system run for 20 full trade cycles
+2. **Avoid premature optimization** — No threshold tweaks based on gut feel
+3. **Respect the data** — Only optimize based on real, complete trade results
+4. **Preserve capital** — No forced trades, no unnecessary risk
+5. **Build credibility** — Create verifiable track record for future monetization
+
+---
+
+## REMINDER
+
+**Every premature optimization:**
+- Invalidates the data (can't compare apples to apples)
+- Delays validation (20-trade clock resets)
+- Risks capital (untested changes)
+- Destroys credibility (track record is inconsistent)
+
+**Every discipline cycle:**
+- Builds data (real, complete trade results)
+- Validates edge (or proves it doesn't exist)
+- Preserves capital (only proven strategies scale)
+- Creates credibility (consistent, verifiable performance)
+
+---
+
+**Status:** ENGAGED  
+**Mode:** FULL CEO AUTONOMOUS CAPITAL ALLOCATOR  
+**Discipline:** LOCKED  
+**Unlock:** After 20 closed trades OR emergency condition
+
+---
+
+**Signed:** CEO (Yumo)  
+**Date:** 2026-03-26 20:31 UTC
