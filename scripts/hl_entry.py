@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
 """
+⛔ DEPRECATED — DO NOT USE
+
+This script is DISABLED. All trading is now handled by trading_engine.py.
+
+Reason: Fragmented entry paths create bypass risks. The engine is the single
+        authoritative trading loop with built-in capital protection.
+
+Migration: Use trading_engine.py (always-on service via LaunchD)
+
+=== ORIGINAL DOCSTRING (PRESERVED FOR REFERENCE) ===
 Hyperliquid Safe Entry Module — Signal-Driven Position Opening.
 
 Opens small positions when strong signals pass ALL safety gates.
@@ -502,5 +512,21 @@ def run_entry(status_only: bool = False) -> dict[str, Any]:
 
 
 if __name__ == "__main__":
+    print("=" * 70)
+    print("⛔ SCRIPT DISABLED")
+    print("=" * 70)
+    print()
+    print("This entry script is deprecated and disabled.")
+    print("All trading is now handled by: scripts/trading_engine.py")
+    print()
+    print("Reason: Single authoritative loop prevents bypass paths.")
+    print()
+    print("To trade:")
+    print("  1. Verify engine is running: python3 scripts/trading_engine.py --status")
+    print("  2. If not running: launchctl load ~/Library/LaunchAgents/com.ats.trading-engine.plist")
+    print()
+    sys.exit(1)
+    
+    # ORIGINAL CODE (UNREACHABLE):
     args = sys.argv[1:]
     run_entry(status_only="--status" in args)

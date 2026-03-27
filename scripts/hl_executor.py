@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
 """
+⛔ DEPRECATED — DO NOT USE
+
+This script is DISABLED. All trading is now handled by trading_engine.py.
+
+Reason: Fragmented exit paths create state inconsistency. The engine is the
+        single authoritative loop that manages all position lifecycle.
+
+Migration: Use trading_engine.py (handles both entries and exits)
+
+=== ORIGINAL DOCSTRING (PRESERVED FOR REFERENCE) ===
 Hyperliquid Safe Execution Module — CLOSE/REDUCE ONLY.
 
 This module can ONLY close or reduce existing positions.
@@ -477,4 +487,22 @@ def main():
 
 
 if __name__ == "__main__":
+    print("=" * 70)
+    print("⛔ SCRIPT DISABLED")
+    print("=" * 70)
+    print()
+    print("This executor script is deprecated and disabled.")
+    print("All trading (entry + exit) is now handled by: scripts/trading_engine.py")
+    print()
+    print("Reason: Single authoritative loop prevents state inconsistency.")
+    print()
+    print("For manual exit (emergency only):")
+    print("  python3 scripts/manual_exit.py <COIN>  # Force-close position")
+    print()
+    print("For status:")
+    print("  python3 scripts/trading_engine.py --status")
+    print()
+    sys.exit(1)
+    
+    # ORIGINAL CODE (UNREACHABLE):
     main()

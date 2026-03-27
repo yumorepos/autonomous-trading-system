@@ -670,6 +670,31 @@ class TradingEngine:
     
     def run(self) -> None:
         """Main always-on loop."""
+        # === STARTUP ASSERTION: VERIFY ENGINE IS SOLE AUTHORITY ===
+        # Check that no other trading processes are running
+        import subprocess
+        ps_check = subprocess.run(
+            ["ps", "aux"],
+            capture_output=True,
+            text=True
+        )
+        trading_procs = [
+            line for line in ps_check.stdout.split("\n")
+            if ("hl_entry.py" in line or "hl_executor.py" in line or "manual_entry.py" in line)
+            and "grep" not in line
+        ]
+        if trading_procs:
+            print("=" * 70)
+            print("❌ STARTUP BLOCKED: LEGACY TRADING SCRIPTS RUNNING")
+            print("=" * 70)
+            print()
+            for proc in trading_procs:
+                print(f"  {proc}")
+            print()
+            print("These scripts must not run. Engine is sole trading authority.")
+            print()
+            raise RuntimeError("Legacy trading scripts detected. Engine cannot start safely.")
+        
         self.startup_reconciliation()
         
         print("🚀 ENGINE RUNNING")
@@ -680,6 +705,34 @@ class TradingEngine:
             while True:
                 cycle += 1
                 cycle_start = time.time()
+                
+                # === RUNTIME ASSERTION: HEARTBEAT FRESHNESS ===
+                # Verify heartbeat is being updated (detect freeze/hang)
+                if cycle > 10:  # Skip first 10 cycles (startup)
+                    hb_time = datetime.fromisoformat(self.state.data["heartbeat"])
+                    if hb_time.tzinfo is None:
+                        hb_time = hb_time.replace(tzinfo=timezone.utc)
+                    age = (datetime.now(timezone.utc) - hb_time).total_seconds()
+                    if age > 10:
+                        log_event({
+                            "event": "CRITICAL_HEARTBEAT_STALE",
+                            "age_sec": age,
+                            "action": "ABORT"
+                        })
+                        raise RuntimeError(f"HEARTBEAT STALE ({age:.0f}s) — Engine frozen, aborting")
+                
+                # === RUNTIME ASSERTION: STATE CONSISTENCY ===
+                # Verify state file is valid and consistent
+                if not STATE_FILE.exists():
+                    raise RuntimeError("STATE FILE DELETED — Engine cannot operate without state")
+                
+                try:
+                    test_state = json.loads(STATE_FILE.read_text())
+                    assert "heartbeat" in test_state
+                    assert "open_positions" in test_state
+                except (json.JSONDecodeError, AssertionError) as e:
+                    log_event({"event": "CRITICAL_STATE_CORRUPTED", "error": str(e), "action": "ABORT"})
+                    raise RuntimeError(f"STATE FILE CORRUPTED — {e}")
                 
                 # 1. PROTECTION (HIGHEST PRIORITY)
                 self.protect_capital()

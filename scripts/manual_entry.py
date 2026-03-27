@@ -1,10 +1,43 @@
 #!/usr/bin/env python3
 """
+⛔ DEPRECATED — DO NOT USE
+
+This script is DISABLED. All trading is now handled by trading_engine.py.
+
+Reason: Manual entries bypass capital protection. The engine enforces
+        heartbeat checks and circuit breaker before all entries.
+
+Migration: Use trading_engine.py (handles all entries with protection)
+
+=== ORIGINAL DOCSTRING (PRESERVED) ===
 CEO OVERRIDE: Manual entry for when signal scanner is broken.
 Usage: python3 scripts/manual_entry.py PROVE
 """
 
+# Minimal imports for abort message
 import sys
+
+# ABORT BEFORE ANY TRADING CODE LOADS
+if __name__ == "__main__":
+    print("=" * 70)
+    print("⛔ SCRIPT DISABLED")
+    print("=" * 70)
+    print()
+    print("Manual entry is disabled to prevent bypass of capital protection.")
+    print()
+    print("All entries must go through: scripts/trading_engine.py")
+    print()
+    print("Reason: Engine enforces heartbeat + circuit breaker checks.")
+    print()
+    print("If you need to manually open a position (extreme emergency):")
+    print("  1. Stop engine: launchctl unload ~/Library/LaunchAgents/com.ats.trading-engine.plist")
+    print("  2. Use Hyperliquid web UI (prevents automated bypass)")
+    print("  3. Restart engine: launchctl load ~/Library/LaunchAgents/com.ats.trading-engine.plist")
+    print()
+    sys.exit(1)
+
+# === UNREACHABLE CODE (PRESERVED FOR REFERENCE) ===
+
 import os
 from pathlib import Path
 
@@ -84,12 +117,4 @@ def manual_entry(asset: str, size_usd: float = 15.0):
         print(f"❌ Error: {e}")
         return
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 scripts/manual_entry.py ASSET [SIZE_USD]")
-        sys.exit(1)
-    
-    asset = sys.argv[1]
-    size = float(sys.argv[2]) if len(sys.argv) > 2 else 15.0
-    
-    manual_entry(asset, size)
+# if __name__ == "__main__" block moved to top (abort before imports)

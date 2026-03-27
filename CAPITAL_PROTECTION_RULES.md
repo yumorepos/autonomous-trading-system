@@ -107,12 +107,26 @@ else:
 python3 tests/test_capital_protection_rules.py
 ```
 
+**Tests (6 total):**
+- ✅ Entry blocked when protection stale
+- ✅ Force-mode SL bypasses circuit breaker
+- ✅ Status verifies protection before claiming operational
+- ✅ Entry blocked when system unhealthy
+- ✅ All legacy entry scripts disabled
+- ✅ No trading with stale heartbeat
+
 Runs on every commit (pre-commit hook).
 
 ### **2. Pre-Commit Hook**
 `.git/hooks/pre-commit` blocks commits if tests fail.
 
-### **3. Continuous Validation**
+### **3. Runtime Assertions**
+Engine aborts on:
+- Heartbeat >10 sec old (frozen loop)
+- State file deleted or corrupted
+- Legacy trading processes detected at startup
+
+### **4. Continuous Validation**
 `scripts/continuous_validation.py` (daily at 6 AM) checks:
 - Heartbeat fresh
 - State integrity
@@ -145,16 +159,25 @@ Runs on every commit (pre-commit hook).
 By design, these states **cannot exist**:
 
 1. ❌ **New position opened with stale protection**
-   - Blocked by Rule 1 guard
+   - Blocked by Rule 1 guard (execute_entry checks heartbeat age)
 
 2. ❌ **SL exit blocked by circuit breaker**
-   - Blocked by Rule 2 force mode
+   - Blocked by Rule 2 force mode (SL always bypasses CB)
 
 3. ❌ **Status claiming "ACTIVE" with stale heartbeat**
-   - Blocked by Rule 3 verification
+   - Blocked by Rule 3 verification (status_check validates live state)
 
 4. ❌ **Position exists without reconciliation**
    - Blocked by periodic reconciliation (every 60 sec)
+
+5. ❌ **Legacy entry scripts execute trades**
+   - Blocked by hard-fail abort (all legacy scripts disabled)
+
+6. ❌ **Trading with stale heartbeat (>2 min)**
+   - Blocked by heartbeat check in execute_entry()
+
+7. ❌ **Engine runs alongside legacy processes**
+   - Blocked by startup assertion (engine checks for conflicting processes)
 
 ---
 
@@ -182,6 +205,9 @@ Re-run destruction tests (`DESTRUCTION_TEST_PLAN.md`)
 | 2026-03-27 | Rule 1 | Added stale protection guard | Test passes |
 | 2026-03-27 | Rule 2 | Verified force mode in code | Test passes |
 | 2026-03-27 | Rule 3 | Added status verification | Test passes |
+| 2026-03-27 | Bypass Elimination | Disabled all legacy entry scripts | Test passes |
+| 2026-03-27 | Runtime Assertions | Added heartbeat/state checks in loop | Engine runs |
+| 2026-03-27 | Startup Assertion | Check for conflicting processes | Engine runs |
 
 ---
 

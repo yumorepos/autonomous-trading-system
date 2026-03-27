@@ -136,6 +136,64 @@ def test_entry_blocked_if_unhealthy():
     
     print("✅ PASS: Entry blocked when system unhealthy")
 
+def test_legacy_entry_scripts_disabled():
+    """RULE 4: Legacy entry scripts must abort (no bypass paths)."""
+    import subprocess
+    
+    legacy_scripts = [
+        "scripts/hl_entry.py",
+        "scripts/hl_executor.py",
+        "scripts/manual_entry.py",
+    ]
+    
+    for script in legacy_scripts:
+        script_path = REPO_ROOT / script
+        if not script_path.exists():
+            continue
+        
+        result = subprocess.run(
+            ["python3", str(script_path)],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT
+        )
+        
+        # Script must exit with code 1 (abort)
+        assert result.returncode == 1, \
+            f"FAIL: {script} did not abort (exit code {result.returncode})"
+        
+        # Output must contain "DISABLED"
+        assert "DISABLED" in result.stdout or "DISABLED" in result.stderr, \
+            f"FAIL: {script} did not show 'DISABLED' message"
+    
+    print("✅ PASS: All legacy entry scripts disabled")
+
+def test_no_stale_heartbeat_trading():
+    """RULE 5: Code cannot allow trading with stale heartbeat."""
+    # This tests the guard in execute_entry()
+    from scripts.trading_engine import TradingEngine
+    
+    with patch('scripts.trading_engine.HyperliquidClient'):
+        engine = TradingEngine(dry_run=True)
+        
+        # Simulate very stale protection (10 min ago)
+        engine.last_reconcile = time.time() - 600
+        
+        signal = {
+            "asset": "BTC",
+            "position_size_usd": 10,
+            "tier": 1,
+        }
+        
+        # Attempt entry
+        engine.execute_entry(signal)
+        
+        # Verify blocked
+        assert "BTC" not in engine.state.data["open_positions"], \
+            "FAIL: Entry allowed with 10-min stale protection"
+    
+    print("✅ PASS: No trading with stale heartbeat")
+
 if __name__ == "__main__":
     print("=" * 70)
     print("  CAPITAL PROTECTION RULES TEST")
@@ -147,6 +205,8 @@ if __name__ == "__main__":
         test_sl_force_mode_bypasses_circuit_breaker()
         test_status_verifies_protection_active()
         test_entry_blocked_if_unhealthy()
+        test_legacy_entry_scripts_disabled()
+        test_no_stale_heartbeat_trading()
         
         print()
         print("=" * 70)
