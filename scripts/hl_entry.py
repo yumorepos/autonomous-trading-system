@@ -39,9 +39,9 @@ if str(REPO_ROOT) not in sys.path:
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR
 from utils.api_connectivity import fetch_hyperliquid_meta
 
-# CEO OVERRIDE: Use simple scanner (multi-factor engine was returning 0)
+# TIERED ALLOCATION: Use tiered scanner (dynamic position sizing)
 import importlib.util as _ilu
-_sig_spec = _ilu.spec_from_file_location("signal_engine", Path(__file__).parent / "simple_scanner.py")
+_sig_spec = _ilu.spec_from_file_location("signal_engine", Path(__file__).parent / "tiered_scanner.py")
 _signal_engine = _ilu.module_from_spec(_sig_spec)
 _sig_spec.loader.exec_module(_signal_engine)
 
@@ -192,8 +192,8 @@ class HLClient:
 # ---------------------------------------------------------------------------
 
 def scan_signals() -> list[dict[str, Any]]:
-    """Scan using simple scanner (CEO override — multi-factor was broken)."""
-    return _signal_engine.scan_simple()
+    """Scan using tiered scanner (dynamic position sizing based on signal strength)."""
+    return _signal_engine.scan_tiered()
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +343,8 @@ def execute_entry(
         return result
 
     # Size in asset units, ensuring notional >= $10 (exchange minimum)
-    target_usd = MAX_POSITION_SIZE_USD
+    # TIERED ALLOCATION: Use signal's recommended size, fallback to MAX if not set
+    target_usd = signal.get("position_size_usd", MAX_POSITION_SIZE_USD)
     raw_size = target_usd / mid
 
     # Get size decimals for the asset
