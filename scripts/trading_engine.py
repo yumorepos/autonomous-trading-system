@@ -398,6 +398,7 @@ class TradingEngine:
         self.client = HyperliquidClient()
         self.state = EngineState()
         self.last_scan = 0.0
+        self.last_reconcile = 0.0
         
         print("=" * 70)
         print(f"  TRADING ENGINE {'[DRY RUN]' if dry_run else '[LIVE]'}")
@@ -615,6 +616,37 @@ class TradingEngine:
             log_event({"event": "entry_failed", "coin": coin, "error": str(e)})
 
     
+    def periodic_reconciliation(self) -> None:
+        """Periodic reconciliation: detect positions closed outside engine."""
+        # Run every 60 seconds
+        if time.time() - self.last_reconcile < 60:
+            return
+        
+        account = self.client.get_state()
+        live_positions = account["positions"]
+        tracked_coins = set(self.state.data["open_positions"].keys())
+        live_coins = set(p["coin"] for p in live_positions)
+        
+        # Stale positions (tracked but not live)
+        stale = tracked_coins - live_coins
+        if stale:
+            log_event({"event": "reconcile_stale_positions", "coins": list(stale)})
+            for coin in stale:
+                del self.state.data["open_positions"][coin]
+                if coin in self.state.data["peak_roe"]:
+                    del self.state.data["peak_roe"][coin]
+            self.state.save()
+        
+        # Untracked positions (live but not tracked)
+        untracked = live_coins - tracked_coins
+        if untracked:
+            log_event({"event": "reconcile_untracked_positions", "coins": list(untracked)})
+            for coin in untracked:
+                pos = next(p for p in live_positions if p["coin"] == coin)
+                self.state.track_position(coin, pos["entry_price"])
+        
+        self.last_reconcile = time.time()
+    
     def run(self) -> None:
         """Main always-on loop."""
         self.startup_reconciliation()
@@ -631,13 +663,16 @@ class TradingEngine:
                 # 1. PROTECTION (HIGHEST PRIORITY)
                 self.protect_capital()
                 
-                # 2. SCANNER (only if healthy)
+                # 2. PERIODIC RECONCILIATION (every 60 sec)
+                self.periodic_reconciliation()
+                
+                # 3. SCANNER (only if healthy)
                 self.scan_opportunities()
                 
-                # 3. HEARTBEAT
+                # 4. HEARTBEAT
                 self.state.update_heartbeat()
                 
-                # 4. SLEEP
+                # 5. SLEEP
                 elapsed = time.time() - cycle_start
                 sleep_time = max(0.1, LOOP_INTERVAL_SEC - elapsed)
                 time.sleep(sleep_time)
