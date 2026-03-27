@@ -358,6 +358,26 @@ def execute_exit(client: HyperliquidClient, pos: dict, triggers: list[str], stat
     max_retries = 5 if force else 1
     retry_delay_sec = 1.0
     
+    # === COORDINATION LOCK: Signal active exit to fallback ===
+    # Prevents fallback from interfering during engine retry
+    active_exits_file = LOGS_DIR / "active_exits.json"
+    if force:
+        try:
+            if active_exits_file.exists():
+                active_exits = json.loads(active_exits_file.read_text())
+            else:
+                active_exits = {"active_exits": {}}
+            
+            active_exits["active_exits"][coin] = {
+                "start_time": datetime.now(timezone.utc).isoformat(),
+                "max_retries": max_retries,
+                "reason": triggers[0] if triggers else "UNKNOWN",
+            }
+            active_exits_file.write_text(json.dumps(active_exits, indent=2))
+        except Exception as e:
+            # Don't fail exit if lock file fails
+            log_event({"event": "coordination_lock_failed", "error": str(e)})
+    
     for attempt in range(1, max_retries + 1):
         response = client.market_close(coin)
         result["exchange_response"] = response
@@ -389,6 +409,18 @@ def execute_exit(client: HyperliquidClient, pos: dict, triggers: list[str], stat
                 })
                 result["result"] = "FAILED_ALL_RETRIES"
                 result["escalated"] = True
+                
+                # === COORDINATION: Clear lock so fallback can take over ===
+                if force:
+                    try:
+                        if active_exits_file.exists():
+                            active_exits = json.loads(active_exits_file.read_text())
+                            if coin in active_exits.get("active_exits", {}):
+                                del active_exits["active_exits"][coin]
+                                active_exits_file.write_text(json.dumps(active_exits, indent=2))
+                    except Exception as e:
+                        log_event({"event": "coordination_unlock_failed", "error": str(e)})
+                
                 log_event(result)
                 return result
     
@@ -418,6 +450,17 @@ def execute_exit(client: HyperliquidClient, pos: dict, triggers: list[str], stat
     else:
         result["result"] = "FAILED"
         result["error"] = response.get("error")
+    
+    # === COORDINATION LOCK: Clear active exit ===
+    if force:
+        try:
+            if active_exits_file.exists():
+                active_exits = json.loads(active_exits_file.read_text())
+                if coin in active_exits.get("active_exits", {}):
+                    del active_exits["active_exits"][coin]
+                    active_exits_file.write_text(json.dumps(active_exits, indent=2))
+        except Exception as e:
+            log_event({"event": "coordination_unlock_failed", "error": str(e)})
     
     log_event(result)
     return result

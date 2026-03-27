@@ -98,6 +98,18 @@ def emergency_close_all() -> None:
     
     client = HyperliquidClient()
     
+    # === COORDINATION: Check if engine is actively exiting ===
+    # Respect active exits to prevent race condition
+    active_exits_file = LOGS_DIR / "active_exits.json"
+    active_exits = {}
+    
+    if active_exits_file.exists():
+        try:
+            data = json.loads(active_exits_file.read_text())
+            active_exits = data.get("active_exits", {})
+        except Exception as e:
+            log_fallback_event({"event": "coordination_check_failed", "error": str(e)})
+    
     # Get live positions from exchange
     positions = client.get_positions()
     
@@ -109,16 +121,54 @@ def emergency_close_all() -> None:
         print("No positions to close")
         return
     
+    # Filter out positions with active exits (engine is handling them)
+    positions_to_close = []
+    positions_skipped = []
+    
+    for pos in positions:
+        coin = pos["coin"]
+        if coin in active_exits:
+            # Engine is actively retrying this exit, don't interfere
+            exit_start = datetime.fromisoformat(active_exits[coin]["start_time"])
+            if exit_start.tzinfo is None:
+                exit_start = exit_start.replace(tzinfo=timezone.utc)
+            
+            age = (datetime.now(timezone.utc) - exit_start).total_seconds()
+            
+            # Only skip if exit started recently (<60 sec)
+            # After 60 sec, assume engine is stuck and take over
+            if age < 60:
+                positions_skipped.append({
+                    "coin": coin,
+                    "reason": f"Engine actively exiting (started {age:.0f}s ago)",
+                })
+                continue
+        
+        positions_to_close.append(pos)
+    
+    if positions_skipped:
+        log_fallback_event({
+            "event": "positions_skipped_active_exit",
+            "skipped": positions_skipped,
+        })
+        print(f"Skipped {len(positions_skipped)} positions (engine actively exiting)")
+    
+    if not positions_to_close:
+        print("No positions to close (all handled by engine)")
+        return
+    
     print("=" * 70)
     print("🚨 EMERGENCY FALLBACK ACTIVATED")
     print("=" * 70)
     print()
-    print(f"Closing {len(positions)} positions...")
+    print(f"Closing {len(positions_to_close)} positions...")
+    if positions_skipped:
+        print(f"Skipped {len(positions_skipped)} (engine actively exiting)")
     print()
     
     results = []
     
-    for pos in positions:
+    for pos in positions_to_close:
         coin = pos["coin"]
         print(f"Closing {coin}...")
         
@@ -142,7 +192,8 @@ def emergency_close_all() -> None:
     
     log_fallback_event({
         "event": "emergency_close_all",
-        "positions_closed": len(positions),
+        "positions_closed": len(positions_to_close),
+        "positions_skipped": len(positions_skipped),
         "results": results,
     })
     

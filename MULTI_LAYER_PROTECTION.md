@@ -59,9 +59,14 @@ for attempt in range(1, max_retries + 1):
 3. Open positions exist without fresh heartbeat
 
 **Actions:**
-1. Force-close all open positions
+1. Force-close all open positions (except active exits)
 2. Log emergency event to `workspace/logs/emergency-fallback.jsonl`
 3. Alert user (future: Telegram notification)
+
+**Coordination:**
+- Respects `active_exits.json` lock file
+- Skips positions where engine is actively retrying (<60 sec)
+- Takes over if engine exit is stuck (>60 sec)
 
 **Why Independent:**
 - Runs in separate process (survives engine crash)
@@ -157,6 +162,7 @@ By design, these failure modes **cannot result in capital loss**:
 | **Network loss** | Layer 1: Retry with timeout | Eventually succeeds or escalates |
 | **State corruption** | Layer 3: Runtime assertion aborts | Prevents unsafe operation |
 | **Dual authority** | Layer 4: Startup validation blocks | Engine refuses to start |
+| **Engine+Fallback race** | Coordination lock (active_exits.json) | Fallback skips active exits <60s, takes over if >60s |
 
 ---
 
@@ -187,7 +193,18 @@ python3 tests/test_capital_protection_rules.py
 - ✅ All legacy entry scripts disabled
 - ✅ No trading with stale heartbeat
 
-**Total:** 11 automated tests enforcing multi-layer protection
+### **Race Condition Tests:**
+```bash
+python3 tests/test_race_condition.py
+```
+
+**Tests (4 total):**
+- ✅ Coordination lock prevents fallback interference
+- ✅ Fallback takes over after engine timeout (>60 sec)
+- ✅ Engine clears lock after success
+- ✅ Engine clears lock after escalation
+
+**Total:** 15 automated tests enforcing multi-layer protection (6 rules + 5 multi-layer + 4 race)
 
 ---
 
