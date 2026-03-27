@@ -353,8 +353,44 @@ def execute_exit(client: HyperliquidClient, pos: dict, triggers: list[str], stat
         log_event(result)
         return result
     
-    response = client.market_close(coin)
-    result["exchange_response"] = response
+    # === GUARANTEED RETRY: RISK EXITS MUST SUCCEED ===
+    # For force-mode exits (SL/timeout), retry up to 5 times with backoff
+    max_retries = 5 if force else 1
+    retry_delay_sec = 1.0
+    
+    for attempt in range(1, max_retries + 1):
+        response = client.market_close(coin)
+        result["exchange_response"] = response
+        result["attempt"] = attempt
+        
+        if response["status"] == "ok":
+            break  # Success
+        else:
+            # Failed exit
+            if attempt < max_retries:
+                log_event({
+                    "event": "exit_retry",
+                    "coin": coin,
+                    "attempt": attempt,
+                    "max_retries": max_retries,
+                    "reason": response.get("response", "unknown"),
+                    "retry_in_sec": retry_delay_sec,
+                })
+                time.sleep(retry_delay_sec)
+                retry_delay_sec *= 2  # Exponential backoff
+            else:
+                # All retries exhausted
+                log_event({
+                    "event": "CRITICAL_EXIT_FAILED",
+                    "coin": coin,
+                    "attempts": max_retries,
+                    "last_response": response,
+                    "action": "ESCALATE_TO_EMERGENCY_FALLBACK",
+                })
+                result["result"] = "FAILED_ALL_RETRIES"
+                result["escalated"] = True
+                log_event(result)
+                return result
     
     if response["status"] == "ok":
         result["result"] = "EXECUTED"
