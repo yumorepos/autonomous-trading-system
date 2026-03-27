@@ -1,0 +1,68 @@
+{
+  "mission_id": "live-trade-audit-2026-03-27",
+  "objective": "Audit first 10 live trades against reliability improvements",
+  "mode": "continuous_monitoring",
+  "status": "active",
+  "created": "2026-03-27T18:00:00Z",
+  "updated": "2026-03-27T18:06:59.083424Z",
+  "progress": {
+    "trades_audited": 0,
+    "trades_required": 10,
+    "last_check": "2026-03-27T18:06:59.083424Z",
+    "next_check": "2026-03-27T18:06:59.083424Z"
+  },
+  "audit_requirements": {
+    "per_trade_checks": [
+      "entry_execution",
+      "heartbeat_freshness",
+      "retry_timing_jitter",
+      "retry_budget_compliance",
+      "max_backoff_cap",
+      "settle_time_effectiveness",
+      "error_context_logging",
+      "exit_execution",
+      "state_consistency"
+    ],
+    "reliability_metrics": {
+      "jitter_working": "verify randomized delays",
+      "retry_budget_max": 60,
+      "backoff_cap_max": 16,
+      "no_state_drift": "ledger/state/exchange match"
+    }
+  },
+  "monitoring_protocol": {
+    "check_interval_minutes": 60,
+    "log_file": "workspace/logs/trading_engine.jsonl",
+    "alert_on": [
+      "new_trade_entry",
+      "exit_with_retries",
+      "state_drift_detected",
+      "retry_budget_exhausted",
+      "protection_failure"
+    ]
+  },
+  "next_session_actions": [
+    "Read CURRENT_MISSION.json to resume context",
+    "Check engine status (python3 scripts/trading_engine.py --status)",
+    "Review logs since last_check for new trades",
+    "Audit any completed trades against 9 checkpoints",
+    "Update progress.trades_audited",
+    "Report findings (proof-only)",
+    "Continue until trades_audited >= trades_required"
+  ],
+  "completion_criteria": {
+    "trades_audited": 10,
+    "all_checks_passed": true,
+    "report_file": "RELIABILITY_AUDIT_FINAL.md"
+  },
+  "token_efficiency_mode": {
+    "enabled": true,
+    "rules": [
+      "Silent between events (no repeated status)",
+      "Batch observations, report only on material changes",
+      "Read logs only on state change or fixed intervals",
+      "Report only: trade events, errors, anomalies, health changes",
+      "Full audit depth only when real execution occurs"
+    ]
+  }
+}

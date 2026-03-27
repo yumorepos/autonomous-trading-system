@@ -17,7 +17,32 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MISSION_FILE = REPO_ROOT / "CURRENT_MISSION.json"
 
 def load_mission():
-    """Load current mission if exists."""
+    """Load current mission if exists (with validation)."""
+    # Run validator first
+    import subprocess
+    validator_script = REPO_ROOT / "scripts" / "mission_validator.py"
+    
+    result = subprocess.run(
+        [sys.executable, str(validator_script)],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT
+    )
+    
+    if result.returncode == 1:
+        # Validation failed, attempt recovery
+        print("⚠️  Mission validation failed, attempting recovery...")
+        recover_result = subprocess.run(
+            [sys.executable, str(validator_script), "--recover"],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT
+        )
+        if recover_result.returncode != 0:
+            print("❌ Auto-recovery failed")
+            return None
+        print("✅ Mission recovered")
+    
     if not MISSION_FILE.exists():
         return None
     
@@ -34,6 +59,20 @@ def check_mission():
     
     if not mission:
         print("No active mission")
+        return
+    
+    # Check for degraded mode
+    if mission.get("mode") == "degraded":
+        print("=" * 70)
+        print("  ⚠️  DEGRADED MODE")
+        print("=" * 70)
+        print()
+        print(f"Reason: {mission.get('degraded_reason', 'Unknown')}")
+        print()
+        print("Actions:")
+        for action in mission.get("next_session_actions", []):
+            print(f"  - {action}")
+        print()
         return
     
     if mission.get("status") != "active":
