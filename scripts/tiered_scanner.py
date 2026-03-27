@@ -8,7 +8,7 @@ import json
 import urllib.request
 
 # TIER 1: High Conviction
-TIER1_MIN_FUNDING = 1.50  # 150% annual
+TIER1_MIN_FUNDING = 1.00  # 100% annual (velocity optimization)
 TIER1_MIN_PREMIUM = -0.01  # -1%
 TIER1_MIN_VOLUME = 1_000_000
 TIER1_POSITION_SIZE = 15.0
