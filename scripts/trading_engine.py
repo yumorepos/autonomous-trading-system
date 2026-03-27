@@ -556,6 +556,27 @@ class TradingEngine:
         coin = signal["asset"]
         size_usd = signal["position_size_usd"]
         
+        # === NON-BYPASSABLE RULE: NO PROTECTION → NO TRADING ===
+        # Verify engine is protecting capital before allowing new exposure
+        heartbeat_age = (time.time() - self.last_reconcile)  # Use reconcile time as proxy
+        if heartbeat_age > 120:  # 2 minutes
+            log_event({
+                "event": "entry_blocked_stale_protection",
+                "coin": coin,
+                "reason": "Protection loop stale (>2 min), refusing new exposure",
+                "heartbeat_age_sec": heartbeat_age,
+            })
+            return
+        
+        if not self.state.is_healthy():
+            log_event({
+                "event": "entry_blocked_unhealthy",
+                "coin": coin,
+                "reason": "System unhealthy (circuit breaker or consecutive losses)",
+            })
+            return
+        # === END PROTECTION CHECK ===
+        
         # Pre-entry validation
         if coin in self.state.data["open_positions"]:
             log_event({"event": "entry_skipped", "coin": coin, "reason": "already_open"})
@@ -695,9 +716,13 @@ def status_check() -> None:
     
     if not STATE_FILE.exists():
         print("❌ State file not found — engine never started")
+        print("⚠️  CAPITAL PROTECTION: OFFLINE")
         return
     
     state = EngineState()
+    
+    # === NON-BYPASSABLE RULE: VERIFY PROTECTION BEFORE CLAIMING OPERATIONAL ===
+    protection_active = False
     
     # Heartbeat
     if state.data["heartbeat"]:
@@ -707,8 +732,11 @@ def status_check() -> None:
         age_sec = (datetime.now(timezone.utc) - hb_time).total_seconds()
         hb_status = "✅ FRESH" if age_sec < 5 else "⚠️  STALE"
         print(f"Heartbeat: {hb_status} ({age_sec:.1f}s ago)")
+        
+        protection_active = (age_sec < 5)
     else:
         print("Heartbeat: ❌ NEVER")
+        protection_active = False
     
     # Circuit breaker
     cb_status = "🔴 HALTED" if state.data["circuit_breaker_halted"] else "✅ ACTIVE"
@@ -724,6 +752,20 @@ def status_check() -> None:
     print(f"Total PnL: ${state.data['total_pnl']:.2f}")
     print(f"Consecutive losses: {state.data['consecutive_losses']} / {CIRCUIT_BREAKER_LOSSES}")
     print(f"Peak capital: ${state.data['peak_capital']:.2f}")
+    
+    print()
+    
+    # === FINAL VERDICT: NO FALSE CLAIMS ===
+    if protection_active:
+        if len(state.data["open_positions"]) > 0:
+            print("✅ CAPITAL PROTECTION: ACTIVE (positions protected)")
+        else:
+            print("✅ CAPITAL PROTECTION: ACTIVE (ready for entries)")
+    else:
+        print("🚨 CAPITAL PROTECTION: OFFLINE (heartbeat stale or missing)")
+        if len(state.data["open_positions"]) > 0:
+            print("⚠️  WARNING: Positions exist without active protection!")
+    # === END VERDICT ===
     
     print()
 
