@@ -460,11 +460,156 @@ class TradingEngine:
             log_event({"event": "scan_skipped", "reason": "system_unhealthy"})
             return
         
-        # TODO: Implement scanner integration
-        # For now, just log that scan would happen
-        log_event({"event": "scan_cycle", "positions": len(self.state.data["open_positions"])})
+        # Run scanner
+        try:
+            signals = self.run_scanner()
+            
+            if signals:
+                log_event({"event": "scan_found_signals", "count": len(signals)})
+                
+                # Process top signal only (one entry at a time)
+                for signal in signals[:1]:
+                    self.execute_entry(signal)
+            else:
+                log_event({"event": "scan_no_signals"})
+        
+        except Exception as e:
+            log_event({"event": "scan_error", "error": str(e)})
         
         self.last_scan = time.time()
+    
+    def run_scanner(self) -> list[dict]:
+        """Run tiered scanner and return qualifying signals."""
+        import urllib.request
+        
+        resp = json.loads(urllib.request.urlopen(
+            urllib.request.Request('https://api.hyperliquid.xyz/info',
+                data=json.dumps({'type': 'metaAndAssetCtxs'}).encode(),
+                headers={'Content-Type': 'application/json'}),
+            timeout=10
+        ).read())
+        
+        signals = []
+        
+        # Tiered thresholds
+        TIER1_MIN_FUNDING = 1.00
+        TIER1_MIN_PREMIUM = -0.01
+        TIER1_MIN_VOLUME = 1_000_000
+        TIER1_POSITION_SIZE = 15.0
+        
+        TIER2_MIN_FUNDING = 0.75
+        TIER2_MIN_PREMIUM = -0.005
+        TIER2_MIN_VOLUME = 500_000
+        TIER2_POSITION_SIZE = 8.0
+        
+        for u, ctx in zip(resp[0]['universe'], resp[1]):
+            asset = u['name']
+            premium = float(ctx.get('premium', 0) or 0)
+            funding = float(ctx.get('funding', 0) or 0)
+            volume = float(ctx.get('dayNtlVlm', 0) or 0)
+            mid = float(ctx.get('midPx', 0) or 0)
+            funding_annual = abs(funding) * 3 * 365
+            
+            # Skip if funding is positive
+            if funding >= 0:
+                continue
+            
+            # Tier 1
+            if funding_annual >= TIER1_MIN_FUNDING and premium < TIER1_MIN_PREMIUM and volume >= TIER1_MIN_VOLUME:
+                tier = 1
+                position_size = TIER1_POSITION_SIZE
+                score = 7.5
+            # Tier 2
+            elif funding_annual >= TIER2_MIN_FUNDING and premium < TIER2_MIN_PREMIUM and volume >= TIER2_MIN_VOLUME:
+                tier = 2
+                position_size = TIER2_POSITION_SIZE
+                score = 5.5
+            else:
+                continue
+            
+            signals.append({
+                "asset": asset,
+                "direction": "long",
+                "price": mid,
+                "score": score,
+                "signal_type": "funding_arbitrage" if tier == 1 else "moderate_funding",
+                "funding_8h": funding,
+                "annualized_rate": funding_annual,
+                "premium": premium,
+                "volume_24h": volume,
+                "tier": tier,
+                "position_size_usd": position_size,
+            })
+        
+        # Sort by tier, then score
+        signals.sort(key=lambda x: (x['tier'], -x['score']))
+        
+        return signals
+    
+    def execute_entry(self, signal: dict) -> None:
+        """Execute entry for a signal."""
+        coin = signal["asset"]
+        size_usd = signal["position_size_usd"]
+        
+        # Pre-entry validation
+        if coin in self.state.data["open_positions"]:
+            log_event({"event": "entry_skipped", "coin": coin, "reason": "already_open"})
+            return
+        
+        if len(self.state.data["open_positions"]) >= 5:
+            log_event({"event": "entry_skipped", "coin": coin, "reason": "max_positions"})
+            return
+        
+        # Check max exposure
+        account = self.client.get_state()
+        total_deployed = sum(p["margin_used"] for p in account["positions"])
+        
+        if total_deployed + size_usd > MAX_EXPOSURE_PER_TRADE * 5:
+            log_event({"event": "entry_skipped", "coin": coin, "reason": "max_exposure"})
+            return
+        
+        if self.dry_run:
+            log_event({"event": "entry_dry_run", "coin": coin, "size_usd": size_usd, "signal": signal})
+            return
+        
+        # Execute entry
+        try:
+            # Calculate size in coins
+            price = signal["price"]
+            leverage = 1  # 1x leverage for funding arb
+            size_coins = (size_usd * leverage) / price
+            
+            # Execute market order
+            response = self.client.exchange.market_open(coin, True, size_coins)  # True = long
+            
+            if response.get("status") != "ok":
+                log_event({"event": "entry_rejected", "coin": coin, "response": response})
+                return
+            
+            # Track position
+            self.state.track_position(coin, price)
+            
+            # Log to ledger
+            trade_id = f"hl-{coin.lower()}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+            log_to_ledger(
+                trade_id=trade_id,
+                action="entry",
+                signal=signal,
+                size=size_coins,
+                entry_price=price,
+            )
+            
+            log_event({
+                "event": "entry_executed",
+                "coin": coin,
+                "price": price,
+                "size_usd": size_usd,
+                "tier": signal["tier"],
+            })
+        
+        except Exception as e:
+            log_event({"event": "entry_failed", "coin": coin, "error": str(e)})
+
     
     def run(self) -> None:
         """Main always-on loop."""
