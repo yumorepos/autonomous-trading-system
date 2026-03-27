@@ -72,6 +72,58 @@ class EdgeMonitor:
             "losses": len(losses),
         }
     
+    def get_trend_analysis(self):
+        """Analyze trend direction over consecutive trades."""
+        if not Path(TRADE_LOGGER).exists():
+            return None
+        
+        trades = []
+        with Path(TRADE_LOGGER).open("r") as f:
+            for line in f:
+                if line.strip():
+                    trades.append(json.loads(line))
+        
+        closed = [t for t in trades if t.get("exit_timestamp")]
+        
+        if len(closed) < 5:  # Need at least 5 for trend
+            return None
+        
+        # Get last 3 windows (3-trade rolling)
+        windows = []
+        for i in range(3, min(len(closed) + 1, 8)):  # Up to 7 trades back
+            window = closed[-i:][:3]  # Last 3 trades
+            if len(window) == 3:
+                wins = [t for t in window if t.get("total_pnl_usd", 0) > 0]
+                total_pnl = sum(t.get("total_pnl_usd", 0) for t in window)
+                windows.append({
+                    'expectancy': total_pnl / 3,
+                    'win_rate': len(wins) / 3,
+                })
+        
+        if len(windows) < 2:
+            return None
+        
+        # Calculate trends
+        exp_trend = windows[-1]['expectancy'] - windows[0]['expectancy']
+        wr_trend = windows[-1]['win_rate'] - windows[0]['win_rate']
+        
+        # Classify trends
+        def classify_trend(value, threshold=0.1):
+            if value > threshold:
+                return 'IMPROVING'
+            elif value < -threshold:
+                return 'DETERIORATING'
+            else:
+                return 'STABLE'
+        
+        return {
+            'expectancy_trend': classify_trend(exp_trend, 0.15),
+            'win_rate_trend': classify_trend(wr_trend, 0.10),
+            'exp_change': exp_trend,
+            'wr_change': wr_trend,
+            'windows': len(windows),
+        }
+    
     def check_early_warning(self):
         """Check if recent performance shows deterioration (before full revert)."""
         
@@ -80,6 +132,9 @@ class EdgeMonitor:
         
         if rolling is None:
             return None
+        
+        # Get trend analysis
+        trend = self.get_trend_analysis()
         
         # Early warning thresholds (more lenient than revert)
         WARNING_EXPECTANCY = 0.30  # $0.30 vs $0.50 for revert
@@ -93,18 +148,28 @@ class EdgeMonitor:
         if rolling['win_rate'] < WARNING_WIN_RATE:
             warnings.append(f"Low win rate in last {rolling['trades']} trades: {rolling['win_rate']*100:.0f}%")
         
+        # Add trend-based warnings
+        if trend:
+            if trend['expectancy_trend'] == 'DETERIORATING':
+                warnings.append(f"Expectancy deteriorating (Δ${trend['exp_change']:.2f} over {trend['windows']} windows)")
+            
+            if trend['win_rate_trend'] == 'DETERIORATING':
+                warnings.append(f"Win rate deteriorating (Δ{trend['wr_change']*100:.0f}% over {trend['windows']} windows)")
+        
         if warnings:
             return {
                 'status': 'WARNING',
                 'rolling': rolling,
+                'trend': trend,
                 'warnings': warnings,
                 'action': 'MONITOR',
-                'reason': 'Recent performance below warning threshold',
+                'reason': 'Recent performance or trend below threshold',
             }
         
         return {
             'status': 'HEALTHY',
             'rolling': rolling,
+            'trend': trend,
             'action': 'CONTINUE',
         }
     
@@ -241,6 +306,16 @@ class EdgeMonitor:
                     print("EARLY INDICATOR (Last 5 trades):")
                     print(f"  ✅ Rolling expectancy: ${early['rolling']['expectancy']:+.2f}")
                     print(f"  ✅ Rolling win rate: {early['rolling']['win_rate']*100:.0f}%")
+                    
+                    # Show trend if available
+                    if early.get('trend'):
+                        trend = early['trend']
+                        exp_emoji = '📈' if trend['expectancy_trend'] == 'IMPROVING' else '📉' if trend['expectancy_trend'] == 'DETERIORATING' else '➡️'
+                        wr_emoji = '📈' if trend['win_rate_trend'] == 'IMPROVING' else '📉' if trend['win_rate_trend'] == 'DETERIORATING' else '➡️'
+                        
+                        print(f"  {exp_emoji} Expectancy trend: {trend['expectancy_trend']}")
+                        print(f"  {wr_emoji} Win rate trend: {trend['win_rate_trend']}")
+                    
                     print(f"  Status: HEALTHY")
         
         elif assessment['status'] == 'WARNING':
@@ -250,6 +325,26 @@ class EdgeMonitor:
             print(f"  Expectancy: ${assessment['rolling']['expectancy']:+.2f} (warning: <$0.30)")
             print(f"  Win rate: {assessment['rolling']['win_rate']*100:.0f}% (warning: <40%)")
             print(f"  Record: {assessment['rolling']['wins']}W / {assessment['rolling']['losses']}L")
+            
+            # Show trend analysis
+            if assessment.get('trend'):
+                trend = assessment['trend']
+                print()
+                print(f"TREND ANALYSIS (Over {trend['windows']} consecutive windows):")
+                
+                exp_emoji = '📈' if trend['expectancy_trend'] == 'IMPROVING' else '📉' if trend['expectancy_trend'] == 'DETERIORATING' else '➡️'
+                wr_emoji = '📈' if trend['win_rate_trend'] == 'IMPROVING' else '📉' if trend['win_rate_trend'] == 'DETERIORATING' else '➡️'
+                
+                print(f"  {exp_emoji} Expectancy: {trend['expectancy_trend']} (Δ${trend['exp_change']:+.2f})")
+                print(f"  {wr_emoji} Win rate: {trend['win_rate_trend']} (Δ{trend['wr_change']*100:+.0f}%)")
+                
+                if trend['expectancy_trend'] == 'DETERIORATING' and trend['win_rate_trend'] == 'DETERIORATING':
+                    print()
+                    print("  🔴 BOTH metrics deteriorating — High priority monitoring")
+                elif trend['expectancy_trend'] == 'IMPROVING' or trend['win_rate_trend'] == 'IMPROVING':
+                    print()
+                    print("  🟢 Recovery signs detected — Continue monitoring")
+            
             print()
             print("WARNINGS:")
             for w in assessment['warnings']:
