@@ -18,23 +18,31 @@ We optimized for trade velocity (faster exits, lower thresholds) to accelerate v
 
 ## PROTECTION RULES
 
-### Monitoring Triggers (After 10 Trades)
+### Two-Tier Safety System
 
-**Check expectancy and win rate:**
-- **Expectancy:** Must be ≥ $0.50 per trade
-- **Win rate:** Must be ≥ 50%
+**Tier 1: Early Warning (3-5 Trades)**
+- **Expectancy warning:** < $0.30 per trade
+- **Win rate warning:** < 40%
+- **Action:** MONITOR (no revert yet, just alert)
+- **Purpose:** Pre-emptive awareness of deterioration
 
-**If EITHER drops below threshold:**
-- Auto-revert to conservative parameters
-- Notify user
-- Preserve edge over speed
+**Tier 2: Automatic Revert (10+ Trades)**
+- **Expectancy threshold:** Must be ≥ $0.50 per trade
+- **Win rate threshold:** Must be ≥ 50%
+- **Action:** AUTO-REVERT to conservative parameters
+- **Purpose:** Preserve edge over speed
 
-### Why 10 Trades?
+### Why Two Tiers?
 
-- Need minimum sample size
-- Too early (5 trades) = noise
-- Too late (20 trades) = all data collected with wrong parameters
-- **10 trades = sweet spot** (50% through, enough data)
+**Early Warning (3-5 trades):**
+- Catches problems early
+- No automatic action (avoids overreacting to noise)
+- Gives heads-up before full revert
+
+**Automatic Revert (10 trades):**
+- Enough data to be statistically meaningful
+- Not too late (still have 10 more trades to go)
+- Auto-corrects without human intervention
 
 ---
 

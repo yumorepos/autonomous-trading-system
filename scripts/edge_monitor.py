@@ -37,12 +37,98 @@ class EdgeMonitor:
         self.stats = get_trade_stats()
         self.repo_root = Path(__file__).parent.parent
     
+    def get_rolling_performance(self, window=5):
+        """Get performance for last N trades (early warning)."""
+        if not Path(TRADE_LOGGER).exists():
+            return None
+        
+        trades = []
+        with Path(TRADE_LOGGER).open("r") as f:
+            for line in f:
+                if line.strip():
+                    trades.append(json.loads(line))
+        
+        closed = [t for t in trades if t.get("exit_timestamp")]
+        
+        if len(closed) < 3:  # Need minimum 3 trades
+            return None
+        
+        # Get last N trades
+        recent = closed[-window:]
+        
+        wins = [t for t in recent if t.get("total_pnl_usd", 0) > 0]
+        losses = [t for t in recent if t.get("total_pnl_usd", 0) <= 0]
+        
+        win_rate = len(wins) / len(recent) if recent else 0
+        
+        total_pnl = sum(t.get("total_pnl_usd", 0) for t in recent)
+        expectancy = total_pnl / len(recent)
+        
+        return {
+            "trades": len(recent),
+            "win_rate": win_rate,
+            "expectancy": expectancy,
+            "wins": len(wins),
+            "losses": len(losses),
+        }
+    
+    def check_early_warning(self):
+        """Check if recent performance shows deterioration (before full revert)."""
+        
+        # Get rolling 5-trade performance
+        rolling = self.get_rolling_performance(window=5)
+        
+        if rolling is None:
+            return None
+        
+        # Early warning thresholds (more lenient than revert)
+        WARNING_EXPECTANCY = 0.30  # $0.30 vs $0.50 for revert
+        WARNING_WIN_RATE = 0.40    # 40% vs 50% for revert
+        
+        warnings = []
+        
+        if rolling['expectancy'] < WARNING_EXPECTANCY:
+            warnings.append(f"Low expectancy in last {rolling['trades']} trades: ${rolling['expectancy']:.2f}")
+        
+        if rolling['win_rate'] < WARNING_WIN_RATE:
+            warnings.append(f"Low win rate in last {rolling['trades']} trades: {rolling['win_rate']*100:.0f}%")
+        
+        if warnings:
+            return {
+                'status': 'WARNING',
+                'rolling': rolling,
+                'warnings': warnings,
+                'action': 'MONITOR',
+                'reason': 'Recent performance below warning threshold',
+            }
+        
+        return {
+            'status': 'HEALTHY',
+            'rolling': rolling,
+            'action': 'CONTINUE',
+        }
+    
     def assess_edge_integrity(self):
         """Check if edge is still valid after velocity changes."""
         
         closed = self.stats['closed']
         expectancy = self.stats['expectancy']
         win_rate = self.stats['win_rate']
+        
+        # Early warning check (3-5 trades)
+        if closed >= 3 and closed < MIN_SAMPLE_SIZE:
+            early_warning = self.check_early_warning()
+            if early_warning and early_warning['status'] == 'WARNING':
+                return early_warning
+            
+            return {
+                'status': 'INSUFFICIENT_DATA',
+                'closed': closed,
+                'needed': MIN_SAMPLE_SIZE,
+                'action': 'HOLD',
+                'reason': f'Need {MIN_SAMPLE_SIZE - closed} more trades to assess edge',
+                'early_check': early_warning,
+            }
         
         if closed < MIN_SAMPLE_SIZE:
             return {
@@ -146,6 +232,32 @@ class EdgeMonitor:
         if assessment['status'] == 'INSUFFICIENT_DATA':
             print(f"Need {assessment['needed'] - assessment['closed']} more trades to assess edge")
             print("Velocity optimizations remain active")
+            
+            # Show early warning if available
+            if 'early_check' in assessment and assessment['early_check']:
+                early = assessment['early_check']
+                if early['status'] == 'HEALTHY':
+                    print()
+                    print("EARLY INDICATOR (Last 5 trades):")
+                    print(f"  ✅ Rolling expectancy: ${early['rolling']['expectancy']:+.2f}")
+                    print(f"  ✅ Rolling win rate: {early['rolling']['win_rate']*100:.0f}%")
+                    print(f"  Status: HEALTHY")
+        
+        elif assessment['status'] == 'WARNING':
+            print("⚠️  EARLY WARNING DETECTED")
+            print()
+            print(f"RECENT PERFORMANCE (Last {assessment['rolling']['trades']} trades):")
+            print(f"  Expectancy: ${assessment['rolling']['expectancy']:+.2f} (warning: <$0.30)")
+            print(f"  Win rate: {assessment['rolling']['win_rate']*100:.0f}% (warning: <40%)")
+            print(f"  Record: {assessment['rolling']['wins']}W / {assessment['rolling']['losses']}L")
+            print()
+            print("WARNINGS:")
+            for w in assessment['warnings']:
+                print(f"  ⚠️  {w}")
+            print()
+            print("ACTION: CONTINUE MONITORING")
+            print("Velocity optimizations remain active")
+            print("Full revert will trigger at 10 trades if trend continues")
         
         elif assessment['status'] == 'EDGE_DEGRADED':
             print("⚠️  EDGE DEGRADATION DETECTED")
