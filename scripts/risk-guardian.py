@@ -94,7 +94,7 @@ class GuardianState:
             self.data["peak_account_value"] = value
             self.save()
 
-    def record_close(self, coin: str, pnl: float) -> None:
+    def record_close(self, coin: str, pnl: float, exit_price: float = 0.0, entry_price: float = 0.0, trigger: str = "UNKNOWN") -> None:
         self.data["total_closes"] += 1
         self.data["recent_executions"].append({
             "coin": coin, "action": "close",
@@ -109,6 +109,36 @@ class GuardianState:
         else:
             self.data["consecutive_losses"] = 0
         self.save()
+        
+        # Log to unified trade ledger
+        try:
+            from trade_logger import TradeLogger
+            logger = TradeLogger()
+            trade_id = f"hl-{coin.lower()}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+            
+            # Create mock trade entry (guardian doesn't have open timestamp)
+            signal = {
+                "asset": coin,
+                "direction": "long",  # Guardian only handles long positions currently
+                "signal_type": "guardian_monitored",
+                "strategy_tag": "funding_arb",
+            }
+            
+            # Log entry (backdated estimate — will fix when we have entry tracker)
+            if entry_price > 0:
+                logger.log_entry(signal, size=0, entry_price=entry_price, trade_id=trade_id)
+            
+            # Log exit
+            if exit_price > 0:
+                logger.log_exit(
+                    trade_id=trade_id,
+                    exit_price=exit_price,
+                    exit_reason=trigger,
+                    pnl_usd=pnl,
+                )
+        except Exception as e:
+            # Don't fail guardian execution if logging fails
+            log_event({"event": "trade_logger_error", "error": str(e), "coin": coin})
 
     def check_circuit_breaker(self, account_value: float) -> tuple[bool, str]:
         """Returns (safe, reason). safe=True means OK to execute."""
@@ -425,7 +455,21 @@ def execute_close(
 
             if filled:
                 result["result"] = "EXECUTED"
-                state.record_close(coin, pos["unrealized_pnl"])
+                
+                # Extract exit price from fill
+                fill_data = statuses[0].get("filled", {}) if statuses else {}
+                exit_price = float(fill_data.get("avgPx", mid or 0))
+                
+                # Determine primary trigger
+                trigger_str = pos.get("triggers", ["UNKNOWN"])[0] if pos.get("triggers") else "UNKNOWN"
+                
+                state.record_close(
+                    coin=coin,
+                    pnl=pos["unrealized_pnl"],
+                    exit_price=exit_price,
+                    entry_price=pos.get("entry_price", 0),
+                    trigger=trigger_str,
+                )
                 break
             elif errored:
                 error_msg = statuses[0].get("error", "unknown") if statuses else "unknown"
