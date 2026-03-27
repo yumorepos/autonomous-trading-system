@@ -14,6 +14,7 @@ Features:
 
 from __future__ import annotations
 
+import random
 import sys
 import time
 from datetime import datetime, timezone
@@ -100,13 +101,35 @@ def execute_exit_idempotent(client, pos: dict, triggers: list[str], state, force
     max_retries = 5 if force else 1
     retry_delay_sec = 1.0
     total_attempts = 0
+    start_time = time.time()
+    max_total_time_sec = 60  # Retry budget: 60 seconds total
     
     while total_attempts < max_retries:
         total_attempts += 1
         
+        # Check retry budget
+        elapsed = time.time() - start_time
+        if elapsed > max_total_time_sec:
+            log_event({
+                "event": "CRITICAL_RETRY_BUDGET_EXHAUSTED",
+                "coin": coin,
+                "elapsed_sec": elapsed,
+                "attempts": total_attempts,
+            })
+            release_exit(coin, trade_id)
+            result["result"] = "RETRY_BUDGET_EXHAUSTED"
+            result["escalated"] = True
+            log_event(result)
+            return result
+        
         # === RE-QUERY EXCHANGE STATE (CRITICAL FOR UNKNOWN-SUCCESS DETECTION) ===
         # Before each retry, check current position state
         # This handles: partial fills, unknown success, concurrent closes
+        
+        # Brief wait to allow exchange state to settle (prevent stale cache)
+        if total_attempts > 1:
+            time.sleep(0.2)
+        
         live_positions = client.get_positions()
         live_pos = next((p for p in live_positions if p["coin"] == coin), None)
         
@@ -179,15 +202,19 @@ def execute_exit_idempotent(client, pos: dict, triggers: list[str], state, force
             record_attempt(coin, trade_id, "error", response)
             
             if total_attempts < max_retries:
+                # Add jitter to prevent thundering herd (AWS best practice)
+                jitter = random.uniform(0, retry_delay_sec * 0.3)  # ±30% jitter
+                actual_delay = retry_delay_sec + jitter
+                
                 log_event({
                     "event": "exit_retry",
                     "coin": coin,
                     "attempt": total_attempts,
                     "error": error_msg,
-                    "retry_in_sec": retry_delay_sec,
+                    "retry_in_sec": actual_delay,
                 })
-                time.sleep(retry_delay_sec)
-                retry_delay_sec *= 2
+                time.sleep(actual_delay)
+                retry_delay_sec = min(retry_delay_sec * 2, 16)  # Cap at 16s
                 continue
             else:
                 # All retries exhausted
@@ -220,8 +247,12 @@ def execute_exit_idempotent(client, pos: dict, triggers: list[str], state, force
             })
             
             if total_attempts < max_retries:
-                time.sleep(retry_delay_sec)
-                retry_delay_sec *= 2
+                # Add jitter for unknown status retries
+                jitter = random.uniform(0, retry_delay_sec * 0.3)
+                actual_delay = retry_delay_sec + jitter
+                
+                time.sleep(actual_delay)
+                retry_delay_sec = min(retry_delay_sec * 2, 16)  # Cap at 16s
                 continue
             else:
                 # Exhausted retries with unknown state

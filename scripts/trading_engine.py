@@ -233,13 +233,23 @@ class HyperliquidClient:
             "positions": positions,
         }
     
+    def get_positions(self) -> list:
+        """Get list of open positions."""
+        state = self.get_state()
+        return state.get("positions", [])
+    
     def market_close(self, coin: str) -> dict:
         """Close position via market order."""
         try:
             response = self.exchange.market_close(coin)
             return {"status": "ok", "response": response}
         except Exception as e:
-            return {"status": "error", "error": str(e)}
+            # Preserve exception type for better error handling
+            return {
+                "status": "error",
+                "error": str(e),
+                "error_type": type(e).__name__,
+            }
     
     def get_mid(self, coin: str) -> float:
         """Get mid price for a coin."""
