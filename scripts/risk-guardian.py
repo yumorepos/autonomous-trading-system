@@ -379,18 +379,21 @@ def execute_close(
 
     # Safety: circuit breaker
     acct = client.get_state()
-    state.update_peak(acct["account_value"])
-    safe, reason = state.check_circuit_breaker(acct["account_value"])
+    total_value = acct["account_value"] + acct.get("spot_usd", 0)
+    state.update_peak(total_value)
+    safe, reason = state.check_circuit_breaker(total_value)
     if not safe:
         result["result"] = "BLOCKED_CIRCUIT_BREAKER"
         result["message"] = reason
         log_event(result)
         return result
 
-    # Safety: slippage
+    # Safety: slippage (skip for STOP_LOSS — must exit at any price)
     mid = client.get_mid(coin)
     result["mid_price"] = mid
-    if mid and pos["entry_price"] > 0:
+    triggers = pos.get("triggers", [])
+    is_stop_loss = any("STOP_LOSS" in t for t in triggers)
+    if not is_stop_loss and mid and pos["entry_price"] > 0:
         slip = abs(mid - pos["entry_price"]) / pos["entry_price"]
         if slip > MAX_SLIPPAGE:
             result["result"] = "BLOCKED_SLIPPAGE"
@@ -601,7 +604,7 @@ def _run_guardian_inner(dry_run: bool, status_only: bool, now: datetime, mode: s
     if status_only:
         for p in positions:
             print(f"  {p['coin']} {p['direction']} {p['size']} | ROE: {p['roe']:+.1%} | PnL: ${p['unrealized_pnl']:+.4f}")
-        safe, reason = state.check_circuit_breaker(acct["account_value"])
+        safe, reason = state.check_circuit_breaker(total_value)
         print(f"  Circuit breaker: {'🟢 ' + reason if safe else '🔴 ' + reason}")
         return {"status": "OK", "positions": len(positions)}
 
