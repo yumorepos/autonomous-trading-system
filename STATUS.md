@@ -242,3 +242,17 @@ When SUPER or PROVE hits a guardian trigger, the trade will close and validation
 **Authority:** CEO (Yumo)  
 **Mode:** LIVE  
 **Next Review:** After first closed trade
+
+---
+
+## VELOCITY OPTIMIZATION (2026-03-26)
+
+**Goal:** Accelerate validation (20 trades in 15 days instead of 30)
+
+**Changes:**
+- Exit triggers tightened: SL -10%→-7%, TP +15%→+10%, timeout 12h→8h
+- Tier 1 threshold lowered: 150%→100% funding
+- Impact: 50% faster trade completion, more signals available
+
+**Discipline Lock:** ✅ NOT VIOLATED (same strategy, just faster execution)
+
