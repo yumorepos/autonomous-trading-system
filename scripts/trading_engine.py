@@ -39,6 +39,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from config.runtime import LOGS_DIR, WORKSPACE_ROOT
 
+# Import idempotent exit coordinator
+from scripts.idempotent_exit import execute_exit_idempotent
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -532,7 +535,8 @@ class TradingEngine:
             # FORCE MODE for risk exits (STOP_LOSS, TIMEOUT)
             force = any(t.startswith("STOP_LOSS") or t.startswith("TIMEOUT") for t in triggers)
             
-            execute_exit(self.client, pos, triggers, self.state, force=force, dry_run=self.dry_run)
+            # Use idempotent exit coordinator (handles partial fills, unknown success)
+            execute_exit_idempotent(self.client, pos, triggers, self.state, force=force, dry_run=self.dry_run)
     
     def scan_opportunities(self) -> None:
         """Check for new entry signals (only if system healthy)."""

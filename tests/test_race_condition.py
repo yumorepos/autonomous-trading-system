@@ -29,19 +29,10 @@ from config.runtime import LOGS_DIR
 def test_coordination_lock_prevents_fallback_interference():
     """Engine signals active exit, fallback skips that position."""
     from scripts.emergency_fallback import emergency_close_all, LOGS_DIR
+    from scripts.exit_ownership import claim_exit
     
-    # Setup: Create active exit lock (engine is retrying)
-    active_exits_file = LOGS_DIR / "active_exits.json"
-    active_exits_file.parent.mkdir(parents=True, exist_ok=True)
-    active_exits_file.write_text(json.dumps({
-        "active_exits": {
-            "ETH": {
-                "start_time": datetime.now(timezone.utc).isoformat(),
-                "max_retries": 5,
-                "reason": "STOP_LOSS: ROE -8.0% <= -7%"
-            }
-        }
-    }, indent=2))
+    # Setup: Engine claims exit ownership
+    claim_exit("ETH", "hl-eth-2026-03-27", "engine", "0.01", "STOP_LOSS: ROE -8.0%")
     
     # Mock client with ETH position
     with patch('scripts.emergency_fallback.HyperliquidClient') as MockClient:
@@ -69,22 +60,37 @@ def test_coordination_lock_prevents_fallback_interference():
         assert not mock_instance.market_close.called, \
             "Fallback should NOT close position when engine is actively exiting"
         
-        assert "Skipped" in output or "engine actively exiting" in output, \
+        assert "Skipped" in output or "owned" in output.lower() or "concurrent" in output.lower(), \
             f"Fallback should report skipping position: {output}"
+    
+    # Cleanup
+    from scripts.exit_ownership import release_exit
+    release_exit("ETH", "hl-eth-2026-03-27")
     
     print("✅ PASS: Coordination lock prevents fallback interference")
 
 def test_fallback_takes_over_after_timeout():
-    """If engine exit is stuck >60 sec, fallback takes over."""
+    """If engine exit is stuck >5 min, fallback takes over."""
     from scripts.emergency_fallback import emergency_close_all, LOGS_DIR
+    from scripts.exit_ownership import claim_exit
     
-    # Setup: Create stale active exit lock (engine stuck for 65 sec)
-    active_exits_file = LOGS_DIR / "active_exits.json"
-    active_exits_file.write_text(json.dumps({
-        "active_exits": {
-            "BTC": {
-                "start_time": (datetime.now(timezone.utc) - timedelta(seconds=65)).isoformat(),
-                "max_retries": 5,
+    # Setup: Engine claimed exit 6 min ago (stuck/stale)
+    # Manually write old ownership
+    from pathlib import Path
+    import json
+    ownership_file = LOGS_DIR / "exit_ownership.json"
+    ownership_file.parent.mkdir(parents=True, exist_ok=True)
+    ownership_file.write_text(json.dumps({
+        "exits": {
+            "BTC-hl-btc-2026-03-27": {
+                "symbol": "BTC",
+                "trade_id": "hl-btc-2026-03-27",
+                "owner": "engine",
+                "state": "retrying",
+                "start_time": (datetime.now(timezone.utc) - timedelta(seconds=360)).isoformat(),  # 6 min ago
+                "attempts": [],
+                "original_size": "0.001",
+                "remaining_size": "0.001",
                 "reason": "STOP_LOSS"
             }
         }
@@ -114,28 +120,32 @@ def test_fallback_takes_over_after_timeout():
         
         # Verify fallback DID close BTC (engine is stuck too long)
         assert mock_instance.market_close.called, \
-            "Fallback should take over if engine exit is stuck >60 sec"
+            "Fallback should take over if engine exit is stuck >5 min"
         
         assert mock_instance.market_close.call_args[0][0] == "BTC", \
             "Fallback should close BTC position"
     
+    # Cleanup
+    from scripts.exit_ownership import release_exit
+    release_exit("BTC", "hl-btc-2026-03-27")
+    
     print("✅ PASS: Fallback takes over after engine timeout")
 
 def test_engine_clears_lock_after_success():
-    """Engine removes active exit lock after successful close."""
-    from scripts.trading_engine import execute_exit, EngineState, HyperliquidClient
-    
-    # Setup: Start with clean lock file
-    active_exits_file = LOGS_DIR / "active_exits.json"
-    active_exits_file.write_text(json.dumps({"active_exits": {}}, indent=2))
+    """Engine releases ownership after successful close."""
+    from scripts.idempotent_exit import execute_exit_idempotent
+    from scripts.trading_engine import EngineState, HyperliquidClient
+    from scripts.exit_ownership import get_exit_state
     
     # Mock client
     client = Mock(spec=HyperliquidClient)
-    client.market_close = Mock(return_value={"status": "ok", "response": {"type": "order", "data": {"statuses": [{"filled": {"totalSz": "1", "avgPx": "2000"}}]}}})
+    client.get_positions = Mock(return_value=[])  # Already flat
     client.get_mid = Mock(return_value=2000.0)
+    client.get_state = Mock(return_value={"account_value": 100})
     
     pos = {
         "coin": "SOL",
+        "szi": "1.0",
         "roe": -0.08,
         "unrealized_pnl": -1.0,
         "entry_price": 100,
@@ -143,36 +153,34 @@ def test_engine_clears_lock_after_success():
     
     triggers = ["STOP_LOSS: ROE -8.0% <= -7%"]
     state = EngineState()
-    state.data["open_positions"]["SOL"] = {"entry_time": datetime.now(timezone.utc).isoformat(), "entry_price": 100}
+    state.data["open_positions"]["SOL"] = {"entry_time": "2026-03-27T12:00:00+00:00", "entry_price": 100}
     
     # Execute force-mode exit
-    result = execute_exit(client, pos, triggers, state, force=True, dry_run=False)
+    result = execute_exit_idempotent(client, pos, triggers, state, force=True, dry_run=False)
     
-    # Verify lock was created during exit
-    # (implicit: execute_exit writes lock at start of retry loop)
-    
-    # Verify lock was cleared after success
-    active_exits = json.loads(active_exits_file.read_text())
-    assert "SOL" not in active_exits.get("active_exits", {}), \
-        "Engine should clear active exit lock after successful close"
+    # Verify ownership was released after success
+    exit_state = get_exit_state("SOL", "hl-sol-2026-03-27")
+    assert exit_state is None, \
+        "Engine should release ownership after successful close"
     
     print("✅ PASS: Engine clears lock after success")
 
 def test_engine_clears_lock_after_escalation():
-    """Engine removes active exit lock even if all retries fail."""
-    from scripts.trading_engine import execute_exit, EngineState, HyperliquidClient
-    
-    # Setup
-    active_exits_file = LOGS_DIR / "active_exits.json"
-    active_exits_file.write_text(json.dumps({"active_exits": {}}, indent=2))
+    """Engine releases ownership even if all retries fail."""
+    from scripts.idempotent_exit import execute_exit_idempotent
+    from scripts.trading_engine import EngineState, HyperliquidClient
+    from scripts.exit_ownership import get_exit_state
     
     # Mock client that always fails
     client = Mock(spec=HyperliquidClient)
+    client.get_positions = Mock(return_value=[{"coin": "AVAX", "szi": "1.0", "roe": -0.09}])  # Position exists
     client.market_close = Mock(return_value={"status": "error", "response": "Network timeout"})
     client.get_mid = Mock(return_value=3000.0)
+    client.get_state = Mock(return_value={"account_value": 100})
     
     pos = {
         "coin": "AVAX",
+        "szi": "1.0",
         "roe": -0.09,
         "unrealized_pnl": -2.0,
         "entry_price": 50,
@@ -180,18 +188,18 @@ def test_engine_clears_lock_after_escalation():
     
     triggers = ["STOP_LOSS"]
     state = EngineState()
-    state.data["open_positions"]["AVAX"] = {"entry_time": datetime.now(timezone.utc).isoformat(), "entry_price": 50}
+    state.data["open_positions"]["AVAX"] = {"entry_time": "2026-03-27T12:00:00+00:00", "entry_price": 50}
     
     # Execute (will fail all retries)
-    result = execute_exit(client, pos, triggers, state, force=True, dry_run=False)
+    result = execute_exit_idempotent(client, pos, triggers, state, force=True, dry_run=False)
     
     # Verify escalated
-    assert result["result"] == "FAILED_ALL_RETRIES"
+    assert result["result"] == "FAILED_ALL_RETRIES" or result["result"] == "UNKNOWN_EXHAUSTED"
     
-    # Verify lock was cleared (so fallback can take over)
-    active_exits = json.loads(active_exits_file.read_text())
-    assert "AVAX" not in active_exits.get("active_exits", {}), \
-        "Engine should clear active exit lock after escalation (so fallback can act)"
+    # Verify ownership was released (so fallback can take over)
+    exit_state = get_exit_state("AVAX", "hl-avax-2026-03-27")
+    assert exit_state is None, \
+        "Engine should release ownership after escalation (so fallback can act)"
     
     print("✅ PASS: Engine clears lock after escalation")
 

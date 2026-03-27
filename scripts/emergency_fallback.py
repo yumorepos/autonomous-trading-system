@@ -48,6 +48,9 @@ trading_engine = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(trading_engine)
 HyperliquidClient = trading_engine.HyperliquidClient
 
+# Import exit ownership manager
+from scripts.exit_ownership import claim_exit, record_attempt, release_exit, list_active_exits
+
 STATE_FILE = LOGS_DIR / "trading_engine_state.json"
 FALLBACK_LOG = LOGS_DIR / "emergency-fallback.jsonl"
 
@@ -98,17 +101,9 @@ def emergency_close_all() -> None:
     
     client = HyperliquidClient()
     
-    # === COORDINATION: Check if engine is actively exiting ===
-    # Respect active exits to prevent race condition
-    active_exits_file = LOGS_DIR / "active_exits.json"
-    active_exits = {}
-    
-    if active_exits_file.exists():
-        try:
-            data = json.loads(active_exits_file.read_text())
-            active_exits = data.get("active_exits", {})
-        except Exception as e:
-            log_fallback_event({"event": "coordination_check_failed", "error": str(e)})
+    # === COORDINATION: Check exit ownership ===
+    # Respect owned exits to prevent race condition
+    owned_exits = list_active_exits()
     
     # Get live positions from exchange
     positions = client.get_positions()
@@ -121,40 +116,55 @@ def emergency_close_all() -> None:
         print("No positions to close")
         return
     
-    # Filter out positions with active exits (engine is handling them)
+    # Filter out positions with active ownership
     positions_to_close = []
     positions_skipped = []
     
     for pos in positions:
         coin = pos["coin"]
-        if coin in active_exits:
-            # Engine is actively retrying this exit, don't interfere
-            exit_start = datetime.fromisoformat(active_exits[coin]["start_time"])
-            if exit_start.tzinfo is None:
-                exit_start = exit_start.replace(tzinfo=timezone.utc)
+        
+        # Check if any owned exit matches this coin
+        owned = next((exit for exit in owned_exits.values() if exit["symbol"] == coin), None)
+        
+        if owned:
+            # Check if ownership is fresh
+            start_time = datetime.fromisoformat(owned["start_time"])
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=timezone.utc)
             
-            age = (datetime.now(timezone.utc) - exit_start).total_seconds()
+            age = (datetime.now(timezone.utc) - start_time).total_seconds()
             
-            # Only skip if exit started recently (<60 sec)
-            # After 60 sec, assume engine is stuck and take over
-            if age < 60:
+            # Only skip if ownership is recent (<5 min)
+            # After 5 min, assume owner is stuck and take over
+            if age < 300:
                 positions_skipped.append({
                     "coin": coin,
-                    "reason": f"Engine actively exiting (started {age:.0f}s ago)",
+                    "owner": owned["owner"],
+                    "reason": f"Owned by {owned['owner']} (started {age:.0f}s ago)",
                 })
                 continue
         
-        positions_to_close.append(pos)
+        # Try to claim ownership before closing
+        trade_id = f"fallback-{coin.lower()}-{datetime.now(timezone.utc).isoformat()[:10]}"
+        
+        if not claim_exit(coin, trade_id, "fallback", pos["szi"], "EMERGENCY_FALLBACK"):
+            positions_skipped.append({
+                "coin": coin,
+                "reason": "Failed to claim ownership (concurrent actor)",
+            })
+            continue
+        
+        positions_to_close.append((pos, trade_id))
     
     if positions_skipped:
         log_fallback_event({
-            "event": "positions_skipped_active_exit",
+            "event": "positions_skipped_ownership",
             "skipped": positions_skipped,
         })
-        print(f"Skipped {len(positions_skipped)} positions (engine actively exiting)")
+        print(f"Skipped {len(positions_skipped)} positions (owned or concurrent)")
     
     if not positions_to_close:
-        print("No positions to close (all handled by engine)")
+        print("No positions to close (all owned or concurrent)")
         return
     
     print("=" * 70)
@@ -168,12 +178,15 @@ def emergency_close_all() -> None:
     
     results = []
     
-    for pos in positions_to_close:
+    for pos, trade_id in positions_to_close:
         coin = pos["coin"]
         print(f"Closing {coin}...")
         
         # Force close (market order, no slippage check)
         response = client.market_close(coin)
+        
+        # Record attempt
+        record_attempt(coin, trade_id, "ok" if response["status"] == "ok" else "error", response)
         
         result = {
             "coin": coin,
@@ -185,8 +198,11 @@ def emergency_close_all() -> None:
         
         if response["status"] == "ok":
             print(f"  ✅ {coin} closed")
+            # Release ownership after success
+            release_exit(coin, trade_id)
         else:
             print(f"  ❌ {coin} FAILED: {response}")
+            # Keep ownership (for retry or manual intervention)
         
         results.append(result)
     
