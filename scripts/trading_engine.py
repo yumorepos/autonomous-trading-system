@@ -359,8 +359,12 @@ def execute_exit(client: HyperliquidClient, pos: dict, triggers: list[str], stat
     if response["status"] == "ok":
         result["result"] = "EXECUTED"
         
-        # Get exit price
+        # Get exit price (fallback to last known if unavailable)
         mid = client.get_mid(coin)
+        if mid == 0.0:
+            # Price unavailable, use entry price as fallback (conservative estimate)
+            mid = pos.get("entry_price", 0)
+            result["price_fallback"] = True
         result["exit_price"] = mid
         
         # Update state
