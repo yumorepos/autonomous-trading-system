@@ -615,7 +615,7 @@ class TradingEngine:
         TIER2_MIN_FUNDING = 0.75
         TIER2_MIN_PREMIUM = -0.005
         TIER2_MIN_VOLUME = 500_000
-        TIER2_POSITION_SIZE = 8.0
+        TIER2_POSITION_SIZE = 12.0  # Increased to meet $10 minimum with $4 capital @ 3x leverage
         
         for u, ctx in zip(resp[0]['universe'], resp[1]):
             asset = u['name']
@@ -712,7 +712,8 @@ class TradingEngine:
         try:
             # Calculate size in coins
             price = signal["price"]
-            leverage = 1  # 1x leverage for funding arb
+            # Use 3x leverage to meet $10 minimum order with low capital
+            leverage = 3 if size_usd < 15 else 1
             size_coins = (size_usd * leverage) / price
             
             # Round to correct decimals per asset (CRITICAL FIX)
