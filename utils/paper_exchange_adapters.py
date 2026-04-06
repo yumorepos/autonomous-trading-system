@@ -133,10 +133,10 @@ class HyperliquidPaperAdapter(PaperExchangeAdapter):
         data = response.json()
         markets = data[1] if isinstance(data, list) and len(data) > 1 else []
         for market in markets:
-            coin = market.get('coin') or market.get('symbol')
+            coin = market.get('coin') or market.get('symbol') or market.get('name')
             if not coin:
                 continue
-            if coin == asset:
+            if str(coin).upper() == str(asset).upper():
                 return float(market.get('dayNtlVlm', 0))
         return None
 

@@ -72,13 +72,7 @@ class EngineState:
     
     def load(self) -> dict:
         """Load state from disk."""
-        if STATE_FILE.exists():
-            try:
-                return json.loads(STATE_FILE.read_text())
-            except Exception:
-                pass
-        
-        return {
+        default = {
             "heartbeat": None,
             "peak_capital": 0.0,
             "consecutive_losses": 0,
@@ -91,6 +85,19 @@ class EngineState:
             "total_pnl": 0.0,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
+        
+        if STATE_FILE.exists():
+            try:
+                loaded = json.loads(STATE_FILE.read_text())
+                # Merge with defaults (backwards compatibility)
+                for key in default:
+                    if key not in loaded:
+                        loaded[key] = default[key]
+                return loaded
+            except Exception:
+                pass
+        
+        return default
     
     def save(self) -> None:
         """Persist state to disk."""
@@ -205,6 +212,7 @@ class HyperliquidClient:
                 "coin": p["coin"],
                 "direction": "long" if szi > 0 else "short",
                 "size": abs(szi),
+                "szi": p.get("szi"),  # Include raw szi for exit coordinator
                 "entry_price": float(p.get("entryPx", 0)),
                 "position_value": float(p.get("positionValue", 0)),
                 "unrealized_pnl": float(p.get("unrealizedPnl", 0)),
@@ -698,6 +706,9 @@ class TradingEngine:
             leverage = 1  # 1x leverage for funding arb
             size_coins = (size_usd * leverage) / price
             
+            # Round to 8 decimals (Hyperliquid szDecimals max, safe for all assets)
+            size_coins = round(size_coins, 8)
+            
             # Execute market order
             response = self.client.exchange.market_open(coin, True, size_coins)  # True = long
             
@@ -925,8 +936,31 @@ def main() -> None:
         status_check()
         return
     
-    engine = TradingEngine(dry_run=args.dry_run)
-    engine.run()
+    # PID lock to prevent concurrent instances
+    pid_file = LOGS_DIR / "trading_engine.pid"
+    if pid_file.exists():
+        try:
+            old_pid = int(pid_file.read_text().strip())
+            # Check if process still running
+            import subprocess
+            result = subprocess.run(["ps", "-p", str(old_pid)], capture_output=True)
+            if result.returncode == 0:
+                print(f"❌ ENGINE ALREADY RUNNING (PID {old_pid})")
+                print("   Stop existing instance before starting new one")
+                sys.exit(1)
+        except Exception:
+            pass
+    
+    # Write PID
+    pid_file.write_text(str(os.getpid()))
+    
+    try:
+        engine = TradingEngine(dry_run=args.dry_run)
+        engine.run()
+    finally:
+        # Clean up PID file
+        if pid_file.exists():
+            pid_file.unlink()
 
 if __name__ == "__main__":
     main()
