@@ -294,23 +294,38 @@ def log_event(event: dict) -> None:
 def log_to_ledger(trade_id: str, action: str, **kwargs) -> None:
     """Log to canonical trade ledger."""
     try:
-        from trade_logger import TradeLogger
-        logger = TradeLogger()
+        ledger_file = Path("workspace/logs/trade-ledger.jsonl")
+        ledger_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        entry_data = {
+            "trade_id": trade_id,
+            "action": action,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
         
         if action == "entry":
-            logger.log_entry(
-                signal=kwargs.get("signal", {}),
-                size=kwargs.get("size", 0),
-                entry_price=kwargs.get("entry_price", 0),
-                trade_id=trade_id,
-            )
+            signal = kwargs.get("signal", {})
+            entry_data.update({
+                "coin": signal.get("asset"),
+                "direction": signal.get("direction"),
+                "entry_price": kwargs.get("entry_price", 0),
+                "size_coins": kwargs.get("size", 0),
+                "position_size_usd": signal.get("position_size_usd", 0),
+                "signal_type": signal.get("signal_type"),
+                "signal_score": signal.get("score"),
+                "tier": signal.get("tier"),
+            })
         elif action == "exit":
-            logger.log_exit(
-                trade_id=trade_id,
-                exit_price=kwargs.get("exit_price", 0),
-                exit_reason=kwargs.get("exit_reason", "UNKNOWN"),
-                # Note: TradeLogger calculates PnL internally
-            )
+            entry_data.update({
+                "exit_price": kwargs.get("exit_price", 0),
+                "exit_reason": kwargs.get("exit_reason", "UNKNOWN"),
+                "pnl_usd": kwargs.get("pnl_usd", 0),
+                "pnl_pct": kwargs.get("pnl_pct", 0),
+            })
+        
+        with open(ledger_file, "a") as f:
+            f.write(json.dumps(entry_data) + "\n")
+            
     except Exception as e:
         log_event({"event": "ledger_error", "error": str(e)})
 
