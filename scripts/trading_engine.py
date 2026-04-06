@@ -483,14 +483,23 @@ def execute_exit(client: HyperliquidClient, pos: dict, triggers: list[str], stat
         # Update state
         state.record_close(coin, pos["unrealized_pnl"])
         
-        # Log to ledger
-        trade_id = f"hl-{coin.lower()}-{state.data['open_positions'].get(coin, {}).get('entry_time', 'unknown')[:10]}"
+        # Log to ledger (use SAME trade_id format as entry)
+        entry_time = state.data['open_positions'].get(coin, {}).get('entry_time', '')
+        if entry_time:
+            # Convert ISO timestamp to compact format: 20260406-213907
+            from datetime import datetime
+            dt = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
+            trade_id = f"hl-{coin.lower()}-{dt.strftime('%Y%m%d-%H%M%S')}"
+        else:
+            trade_id = f"hl-{coin.lower()}-unknown"
+        
         log_to_ledger(
             trade_id=trade_id,
             action="exit",
             exit_price=mid,
             exit_reason=triggers[0] if triggers else "MANUAL",
-            # Note: TradeLogger calculates PnL internally, doesn't accept pnl_usd param
+            pnl_usd=pos.get("unrealized_pnl", 0),
+            pnl_pct=(pos.get("unrealized_pnl", 0) / (pos.get("position_value", 1))) * 100 if pos.get("position_value", 0) > 0 else 0,
         )
     else:
         result["result"] = "FAILED"
