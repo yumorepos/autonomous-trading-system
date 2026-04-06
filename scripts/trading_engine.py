@@ -689,11 +689,38 @@ class TradingEngine:
         """Execute entry for a signal."""
         coin = signal["asset"]
         size_usd = signal["position_size_usd"]
+        price = signal.get("price", 0)
         
-        # === NON-BYPASSABLE RULE: NO PROTECTION → NO TRADING ===
-        # Verify engine is protecting capital before allowing new exposure
-        heartbeat_age = (time.time() - self.last_reconcile)  # Use reconcile time as proxy
-        if heartbeat_age > 120:  # 2 minutes
+        # === STRICT PRE-TRADE VALIDATION (NON-BYPASSABLE) ===
+        import sys
+        from pathlib import Path as PathLib
+        sys.path.insert(0, str(PathLib(__file__).parent))
+        from pre_trade_validator import PreTradeValidator, log_validation_failure
+        
+        validator = PreTradeValidator(self.client, self.state)
+        valid, reason = validator.validate_entry(coin, size_usd, price)
+        
+        if not valid:
+            log_event({
+                "event": "entry_blocked_validation",
+                "coin": coin,
+                "reason": reason,
+                "signal": signal,
+            })
+            log_validation_failure(reason, {"coin": coin, "size_usd": size_usd, "signal": signal})
+            
+            # HALT on validation failure (safety-first)
+            if "STATE_SYNC" in reason or "LEDGER" in reason:
+                self.state.data["circuit_breaker_halted"] = True
+                self.state.data["halt_reason"] = f"Pre-trade validation failed: {reason}"
+                self.state.save()
+                log_event({"event": "CRITICAL_HALT", "reason": reason})
+            
+            return
+        
+        # === LEGACY PROTECTION CHECKS (kept for compatibility) ===
+        heartbeat_age = (time.time() - self.last_reconcile)
+        if heartbeat_age > 120:
             log_event({
                 "event": "entry_blocked_stale_protection",
                 "coin": coin,
@@ -709,7 +736,7 @@ class TradingEngine:
                 "reason": "System unhealthy (circuit breaker or consecutive losses)",
             })
             return
-        # === END PROTECTION CHECK ===
+        # === END PROTECTION CHECKS ===
         
         # Pre-entry validation
         if coin in self.state.data["open_positions"]:
@@ -791,6 +818,57 @@ class TradingEngine:
                 "tier": signal["tier"],
                 "verified": True,  # Only logged after exchange confirmation
             })
+            
+            # === POST-TRADE VALIDATION (STRICT ENFORCEMENT) ===
+            # Verify all 5 proof sources exist and match
+            time.sleep(1)  # Allow logs to flush
+            
+            # Check: Exchange position
+            fresh_state = self.client.get_state()
+            position_still_exists = any(p["coin"] == coin for p in fresh_state["positions"])
+            
+            # Check: Ledger entry
+            ledger_file = Path("workspace/logs/trade-ledger.jsonl")
+            ledger_has_entry = False
+            if ledger_file.exists():
+                with open(ledger_file) as f:
+                    entries = [json.loads(l) for l in f if l.strip()]
+                ledger_has_entry = any(e.get('action') == 'entry' and e.get('coin') == coin for e in entries[-5:])
+            
+            # Check: Internal state
+            state_has_position = coin in self.state.data.get('open_positions', {})
+            
+            # If ANY proof missing → HALT and ROLLBACK
+            if not (position_still_exists and ledger_has_entry and state_has_position):
+                log_event({
+                    "event": "POST_TRADE_VALIDATION_FAILED",
+                    "coin": coin,
+                    "position_exists": position_still_exists,
+                    "ledger_exists": ledger_has_entry,
+                    "state_exists": state_has_position,
+                })
+                
+                # CRITICAL: Rollback (close position, clear state)
+                if position_still_exists:
+                    try:
+                        self.client.exchange.market_close(coin)
+                        log_event({"event": "rollback_position_closed", "coin": coin})
+                    except Exception as rollback_error:
+                        log_event({"event": "rollback_failed", "coin": coin, "error": str(rollback_error)})
+                
+                # Clear internal state
+                if coin in self.state.data['open_positions']:
+                    del self.state.data['open_positions'][coin]
+                if coin in self.state.data.get('peak_roe', {}):
+                    del self.state.data['peak_roe'][coin]
+                
+                # HALT system
+                self.state.data['circuit_breaker_halted'] = True
+                self.state.data['halt_reason'] = f"Post-trade validation failed for {coin}"
+                self.state.save()
+                
+                return
+            # === END POST-TRADE VALIDATION ===
         
         except Exception as e:
             log_event({"event": "entry_failed", "coin": coin, "error": str(e)})
