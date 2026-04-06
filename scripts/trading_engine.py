@@ -195,6 +195,15 @@ class HyperliquidClient:
         wallet = Account.from_key(private_key)
         self.exchange = Exchange(wallet)
         self.address = wallet.address
+        
+        # Fetch and cache asset metadata (szDecimals)
+        self.asset_metadata = {}
+        meta = self.info.meta()
+        for asset in meta.get('universe', []):
+            self.asset_metadata[asset['name']] = {
+                'szDecimals': asset.get('szDecimals', 8),
+                'maxLeverage': asset.get('maxLeverage', 1),
+            }
     
     def get_state(self) -> dict:
         """Get account state (positions + capital)."""
@@ -706,17 +715,36 @@ class TradingEngine:
             leverage = 1  # 1x leverage for funding arb
             size_coins = (size_usd * leverage) / price
             
-            # Round to 8 decimals (Hyperliquid szDecimals max, safe for all assets)
-            size_coins = round(size_coins, 8)
+            # Round to correct decimals per asset (CRITICAL FIX)
+            sz_decimals = self.client.asset_metadata.get(coin, {}).get('szDecimals', 8)
+            size_coins = round(size_coins, sz_decimals)
             
             # Execute market order
             response = self.client.exchange.market_open(coin, True, size_coins)  # True = long
             
+            # CRITICAL: Validate ACTUAL order outcome (not just API success)
             if response.get("status") != "ok":
-                log_event({"event": "entry_rejected", "coin": coin, "response": response})
+                log_event({"event": "entry_rejected", "coin": coin, "reason": "api_failed", "response": response})
                 return
             
-            # Track position
+            # Check for order-level errors (status: "ok" just means API call worked)
+            statuses = response.get("response", {}).get("data", {}).get("statuses", [])
+            if statuses and statuses[0].get("error"):
+                error_msg = statuses[0]["error"]
+                log_event({"event": "order_rejected", "coin": coin, "error": error_msg, "response": response})
+                return
+            
+            # Verify fill actually happened (don't trust logs without exchange confirmation)
+            # Wait 2 seconds for fill, then check user_state
+            time.sleep(2)
+            account = self.client.get_state()
+            position_found = any(p["coin"] == coin for p in account["positions"])
+            
+            if not position_found:
+                log_event({"event": "order_no_fill", "coin": coin, "reason": "position_not_found", "response": response})
+                return
+            
+            # ONLY track position if fill confirmed
             self.state.track_position(coin, price)
             
             # Log to ledger
@@ -730,11 +758,13 @@ class TradingEngine:
             )
             
             log_event({
-                "event": "entry_executed",
+                "event": "order_filled",  # Renamed from "entry_executed" for truth
                 "coin": coin,
                 "price": price,
+                "size_coins": size_coins,
                 "size_usd": size_usd,
                 "tier": signal["tier"],
+                "verified": True,  # Only logged after exchange confirmation
             })
         
         except Exception as e:
