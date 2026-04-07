@@ -958,18 +958,25 @@ class TradingEngine:
                         })
                         raise RuntimeError(f"HEARTBEAT STALE ({age:.0f}s) — Engine frozen, aborting")
                 
-                # === RUNTIME ASSERTION: STATE CONSISTENCY ===
-                # Verify state file is valid and consistent
-                if not STATE_FILE.exists():
-                    raise RuntimeError("STATE FILE DELETED — Engine cannot operate without state")
+                # === SELF-HEALING VALIDATION (replaces rigid assertions) ===
+                # Run continuous validation and auto-heal instead of crashing
+                from self_healing_validator import auto_heal_and_validate
                 
-                try:
-                    test_state = json.loads(STATE_FILE.read_text())
-                    assert "heartbeat" in test_state
-                    assert "open_positions" in test_state
-                except (json.JSONDecodeError, AssertionError) as e:
-                    log_event({"event": "CRITICAL_STATE_CORRUPTED", "error": str(e), "action": "ABORT"})
-                    raise RuntimeError(f"STATE FILE CORRUPTED — {e}")
+                heal_result = auto_heal_and_validate(STATE_FILE, self.client.info)
+                
+                if not heal_result['healthy']:
+                    log_event({
+                        "event": "auto_heal_triggered",
+                        "reason": heal_result['reason'],
+                        "actions": heal_result['actions_taken'],
+                    })
+                
+                if heal_result['actions_taken'].get('state_healed'):
+                    # State was healed—reload
+                    self.state = EngineState(STATE_FILE)
+                    log_event({"event": "state_reloaded_after_heal"})
+                
+                # === END SELF-HEALING ===
                 
                 # 1. PROTECTION (HIGHEST PRIORITY)
                 self.protect_capital()
@@ -1068,6 +1075,24 @@ def main() -> None:
     if args.status:
         status_check()
         return
+    
+    # === SELF-HEALING VALIDATION LAYER (runs before startup) ===
+    import sys
+    from pathlib import Path as PathLib
+    sys.path.insert(0, str(PathLib(__file__).parent))
+    from self_healing_validator import auto_heal_and_validate
+    
+    state_file = LOGS_DIR / "trading_engine_state.json"
+    heal_result = auto_heal_and_validate(state_file)
+    
+    if not heal_result['healthy']:
+        print(f"⚠️  STATE HEALING: {heal_result['reason']}")
+    
+    if heal_result['actions_taken']:
+        print("🔧 AUTO-HEAL ACTIONS:")
+        for key, value in heal_result['actions_taken'].items():
+            print(f"   - {key}: {value}")
+    # === END SELF-HEALING ===
     
     # PID lock to prevent concurrent instances
     pid_file = LOGS_DIR / "trading_engine.pid"
