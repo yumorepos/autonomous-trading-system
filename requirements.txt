@@ -2,3 +2,4 @@ requests>=2.31
 numpy>=1.26
 psutil>=5.9
 hyperliquid-python-sdk>=0.22
+pandas>=2.1
