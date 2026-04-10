@@ -53,6 +53,26 @@ from utils.alerting import (
     alert_engine_event, alert_error,
 )
 
+import logging
+logger = logging.getLogger(__name__)
+
+class _StdoutHandler(logging.StreamHandler):
+    """Handler that always writes to the current sys.stdout (not the one at init time)."""
+    def __init__(self):
+        super().__init__()
+    @property
+    def stream(self):
+        return sys.stdout
+    @stream.setter
+    def stream(self, _):
+        pass
+
+if not logger.handlers:
+    _handler = _StdoutHandler()
+    _handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
+
 # Import idempotent exit coordinator
 from scripts.idempotent_exit import execute_exit_idempotent
 
@@ -559,17 +579,17 @@ class TradingEngine:
         self.last_scan = 0.0
         self.last_reconcile = 0.0
         
-        print("=" * 70)
-        print(f"  TRADING ENGINE {'[DRY RUN]' if dry_run else '[LIVE]'}")
-        print(f"  Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        print("=" * 70)
-        print()
+        logger.info("=" * 70)
+        logger.info(f"  TRADING ENGINE {'[DRY RUN]' if dry_run else '[LIVE]'}")
+        logger.info(f"  Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        logger.info("=" * 70)
+        logger.info("")
         
         log_event({"event": "engine_started", "dry_run": dry_run, "pid": os.getpid()})
     
     def startup_reconciliation(self) -> None:
         """Reconcile state on startup."""
-        print("🔍 RECONCILIATION")
+        logger.info("RECONCILIATION")
         
         account = self.client.get_state()
         live_positions = account["positions"]
@@ -579,7 +599,7 @@ class TradingEngine:
         # Untracked positions
         untracked = live_coins - tracked_coins
         if untracked:
-            print(f"  ⚠️  Untracked: {untracked}")
+            logger.warning(f"  Untracked: {untracked}")
             for coin in untracked:
                 pos = next(p for p in live_positions if p["coin"] == coin)
                 self.state.track_position(coin, pos["entry_price"])
@@ -587,7 +607,7 @@ class TradingEngine:
         # Stale positions
         stale = tracked_coins - live_coins
         if stale:
-            print(f"  🧹 Cleaning stale: {stale}")
+            logger.warning(f"  Cleaning stale: {stale}")
             for coin in stale:
                 del self.state.data["open_positions"][coin]
             self.state.save()
@@ -595,8 +615,8 @@ class TradingEngine:
         # Update peak capital
         self.state.update_peak_capital(account["account_value"])
         
-        print(f"  ✅ Complete: {len(live_positions)} live positions")
-        print()
+        logger.info(f"  Complete: {len(live_positions)} live positions")
+        logger.info("")
     
     def protect_capital(self) -> None:
         """Enforce stop-loss / take-profit (HIGHEST PRIORITY)."""
@@ -993,22 +1013,22 @@ class TradingEngine:
             and "grep" not in line
         ]
         if trading_procs:
-            print("=" * 70)
-            print("❌ STARTUP BLOCKED: LEGACY TRADING SCRIPTS RUNNING")
-            print("=" * 70)
-            print()
+            logger.error("=" * 70)
+            logger.error("STARTUP BLOCKED: LEGACY TRADING SCRIPTS RUNNING")
+            logger.error("=" * 70)
+            logger.error("")
             for proc in trading_procs:
-                print(f"  {proc}")
-            print()
-            print("These scripts must not run. Engine is sole trading authority.")
-            print()
+                logger.error(f"  {proc}")
+            logger.error("")
+            logger.error("These scripts must not run. Engine is sole trading authority.")
+            logger.error("")
             raise RuntimeError("Legacy trading scripts detected. Engine cannot start safely.")
         
         self.startup_reconciliation()
 
         alert_engine_event("Engine started")
-        print("🚀 ENGINE RUNNING")
-        print()
+        logger.info("ENGINE RUNNING")
+        logger.info("")
         
         cycle = 0
         try:
@@ -1069,8 +1089,8 @@ class TradingEngine:
                 time.sleep(sleep_time)
                 
         except KeyboardInterrupt:
-            print()
-            print("🛑 ENGINE SHUTDOWN")
+            logger.info("")
+            logger.info("ENGINE SHUTDOWN")
             log_event({"event": "engine_stopped", "cycles": cycle})
 
 # ---------------------------------------------------------------------------
@@ -1078,66 +1098,66 @@ class TradingEngine:
 # ---------------------------------------------------------------------------
 
 def status_check() -> None:
-    """Quick health check."""
+    """Quick health check.  Uses print() for CLI output (tests capture stdout)."""
     print("=" * 70)
     print("  ENGINE STATUS CHECK")
     print("=" * 70)
     print()
-    
+
     if not STATE_FILE.exists():
-        print("❌ State file not found — engine never started")
-        print("⚠️  CAPITAL PROTECTION: OFFLINE")
+        print("State file not found — engine never started")
+        print("CAPITAL PROTECTION: OFFLINE")
         return
-    
+
     state = EngineState()
-    
+
     # === NON-BYPASSABLE RULE: VERIFY PROTECTION BEFORE CLAIMING OPERATIONAL ===
     protection_active = False
-    
+
     # Heartbeat
     if state.data["heartbeat"]:
         hb_time = datetime.fromisoformat(state.data["heartbeat"])
         if hb_time.tzinfo is None:
             hb_time = hb_time.replace(tzinfo=timezone.utc)
         age_sec = (datetime.now(timezone.utc) - hb_time).total_seconds()
-        hb_status = "✅ FRESH" if age_sec < 5 else "⚠️  STALE"
+        hb_status = "FRESH" if age_sec < 5 else "STALE"
         print(f"Heartbeat: {hb_status} ({age_sec:.1f}s ago)")
-        
+
         protection_active = (age_sec < 5)
     else:
-        print("Heartbeat: ❌ NEVER")
+        print("Heartbeat: NEVER")
         protection_active = False
-    
+
     # Circuit breaker
-    cb_status = "🔴 HALTED" if state.data["circuit_breaker_halted"] else "✅ ACTIVE"
+    cb_status = "HALTED" if state.data["circuit_breaker_halted"] else "ACTIVE"
     print(f"Circuit breaker: {cb_status}")
     if state.data["circuit_breaker_halted"]:
         print(f"  Reason: {state.data['halt_reason']}")
-    
+
     # Positions
     print(f"Open positions: {len(state.data['open_positions'])}")
-    
+
     # Performance
     print(f"Total closes: {state.data['total_closes']}")
     print(f"Total PnL: ${state.data['total_pnl']:.2f}")
     print(f"Consecutive losses: {state.data['consecutive_losses']} / {CIRCUIT_BREAKER_LOSSES}")
     print(f"Peak capital: ${state.data['peak_capital']:.2f}")
-    
+
     print()
-    
+
     # === FINAL VERDICT: NO FALSE CLAIMS ===
     if protection_active:
         if len(state.data["open_positions"]) > 0:
-            print("✅ CAPITAL PROTECTION: ACTIVE (positions protected)")
+            print("CAPITAL PROTECTION: ACTIVE (positions protected)")
         else:
-            print("✅ CAPITAL PROTECTION: ACTIVE (ready for entries)")
+            print("CAPITAL PROTECTION: ACTIVE (ready for entries)")
     else:
-        print("🚨 CAPITAL PROTECTION: OFFLINE (heartbeat stale or missing)")
+        print("CAPITAL PROTECTION: OFFLINE (heartbeat stale or missing)")
         if len(state.data["open_positions"]) > 0:
-            print("⚠️  WARNING: Positions exist without active protection!")
+            print("WARNING: Positions exist without active protection!")
     # === END VERDICT ===
-    
-    print()
+
+    logger.info("")
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Trading Engine")
@@ -1159,12 +1179,12 @@ def main() -> None:
     heal_result = auto_heal_and_validate(state_file)
     
     if not heal_result['healthy']:
-        print(f"⚠️  STATE HEALING: {heal_result['reason']}")
-    
+        logger.warning(f"STATE HEALING: {heal_result['reason']}")
+
     if heal_result['actions_taken']:
-        print("🔧 AUTO-HEAL ACTIONS:")
+        logger.info("AUTO-HEAL ACTIONS:")
         for key, value in heal_result['actions_taken'].items():
-            print(f"   - {key}: {value}")
+            logger.info(f"   - {key}: {value}")
     # === END SELF-HEALING ===
     
     # PID lock to prevent concurrent instances
@@ -1176,8 +1196,8 @@ def main() -> None:
             import subprocess
             result = subprocess.run(["ps", "-p", str(old_pid)], capture_output=True)
             if result.returncode == 0:
-                print(f"❌ ENGINE ALREADY RUNNING (PID {old_pid})")
-                print("   Stop existing instance before starting new one")
+                logger.error(f"ENGINE ALREADY RUNNING (PID {old_pid})")
+                logger.error("   Stop existing instance before starting new one")
                 sys.exit(1)
         except Exception:
             pass
@@ -1194,4 +1214,5 @@ def main() -> None:
             pid_file.unlink()
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     main()

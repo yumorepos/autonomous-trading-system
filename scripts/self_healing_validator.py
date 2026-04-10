@@ -187,11 +187,11 @@ class SelfHealingValidator:
                         age = (datetime.now(timezone.utc) - hb).total_seconds()
                         if age > 300:  # 5 minutes
                             return True
-                    except:
+                    except (ValueError, TypeError):
                         pass
-            
+
             return False
-            
+
         except Exception:
             return False
     
@@ -301,7 +301,7 @@ class CrashProofExecutionGuard:
             
             with open(self.log_file, 'a') as f:
                 f.write(json.dumps(entry) + '\n')
-        except:
+        except Exception:
             pass  # Even logging failure is non-fatal
 
 
