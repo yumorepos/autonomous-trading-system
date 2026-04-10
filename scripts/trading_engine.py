@@ -38,24 +38,23 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import LOGS_DIR, WORKSPACE_ROOT
+from config.risk_params import (
+    LOOP_INTERVAL_SEC, SCAN_INTERVAL_SEC,
+    STOP_LOSS_ROE, TAKE_PROFIT_ROE, TIMEOUT_HOURS,
+    TRAILING_STOP_ACTIVATE, TRAILING_STOP_DISTANCE,
+    MAX_EXPOSURE_PER_TRADE, MAX_CONCURRENT,
+    CIRCUIT_BREAKER_LOSSES, DRAWDOWN_PCT, LEVERAGE,
+    calculate_position_size,
+    TIER1_MIN_FUNDING, TIER1_MIN_PREMIUM, TIER1_MIN_VOLUME,
+    TIER2_MIN_FUNDING, TIER2_MIN_PREMIUM, TIER2_MIN_VOLUME,
+)
+from utils.alerting import (
+    alert_entry, alert_exit, alert_circuit_breaker,
+    alert_engine_event, alert_error,
+)
 
 # Import idempotent exit coordinator
 from scripts.idempotent_exit import execute_exit_idempotent
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-LOOP_INTERVAL_SEC = 1.0          # Main loop interval (1-sec protection checks)
-SCAN_INTERVAL_SEC = 300          # Scanner runs every 5 minutes
-STOP_LOSS_ROE = -0.07            # -7% ROE
-TAKE_PROFIT_ROE = 0.10           # +10% ROE
-TIMEOUT_HOURS = 8                # 8-hour max hold
-TRAILING_STOP_ACTIVATE = 0.02    # Activate at +2% ROE
-TRAILING_STOP_DISTANCE = 0.02    # Trail 2% behind peak
-MAX_EXPOSURE_PER_TRADE = 20.0    # $20 per trade
-CIRCUIT_BREAKER_LOSSES = 3       # Halt after 3 consecutive losses
-DRAWDOWN_PCT = 0.15              # 15% from peak
 
 STATE_FILE = LOGS_DIR / "trading_engine_state.json"
 ENGINE_LOG = LOGS_DIR / "trading_engine.jsonl"
@@ -149,6 +148,7 @@ class EngineState:
         if self.data["consecutive_losses"] >= CIRCUIT_BREAKER_LOSSES:
             self.data["circuit_breaker_halted"] = True
             self.data["halt_reason"] = f"{self.data['consecutive_losses']} consecutive losses"
+            alert_circuit_breaker(self.data["halt_reason"])
         
         # Remove from tracking
         if coin in self.data["open_positions"]:
@@ -493,14 +493,20 @@ def execute_exit(client: HyperliquidClient, pos: dict, triggers: list[str], stat
         else:
             trade_id = f"hl-{coin.lower()}-unknown"
         
+        pnl_usd = pos.get("unrealized_pnl", 0)
+        pnl_pct = (pnl_usd / pos.get("position_value", 1)) * 100 if pos.get("position_value", 0) > 0 else 0
+
         log_to_ledger(
             trade_id=trade_id,
             action="exit",
             exit_price=mid,
             exit_reason=triggers[0] if triggers else "MANUAL",
-            pnl_usd=pos.get("unrealized_pnl", 0),
-            pnl_pct=(pos.get("unrealized_pnl", 0) / (pos.get("position_value", 1))) * 100 if pos.get("position_value", 0) > 0 else 0,
+            pnl_usd=pnl_usd,
+            pnl_pct=pnl_pct,
         )
+
+        # Send exit alert
+        alert_exit(coin, triggers[0] if triggers else "MANUAL", pnl_usd, pnl_pct / 100)
     else:
         result["result"] = "FAILED"
         result["error"] = response.get("error")
@@ -614,58 +620,69 @@ class TradingEngine:
         
         except Exception as e:
             log_event({"event": "scan_error", "error": str(e)})
-        
+            alert_error("scanner", str(e))
+
         self.last_scan = time.time()
     
     def run_scanner(self) -> list[dict]:
-        """Run tiered scanner and return qualifying signals."""
+        """Run tiered scanner and return qualifying signals.
+
+        Uses thresholds from config/risk_params.py and capital-proportional
+        position sizing.  Filters out assets already held.
+        """
         import urllib.request
-        
+
         resp = json.loads(urllib.request.urlopen(
             urllib.request.Request('https://api.hyperliquid.xyz/info',
                 data=json.dumps({'type': 'metaAndAssetCtxs'}).encode(),
                 headers={'Content-Type': 'application/json'}),
             timeout=10
         ).read())
-        
+
+        # Fetch account balance for capital-proportional sizing
+        try:
+            account_balance = self.client.get_state()["account_value"]
+        except Exception:
+            account_balance = 95.0  # fallback
+
+        # Assets we already hold — skip to avoid duplicates
+        held = set(self.state.data["open_positions"].keys())
+
         signals = []
-        
-        # Tiered thresholds
-        TIER1_MIN_FUNDING = 1.00
-        TIER1_MIN_PREMIUM = -0.01
-        TIER1_MIN_VOLUME = 1_000_000
-        TIER1_POSITION_SIZE = 15.0
-        
-        TIER2_MIN_FUNDING = 0.75
-        TIER2_MIN_PREMIUM = -0.005
-        TIER2_MIN_VOLUME = 500_000
-        TIER2_POSITION_SIZE = 12.0  # Increased to meet $10 minimum with $4 capital @ 3x leverage
-        
+
         for u, ctx in zip(resp[0]['universe'], resp[1]):
             asset = u['name']
+
+            if asset in held:
+                continue
+
             premium = float(ctx.get('premium', 0) or 0)
             funding = float(ctx.get('funding', 0) or 0)
             volume = float(ctx.get('dayNtlVlm', 0) or 0)
             mid = float(ctx.get('midPx', 0) or 0)
             funding_annual = abs(funding) * 3 * 365
-            
-            # Skip if funding is positive
+
+            # Skip if funding is positive (we'd pay, not earn)
             if funding >= 0:
                 continue
-            
+
             # Tier 1
-            if funding_annual >= TIER1_MIN_FUNDING and premium < TIER1_MIN_PREMIUM and volume >= TIER1_MIN_VOLUME:
+            if (funding_annual >= TIER1_MIN_FUNDING
+                    and premium < TIER1_MIN_PREMIUM
+                    and volume >= TIER1_MIN_VOLUME):
                 tier = 1
-                position_size = TIER1_POSITION_SIZE
                 score = 7.5
             # Tier 2
-            elif funding_annual >= TIER2_MIN_FUNDING and premium < TIER2_MIN_PREMIUM and volume >= TIER2_MIN_VOLUME:
+            elif (funding_annual >= TIER2_MIN_FUNDING
+                    and premium < TIER2_MIN_PREMIUM
+                    and volume >= TIER2_MIN_VOLUME):
                 tier = 2
-                position_size = TIER2_POSITION_SIZE
                 score = 5.5
             else:
                 continue
-            
+
+            position_size = calculate_position_size(account_balance, tier)
+
             signals.append({
                 "asset": asset,
                 "direction": "long",
@@ -679,10 +696,10 @@ class TradingEngine:
                 "tier": tier,
                 "position_size_usd": position_size,
             })
-        
+
         # Sort by tier, then score
         signals.sort(key=lambda x: (x['tier'], -x['score']))
-        
+
         return signals
     
     def execute_entry(self, signal: dict) -> None:
@@ -743,7 +760,7 @@ class TradingEngine:
             log_event({"event": "entry_skipped", "coin": coin, "reason": "already_open"})
             return
         
-        if len(self.state.data["open_positions"]) >= 5:
+        if len(self.state.data["open_positions"]) >= MAX_CONCURRENT:
             log_event({"event": "entry_skipped", "coin": coin, "reason": "max_positions"})
             return
         
@@ -763,9 +780,7 @@ class TradingEngine:
         try:
             # Calculate size in coins
             price = signal["price"]
-            # Use 3x leverage to meet $10 minimum order with low capital
-            leverage = 3 if size_usd < 15 else 1
-            size_coins = (size_usd * leverage) / price
+            size_coins = (size_usd * LEVERAGE) / price
             
             # Round to correct decimals per asset (CRITICAL FIX)
             sz_decimals = self.client.asset_metadata.get(coin, {}).get('szDecimals', 8)
@@ -810,15 +825,18 @@ class TradingEngine:
             )
             
             log_event({
-                "event": "order_filled",  # Renamed from "entry_executed" for truth
+                "event": "order_filled",
                 "coin": coin,
                 "price": price,
                 "size_coins": size_coins,
                 "size_usd": size_usd,
                 "tier": signal["tier"],
-                "verified": True,  # Only logged after exchange confirmation
+                "verified": True,
             })
-            
+
+            # Send Telegram alert
+            alert_entry(coin, signal.get("direction", "long"), size_usd, signal["tier"], price)
+
             # === POST-TRADE VALIDATION (STRICT ENFORCEMENT) ===
             # Verify all 5 proof sources exist and match
             time.sleep(1)  # Allow logs to flush
@@ -933,7 +951,8 @@ class TradingEngine:
             raise RuntimeError("Legacy trading scripts detected. Engine cannot start safely.")
         
         self.startup_reconciliation()
-        
+
+        alert_engine_event("Engine started")
         print("🚀 ENGINE RUNNING")
         print()
         

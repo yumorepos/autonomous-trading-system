@@ -1,0 +1,11 @@
+.git
+.env
+.claude
+__pycache__
+*.pyc
+workspace/logs/*
+workspace/data/*
+docs/
+memory/
+tests/
+*.md

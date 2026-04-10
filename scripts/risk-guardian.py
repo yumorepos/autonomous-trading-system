@@ -28,23 +28,14 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.runtime import WORKSPACE_ROOT as WORKSPACE, LOGS_DIR
+from config.risk_params import (
+    STOP_LOSS_ROE, TAKE_PROFIT_ROE, TIMEOUT_HOURS,
+    TRAILING_STOP_ACTIVATE, TRAILING_STOP_DISTANCE,
+    DRAWDOWN_PCT, MAX_CONCURRENT, MAX_EXPOSURE_PER_TRADE,
+    MAX_SLIPPAGE, EXECUTION_COOLDOWN_SEC, CIRCUIT_BREAKER_LOSSES,
+)
 
-# ---------------------------------------------------------------------------
-# Risk Parameters
-# ---------------------------------------------------------------------------
-
-STOP_LOSS_ROE = -0.07           # -7% ROE (velocity optimization: faster exits)
-TIMEOUT_HOURS = 8               # 8h max hold (velocity optimization: faster turnover)
-TAKE_PROFIT_ROE = 0.10          # +10% ROE (velocity optimization: faster profit-taking)
-TRAILING_STOP_ACTIVATE = 0.02   # Activate trailing stop at +2% ROE (lock profit early)
-TRAILING_STOP_DISTANCE = 0.02   # Trail 2% behind peak (tight trail captures moves)
-DRAWDOWN_PCT = 0.15             # 15% from peak account value (CANARY_PROTOCOL)
-MAX_CONCURRENT = 5              # Max open positions
-MAX_EXPOSURE_PER_TRADE = 20.0   # $20 per trade (CEO PROFIT MODE)
-MAX_SLIPPAGE = 0.03             # 3% max slippage (CANARY_PROTOCOL)
-EXECUTION_COOLDOWN_SEC = 120    # 2 min between same-coin executions
-CIRCUIT_BREAKER_LOSSES = 3      # Halt after 3 consecutive losses (tightened for small bankroll)
-MAX_RETRIES = 1                 # Retry once on execution failure
+MAX_RETRIES = 1  # Guardian-specific: retry once on execution failure
 
 # ---------------------------------------------------------------------------
 # Files
