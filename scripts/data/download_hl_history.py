@@ -25,18 +25,28 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 API_URL = "https://api.hyperliquid.xyz/info"
-RATE_LIMIT_SEC = 0.1  # 100ms between requests
+RATE_LIMIT_SEC = 0.25  # 250ms between requests to avoid 429s
+MAX_RETRIES = 3
 
 
 def api_post(body: dict) -> dict | list:
-    """POST to Hyperliquid info API."""
-    req = urllib.request.Request(
-        API_URL,
-        data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    resp = urllib.request.urlopen(req, timeout=30)
-    return json.loads(resp.read())
+    """POST to Hyperliquid info API with retry on 429."""
+    for attempt in range(MAX_RETRIES):
+        req = urllib.request.Request(
+            API_URL,
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            resp = urllib.request.urlopen(req, timeout=30)
+            return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < MAX_RETRIES - 1:
+                wait = 2 ** (attempt + 1)
+                time.sleep(wait)
+                continue
+            raise
+    return []
 
 
 def get_top_assets(n: int = 30) -> list[str]:
@@ -136,12 +146,16 @@ def download_candles(
 
         while cursor < now_ms:
             time.sleep(RATE_LIMIT_SEC)
+            chunk_end = min(cursor + 30 * 24 * 3600 * 1000, now_ms)  # 30 day chunks
             try:
                 data = api_post({
                     "type": "candleSnapshot",
-                    "coin": asset,
-                    "interval": "1h",
-                    "startTime": cursor,
+                    "req": {
+                        "coin": asset,
+                        "interval": "1h",
+                        "startTime": cursor,
+                        "endTime": chunk_end,
+                    },
                 })
             except Exception as e:
                 print(f" error: {e}")
