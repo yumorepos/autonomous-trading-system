@@ -10,8 +10,8 @@ from __future__ import annotations
 class CostModel:
     """Hyperliquid fee and slippage model."""
 
-    TAKER_FEE = 0.00050   # 0.05%
-    SLIPPAGE = 0.00050     # 0.05% estimated
+    TAKER_FEE = 0.00035   # 0.035% (Hyperliquid taker fee)
+    SLIPPAGE = 0.00050     # 0.05% estimated for small positions
 
     def entry_cost(self, size_usd: float) -> float:
         """Total cost to open a position (fees + slippage)."""
