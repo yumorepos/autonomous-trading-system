@@ -558,6 +558,9 @@ def main() -> None:
     if args.strategy == "funding_arb":
         from scripts.backtest.strategies.funding_arb import FundingArbStrategy
         strategy_fn = FundingArbStrategy()
+    elif args.strategy == "mean_reversion":
+        from scripts.backtest.strategies.mean_reversion import MeanReversionStrategy
+        strategy_fn = MeanReversionStrategy(market_data=market_data)
     else:
         print(f"Unknown strategy: {args.strategy}")
         sys.exit(1)
