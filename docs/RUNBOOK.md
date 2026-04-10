@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # AUTONOMOUS TRADING SYSTEM — OPERATIONS RUNBOOK
 
 **Purpose:** Standard procedures for starting, stopping, monitoring, and troubleshooting the trading engine.

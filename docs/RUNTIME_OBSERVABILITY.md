@@ -1,3 +1,5 @@
+> **Status: ACCURATE** — verified against current codebase.
+
 # Runtime Observability
 
 ## Goal

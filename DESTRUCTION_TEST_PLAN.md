@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # DESTRUCTION TEST PLAN
 
 **Purpose:** Validate trading engine under failure conditions BEFORE production scaling.

@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # IDEMPOTENT CLOSE COORDINATION
 
 **Final distributed-systems hardening for messy-exit scenarios.**

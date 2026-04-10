@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # CEO SCALING AND MONETIZATION STRATEGY
 
 > **Mission:** Compound $97 → $194 in 30 days while building a public track record that unlocks future monetization.

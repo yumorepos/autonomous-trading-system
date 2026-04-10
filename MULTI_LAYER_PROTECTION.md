@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # MULTI-LAYER CAPITAL PROTECTION
 
 **Philosophy:** Safety cannot depend on a single process or single successful operation.

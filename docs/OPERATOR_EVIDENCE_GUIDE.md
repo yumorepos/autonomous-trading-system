@@ -1,3 +1,5 @@
+> **Status: ACCURATE** — verified against current codebase.
+
 # Operator Evidence Guide
 
 ## What an Operator Can Trust Today

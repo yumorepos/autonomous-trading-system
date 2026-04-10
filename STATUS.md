@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # SYSTEM STATUS
 
 **Mode:** FULL CEO AUTONOMOUS CAPITAL ALLOCATOR  

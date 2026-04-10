@@ -1,3 +1,5 @@
+> **Status: ACCURATE** — verified against current codebase.
+
 # Repository Truthfulness Audit
 
 **Date:** 2026-03-22  

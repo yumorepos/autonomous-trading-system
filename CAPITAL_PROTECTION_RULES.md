@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # NON-BYPASSABLE CAPITAL PROTECTION RULES
 
 **These rules are hard-coded into the trading engine and cannot be bypassed.**

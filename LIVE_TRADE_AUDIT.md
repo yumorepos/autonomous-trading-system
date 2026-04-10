@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # LIVE TRADE AUDIT — Risk Desk Report
 
 **Purpose:** Verify capital protection holds under real market conditions
