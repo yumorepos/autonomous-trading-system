@@ -5,12 +5,13 @@ Enforces execution truth BEFORE order submission, not after.
 """
 
 import json
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 from hyperliquid.info import Info
 from hyperliquid.utils import constants
 
-ENGINE_ADDRESS = "0x8743f51c57e90644a0c141eD99064C4e9efFC01c"
+ENGINE_ADDRESS = os.environ.get("HL_WALLET_ADDRESS", "")
 
 class PreTradeValidator:
     """Validate trade conditions BEFORE execution."""
