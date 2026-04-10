@@ -2,53 +2,48 @@
 """
 TIERED CAPITAL ALLOCATION SCANNER
 Classifies signals by strength and assigns appropriate position size.
+
+All thresholds imported from config/risk_params.py (single source of truth).
 """
 
 import json
+import sys
 import urllib.request
+from pathlib import Path
 
-# TIER 1: High Conviction
-TIER1_MIN_FUNDING = 1.00  # 100% annual (velocity optimization)
-TIER1_MIN_PREMIUM = -0.01  # -1%
-TIER1_MIN_VOLUME = 1_000_000
-TIER1_POSITION_SIZE = 15.0
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-# TIER 2: Medium Conviction
-TIER2_MIN_FUNDING = 0.75  # 75% annual
-TIER2_MIN_PREMIUM = -0.005  # -0.5%
-TIER2_MIN_VOLUME = 500_000
-TIER2_POSITION_SIZE = 8.0
+from config.risk_params import (
+    TIER1_MIN_FUNDING, TIER1_MIN_PREMIUM, TIER1_MIN_VOLUME,
+    TIER2_MIN_FUNDING, TIER2_MIN_PREMIUM, TIER2_MIN_VOLUME,
+    calculate_position_size,
+)
 
-# TIER 3: Reject
-# Anything below Tier 2 thresholds = no trade
 
 def classify_signal(funding_annual, premium, volume):
-    """Classify signal into Tier 1, 2, or 3 and return position size."""
-    
-    # Tier 1: Highest conviction
+    """Classify signal into Tier 1, 2, or 3."""
     if funding_annual >= TIER1_MIN_FUNDING and premium < TIER1_MIN_PREMIUM and volume >= TIER1_MIN_VOLUME:
-        return 1, TIER1_POSITION_SIZE
-    
-    # Tier 2: Medium conviction
+        return 1
     elif funding_annual >= TIER2_MIN_FUNDING and premium < TIER2_MIN_PREMIUM and volume >= TIER2_MIN_VOLUME:
-        return 2, TIER2_POSITION_SIZE
-    
-    # Tier 3: Reject
+        return 2
     else:
-        return 3, 0.0
+        return 3
 
-def scan_tiered():
-    """Scan for signals with tiered classification."""
-    
+
+def scan_tiered(account_balance: float = 95.0):
+    """Scan for signals with tiered classification and capital-proportional sizing."""
+
     resp = json.loads(urllib.request.urlopen(
         urllib.request.Request('https://api.hyperliquid.xyz/info',
             data=json.dumps({'type': 'metaAndAssetCtxs'}).encode(),
             headers={'Content-Type': 'application/json'}),
         timeout=10
     ).read())
-    
+
     signals = []
-    
+
     for u, ctx in zip(resp[0]['universe'], resp[1]):
         asset = u['name']
         premium = float(ctx.get('premium', 0) or 0)
@@ -56,22 +51,20 @@ def scan_tiered():
         volume = float(ctx.get('dayNtlVlm', 0) or 0)
         mid = float(ctx.get('midPx', 0) or 0)
         funding_annual = abs(funding) * 3 * 365
-        
+
         # Skip if funding is positive (we'd pay, not earn)
         if funding >= 0:
             continue
-        
-        # Classify
-        tier, position_size = classify_signal(funding_annual, premium, volume)
-        
+
+        tier = classify_signal(funding_annual, premium, volume)
+
         # Skip Tier 3
         if tier == 3:
             continue
-        
-        # Calculate score (higher = better)
-        # Tier 1 gets base score 7.5, Tier 2 gets 5.5
+
         base_score = 7.5 if tier == 1 else 5.5
-        
+        position_size = calculate_position_size(account_balance, tier)
+
         signals.append({
             "asset": asset,
             "direction": "long",
@@ -83,32 +76,32 @@ def scan_tiered():
             "premium": premium,
             "volume_24h": volume,
             "tier": tier,
-            "position_size_usd": position_size,  # KEY: dynamic sizing
+            "position_size_usd": position_size,
             "composite": {"premium": premium},
         })
-    
+
     # Sort by tier (1 first), then by score
     signals.sort(key=lambda x: (x['tier'], -x['score']))
-    
+
     return signals
 
 if __name__ == "__main__":
     signals = scan_tiered()
-    
+
     tier1 = [s for s in signals if s['tier'] == 1]
     tier2 = [s for s in signals if s['tier'] == 2]
-    
-    print(f"=== TIERED SIGNAL SCAN ===")
+
+    print("=== TIERED SIGNAL SCAN ===")
     print()
-    print(f"Tier 1 (High Conviction — ${TIER1_POSITION_SIZE} each): {len(tier1)}")
+    print(f"Tier 1 (High Conviction): {len(tier1)}")
     for s in tier1:
-        print(f"  {s['asset']:8s} fund={s['annualized_rate']*100:>5.0f}% prem={s['premium']*100:>+5.1f}% vol=${s['volume_24h']/1e6:>4.1f}M")
-    
+        print(f"  {s['asset']:8s} fund={s['annualized_rate']*100:>5.0f}% prem={s['premium']*100:>+5.1f}% vol=${s['volume_24h']/1e6:>4.1f}M  size=${s['position_size_usd']:.2f}")
+
     print()
-    print(f"Tier 2 (Medium Conviction — ${TIER2_POSITION_SIZE} each): {len(tier2)}")
+    print(f"Tier 2 (Medium Conviction): {len(tier2)}")
     for s in tier2:
-        print(f"  {s['asset']:8s} fund={s['annualized_rate']*100:>5.0f}% prem={s['premium']*100:>+5.1f}% vol=${s['volume_24h']/1e6:>4.1f}M")
-    
+        print(f"  {s['asset']:8s} fund={s['annualized_rate']*100:>5.0f}% prem={s['premium']*100:>+5.1f}% vol=${s['volume_24h']/1e6:>4.1f}M  size=${s['position_size_usd']:.2f}")
+
     print()
-    print(f"Total tradeable: {len(signals)}")
-    print(f"Max capital if all entered: Tier1=${len(tier1)*TIER1_POSITION_SIZE:.0f} + Tier2=${len(tier2)*TIER2_POSITION_SIZE:.0f} = ${len(tier1)*TIER1_POSITION_SIZE + len(tier2)*TIER2_POSITION_SIZE:.0f}")
+    total_capital = sum(s['position_size_usd'] for s in signals)
+    print(f"Total tradeable: {len(signals)} (${total_capital:.0f} total)")
