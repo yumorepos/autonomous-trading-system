@@ -14,11 +14,11 @@ from __future__ import annotations
 # Exit Thresholds
 # ---------------------------------------------------------------------------
 
-STOP_LOSS_ROE = -0.13            # -13% ROE (force-mode exit, unblockable)
+STOP_LOSS_ROE = -0.15            # -15% ROE (widened from -13% per backtest optimization)
 TAKE_PROFIT_ROE = 0.13           # +13% ROE
 TRAILING_STOP_ACTIVATE = 0.02    # Activate trailing at +2% ROE
 TRAILING_STOP_DISTANCE = 0.02    # Trail 2% behind peak ROE
-TIMEOUT_HOURS = 8                # Max hold time (hours)
+TIMEOUT_HOURS = 24               # Max hold time (hours) — extended from 8h per backtest optimization
 
 # ---------------------------------------------------------------------------
 # Position Sizing
@@ -42,7 +42,7 @@ TIER1_MIN_FUNDING = 1.00         # 100% annualized
 TIER1_MIN_PREMIUM = -0.01        # -1%
 TIER1_MIN_VOLUME = 1_000_000     # $1M daily volume
 
-TIER2_MIN_FUNDING = 0.65         # 65% annualized (sweep-optimized from 75%)
+TIER2_MIN_FUNDING = 1.00         # 100% annualized (raised from 65% — only trade extreme funding rates)
 TIER2_MIN_PREMIUM = -0.005       # -0.5%
 TIER2_MIN_VOLUME = 500_000       # $500K daily volume
 

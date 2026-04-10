@@ -242,7 +242,27 @@ class HyperliquidClient:
         
         perp_value = float(margin.get("accountValue", 0))
         total_value = perp_value + spot_usd
-        
+
+        # Unified account fallback: if perp side reports $0 but spot has funds,
+        # the capital is likely sitting in spot wallet (not yet transferred to perps).
+        # Use spot balance as the account value so position sizing works correctly.
+        if total_value == 0 and spot_usd == 0:
+            # Both zero — try spot_user_state directly as a last resort
+            try:
+                spot_fallback = self.info.spot_user_state(self.address)
+                for b in spot_fallback.get("balances", []):
+                    if b.get("coin") in ("USDC", "USDT", "USDE"):
+                        total_value += float(b.get("total", 0))
+                if total_value > 0:
+                    spot_usd = total_value
+                    log_event({
+                        "event": "balance_fallback_used",
+                        "source": "spot_user_state",
+                        "amount": total_value,
+                    })
+            except Exception:
+                pass
+
         return {
             "account_value": total_value,
             "spot_usd": spot_usd,
@@ -699,6 +719,40 @@ class TradingEngine:
 
         # Sort by tier, then score
         signals.sort(key=lambda x: (x['tier'], -x['score']))
+
+        # --- Regime indicator ---
+        # Log funding regime status so operator can see active vs idle periods
+        if signals:
+            best = signals[0]
+            log_event({
+                "event": "regime_status",
+                "regime": "HIGH_FUNDING",
+                "signals_found": len(signals),
+                "best_asset": best["asset"],
+                "best_funding_apy": round(best["annualized_rate"] * 100, 1),
+                "best_tier": best["tier"],
+            })
+        else:
+            # Check if any assets had notable (but sub-threshold) funding
+            max_funding_apy = 0.0
+            max_funding_asset = None
+            for u, ctx in zip(resp[0]['universe'], resp[1]):
+                funding = float(ctx.get('funding', 0) or 0)
+                if funding < 0:  # Only negative rates (long opportunities)
+                    apy = abs(funding) * 3 * 365
+                    if apy > max_funding_apy:
+                        max_funding_apy = apy
+                        max_funding_asset = u['name']
+
+            log_event({
+                "event": "regime_status",
+                "regime": "LOW_FUNDING",
+                "signals_found": 0,
+                "message": "no opportunities above threshold",
+                "highest_funding_apy": round(max_funding_apy * 100, 1),
+                "highest_funding_asset": max_funding_asset,
+                "threshold_apy": round(TIER2_MIN_FUNDING * 100, 1),
+            })
 
         return signals
     

@@ -136,6 +136,7 @@ class TestBacktestEngineWithMockStrategy(unittest.TestCase):
             initial_capital=1000.0,
             take_profit_roe=0.10,  # 10%
             stop_loss_roe=-0.07,
+            timeout_hours=8,  # explicit so test doesn't depend on config default
         )
 
         result = engine.run(timestamps, market_data, funding_data, volume_data)
@@ -144,7 +145,7 @@ class TestBacktestEngineWithMockStrategy(unittest.TestCase):
         self.assertEqual(result.wins, 1)
         self.assertEqual(result.losses, 0)
         self.assertGreater(result.net_pnl, 0)
-        # Entry at bar 0 close=100. Default timeout=8h fires at bar 8 (close=108)
+        # Entry at bar 0 close=100. Timeout at 8h fires at bar 8 (close=108)
         # before TP at 10% can be reached. Gross = (108-100)/100 * $100 = $8.
         self.assertAlmostEqual(result.closed_trades[0].gross_pnl, 8.0, places=1)
         self.assertEqual(result.closed_trades[0].exit_reason, "TIMEOUT")
@@ -489,19 +490,18 @@ class TestSignalParityWithLiveScanner(unittest.TestCase):
         self.assertEqual(signal["direction"], "long")
         self.assertEqual(signal["signal_type"], "funding_arbitrage")
 
-    def test_tier2_signal_generated(self):
-        """Tier 2 signal generated for moderate funding."""
+    def test_sub_threshold_no_signal(self):
+        """No signal for funding below the 100% APY threshold."""
         from scripts.backtest.strategies.funding_arb import FundingArbStrategy
-        from config.risk_params import TIER2_MIN_FUNDING, TIER1_MIN_FUNDING
+        from config.risk_params import TIER2_MIN_FUNDING
 
         strategy = FundingArbStrategy()
 
-        # Rate that gives ~75% APY (between T2 min 65% and T1 min 100%)
+        # Rate that gives ~75% APY — below the 100% threshold
         rate_8h = 0.00068  # 0.00068 * 3 * 365 = 0.7446 = ~74.5% APY
         funding_annual = abs(rate_8h) * 3 * 365
 
-        self.assertGreater(funding_annual, TIER2_MIN_FUNDING)
-        self.assertLess(funding_annual, TIER1_MIN_FUNDING)
+        self.assertLess(funding_annual, TIER2_MIN_FUNDING)
 
         state = MarketState(
             timestamp=1_700_000_000_000,
@@ -511,9 +511,7 @@ class TestSignalParityWithLiveScanner(unittest.TestCase):
         )
 
         signal = strategy(state)
-        self.assertIsNotNone(signal)
-        # Positive funding -> shorts earn
-        self.assertEqual(signal["direction"], "short")
+        self.assertIsNone(signal, "75% APY should be below the 100% threshold")
 
     def test_below_threshold_no_signal(self):
         """No signal when funding is below Tier 2 minimum."""
