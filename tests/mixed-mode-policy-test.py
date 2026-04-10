@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import tempfile
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -128,9 +129,13 @@ if __name__ == '__main__':
         trader = load_trader(workspace_root)
         signals_path = logs_dir / 'phase1-signals.jsonl'
         signals_path.parent.mkdir(parents=True, exist_ok=True)
+        # Use fresh timestamps so signals pass the MAX_SIGNAL_AGE_SECONDS check
+        now = datetime.now(timezone.utc)
+        ts0 = (now - timedelta(seconds=30)).isoformat()
+        ts1 = (now - timedelta(seconds=29)).isoformat()
         signals = [
             {
-                'timestamp': '2026-01-01T00:00:00+00:00',
+                'timestamp': ts0,
                 'source': 'Polymarket',
                 'exchange': 'Polymarket',
                 'signal_type': 'polymarket_binary_market',
@@ -150,7 +155,7 @@ if __name__ == '__main__':
                 'experimental': True,
             },
             {
-                'timestamp': '2026-01-01T00:00:01+00:00',
+                'timestamp': ts1,
                 'source': 'Hyperliquid',
                 'exchange': 'Hyperliquid',
                 'signal_type': 'funding_arbitrage',
