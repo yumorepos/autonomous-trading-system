@@ -82,6 +82,9 @@ class BacktestResult:
     max_drawdown_pct: float
     sharpe_ratio: float
     profit_factor: float
+    avg_hold_hours: float = 0.0
+    equity_curve: list[tuple[int, float]] = field(default_factory=list)
+    monthly_breakdown: dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass
@@ -376,6 +379,32 @@ class BacktestEngine:
         gross_losses = abs(sum(t.net_pnl for t in trades if t.net_pnl <= 0))
         profit_factor = gross_wins / gross_losses if gross_losses > 0 else float("inf")
 
+        # Average hold time
+        hold_hours = [
+            (t.exit_time - t.entry_time) / (3600 * 1000)
+            for t in trades
+        ]
+        avg_hold = sum(hold_hours) / len(hold_hours) if hold_hours else 0.0
+
+        # Monthly breakdown
+        monthly: dict[str, dict] = {}
+        for t in trades:
+            from datetime import datetime, timezone
+            month_key = datetime.fromtimestamp(
+                t.entry_time / 1000, tz=timezone.utc
+            ).strftime("%Y-%m")
+            if month_key not in monthly:
+                monthly[month_key] = {
+                    "trades": 0, "wins": 0, "net_pnl": 0.0,
+                    "gross_pnl": 0.0, "fees": 0.0,
+                }
+            monthly[month_key]["trades"] += 1
+            if t.net_pnl > 0:
+                monthly[month_key]["wins"] += 1
+            monthly[month_key]["net_pnl"] += t.net_pnl
+            monthly[month_key]["gross_pnl"] += t.gross_pnl
+            monthly[month_key]["fees"] += t.fees
+
         return BacktestResult(
             closed_trades=trades,
             final_capital=self.capital,
@@ -389,6 +418,9 @@ class BacktestEngine:
             max_drawdown_pct=max_dd,
             sharpe_ratio=sharpe,
             profit_factor=profit_factor,
+            avg_hold_hours=avg_hold,
+            equity_curve=list(self.equity_curve),
+            monthly_breakdown=monthly,
         )
 
     def _max_drawdown(self) -> float:
@@ -435,9 +467,14 @@ class BacktestEngine:
 # Data loading
 # ---------------------------------------------------------------------------
 
-def load_candles(data_dir: Path, days: int | None = None) -> tuple[dict, list[int]]:
+def load_candles(
+    data_dir: Path,
+    days: int | None = None,
+    start_ms: int | None = None,
+    end_ms: int | None = None,
+) -> tuple[dict, list[int]]:
     """
-    Load candle CSVs.
+    Load candle data (parquet preferred, CSV fallback).
 
     Returns:
         market_data: {asset: {timestamp_ms: {open, high, low, close, volume}}}
@@ -448,33 +485,64 @@ def load_candles(data_dir: Path, days: int | None = None) -> tuple[dict, list[in
         print(f"No candle data found at {candle_dir}")
         return {}, []
 
+    # Compute time bounds
+    cutoff_min = start_ms
+    cutoff_max = end_ms
+    if days and not cutoff_min:
+        import time as _time
+        now_ms = int(_time.time() * 1000)
+        cutoff_min = now_ms - (days * 24 * 3600 * 1000)
+
     market_data: dict[str, dict[int, dict]] = {}
     all_timestamps: set[int] = set()
 
-    cutoff_ms = None
-    if days:
-        import time as _time
-        now_ms = int(_time.time() * 1000)
-        cutoff_ms = now_ms - (days * 24 * 3600 * 1000)
+    # Try parquet first, fall back to CSV
+    parquet_files = sorted(candle_dir.glob("*_1h.parquet"))
+    csv_files = sorted(candle_dir.glob("*_1h.csv"))
+    files = parquet_files if parquet_files else csv_files
 
-    for csv_file in sorted(candle_dir.glob("*_1h.csv")):
-        asset = csv_file.stem.replace("_1h", "")
+    for file_path in files:
+        asset = file_path.stem.replace("_1h", "")
         asset_data: dict[int, dict] = {}
 
-        with open(csv_file) as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                ts = int(row["timestamp"])
-                if cutoff_ms and ts < cutoff_ms:
-                    continue
-                asset_data[ts] = {
-                    "open": float(row["open"]),
-                    "high": float(row["high"]),
-                    "low": float(row["low"]),
-                    "close": float(row["close"]),
-                    "volume": float(row["volume"]),
-                }
-                all_timestamps.add(ts)
+        if file_path.suffix == ".parquet":
+            try:
+                import pyarrow.parquet as pq
+                table = pq.read_table(file_path)
+                d = table.to_pydict()
+                for i in range(len(d["timestamp"])):
+                    ts = d["timestamp"][i]
+                    if cutoff_min and ts < cutoff_min:
+                        continue
+                    if cutoff_max and ts > cutoff_max:
+                        continue
+                    asset_data[ts] = {
+                        "open": d["open"][i],
+                        "high": d["high"][i],
+                        "low": d["low"][i],
+                        "close": d["close"][i],
+                        "volume": d["volume"][i],
+                    }
+                    all_timestamps.add(ts)
+            except Exception:
+                continue
+        else:
+            with open(file_path) as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    ts = int(row["timestamp"])
+                    if cutoff_min and ts < cutoff_min:
+                        continue
+                    if cutoff_max and ts > cutoff_max:
+                        continue
+                    asset_data[ts] = {
+                        "open": float(row["open"]),
+                        "high": float(row["high"]),
+                        "low": float(row["low"]),
+                        "close": float(row["close"]),
+                        "volume": float(row["volume"]),
+                    }
+                    all_timestamps.add(ts)
 
         if asset_data:
             market_data[asset] = asset_data
@@ -483,37 +551,66 @@ def load_candles(data_dir: Path, days: int | None = None) -> tuple[dict, list[in
     return market_data, timestamps
 
 
-def load_funding(data_dir: Path, days: int | None = None) -> dict[str, dict[int, float]]:
+def load_funding(
+    data_dir: Path,
+    days: int | None = None,
+    start_ms: int | None = None,
+    end_ms: int | None = None,
+) -> dict[str, dict[int, float]]:
     """
-    Load funding rate CSV.
+    Load funding rates (parquet preferred, CSV fallback).
 
     Returns:
         {asset: {timestamp_ms: funding_rate_8h}}
     """
-    funding_file = data_dir / "funding_rates.csv"
-    if not funding_file.exists():
-        print(f"No funding data found at {funding_file}")
-        return {}
+    parquet_file = data_dir / "funding_rates.parquet"
+    csv_file = data_dir / "funding_rates.csv"
 
-    cutoff_ms = None
-    if days:
+    cutoff_min = start_ms
+    cutoff_max = end_ms
+    if days and not cutoff_min:
         import time as _time
         now_ms = int(_time.time() * 1000)
-        cutoff_ms = now_ms - (days * 24 * 3600 * 1000)
+        cutoff_min = now_ms - (days * 24 * 3600 * 1000)
 
     funding_data: dict[str, dict[int, float]] = {}
 
-    with open(funding_file) as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            ts = int(row["timestamp"])
-            if cutoff_ms and ts < cutoff_ms:
-                continue
-            asset = row["asset"]
-            rate = float(row["funding_rate_8h"])
-            if asset not in funding_data:
-                funding_data[asset] = {}
-            funding_data[asset][ts] = rate
+    if parquet_file.exists():
+        try:
+            import pyarrow.parquet as pq
+            table = pq.read_table(parquet_file)
+            d = table.to_pydict()
+            for i in range(len(d["timestamp"])):
+                ts = d["timestamp"][i]
+                if cutoff_min and ts < cutoff_min:
+                    continue
+                if cutoff_max and ts > cutoff_max:
+                    continue
+                asset = d["asset"][i]
+                rate = d["funding_rate_8h"][i]
+                if asset not in funding_data:
+                    funding_data[asset] = {}
+                funding_data[asset][ts] = rate
+            return funding_data
+        except Exception:
+            pass
+
+    if csv_file.exists():
+        with open(csv_file) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                ts = int(row["timestamp"])
+                if cutoff_min and ts < cutoff_min:
+                    continue
+                if cutoff_max and ts > cutoff_max:
+                    continue
+                asset = row["asset"]
+                rate = float(row["funding_rate_8h"])
+                if asset not in funding_data:
+                    funding_data[asset] = {}
+                funding_data[asset][ts] = rate
+    else:
+        print(f"No funding data found at {data_dir}")
 
     return funding_data
 
@@ -534,22 +631,56 @@ def estimate_volumes(market_data: dict[str, dict[int, dict]]) -> dict[str, float
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+def _parse_date_to_ms(date_str: str) -> int:
+    """Parse YYYY-MM-DD to epoch ms."""
+    from datetime import datetime, timezone
+    dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    return int(dt.timestamp() * 1000)
+
+
+def export_equity_csv(result: BacktestResult, out_path: Path) -> None:
+    """Write equity curve to CSV."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["timestamp", "capital"])
+        for ts, cap in result.equity_curve:
+            writer.writerow([ts, f"{cap:.4f}"])
+    print(f"Equity curve: {out_path} ({len(result.equity_curve)} points)")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run backtest")
     parser.add_argument("--strategy", default="funding_arb", help="Strategy name")
     parser.add_argument("--days", type=int, default=90, help="Days to backtest")
-    parser.add_argument("--capital", type=float, default=BACKTEST_INITIAL_CAPITAL)
+    parser.add_argument("--start-date", type=str, default=None, help="Start date YYYY-MM-DD")
+    parser.add_argument("--end-date", type=str, default=None, help="End date YYYY-MM-DD")
+    parser.add_argument("--initial-capital", type=float, default=95.0, help="Initial capital (default: $95)")
+    # Keep --capital as alias for backwards compat
+    parser.add_argument("--capital", type=float, default=None, help=argparse.SUPPRESS)
     args = parser.parse_args()
+
+    capital = args.capital if args.capital is not None else args.initial_capital
 
     data_dir = REPO_ROOT / "data" / "historical"
 
+    # Parse date bounds
+    start_ms = _parse_date_to_ms(args.start_date) if args.start_date else None
+    end_ms = _parse_date_to_ms(args.end_date) if args.end_date else None
+
     print(f"Loading data from {data_dir}...")
-    market_data, timestamps = load_candles(data_dir, args.days)
-    funding_data = load_funding(data_dir, args.days)
+    market_data, timestamps = load_candles(
+        data_dir, days=args.days if not start_ms else None,
+        start_ms=start_ms, end_ms=end_ms,
+    )
+    funding_data = load_funding(
+        data_dir, days=args.days if not start_ms else None,
+        start_ms=start_ms, end_ms=end_ms,
+    )
     volume_data = estimate_volumes(market_data)
 
     if not timestamps:
-        print("No data found. Run scripts/data/download_hl_history.py first.")
+        print("No data found. Run scripts/backtest/download_history.py first.")
         sys.exit(1)
 
     print(f"Loaded {len(market_data)} assets, {len(timestamps)} hourly bars")
@@ -557,7 +688,7 @@ def main() -> None:
     # Load strategy
     if args.strategy == "funding_arb":
         from scripts.backtest.strategies.funding_arb import FundingArbStrategy
-        strategy_fn = FundingArbStrategy()
+        strategy_fn = FundingArbStrategy(capital=capital)
     elif args.strategy == "mean_reversion":
         from scripts.backtest.strategies.mean_reversion import MeanReversionStrategy
         strategy_fn = MeanReversionStrategy(market_data=market_data)
@@ -567,11 +698,15 @@ def main() -> None:
 
     engine = BacktestEngine(
         strategy=strategy_fn,
-        initial_capital=args.capital,
+        initial_capital=capital,
     )
 
-    print(f"Running backtest ({args.days} days, ${args.capital:.0f} capital)...")
+    print(f"Running backtest ({args.days} days, ${capital:.0f} capital)...")
     result = engine.run(timestamps, market_data, funding_data, volume_data)
+
+    # Export equity curve CSV
+    artifacts_dir = REPO_ROOT / "artifacts"
+    export_equity_csv(result, artifacts_dir / "equity_curve.csv")
 
     print(f"\n{'='*50}")
     print(f"BACKTEST RESULTS — {args.strategy}")
@@ -585,7 +720,19 @@ def main() -> None:
     print(f"Max drawdown:    {result.max_drawdown_pct:.2%}")
     print(f"Sharpe ratio:    {result.sharpe_ratio:.2f}")
     print(f"Profit factor:   {result.profit_factor:.2f}")
+    print(f"Avg hold time:   {result.avg_hold_hours:.1f}h")
     print(f"Final capital:   ${result.final_capital:.2f}")
+
+    # Monthly breakdown
+    if result.monthly_breakdown:
+        print(f"\n{'='*50}")
+        print(f"MONTHLY BREAKDOWN")
+        print(f"{'='*50}")
+        print(f"{'Month':<10} {'Trades':>7} {'Wins':>5} {'Net PnL':>10} {'Win Rate':>9}")
+        for month in sorted(result.monthly_breakdown):
+            m = result.monthly_breakdown[month]
+            wr = m["wins"] / m["trades"] if m["trades"] > 0 else 0
+            print(f"{month:<10} {m['trades']:>7} {m['wins']:>5} ${m['net_pnl']:>9.2f} {wr:>8.1%}")
 
 
 if __name__ == "__main__":
