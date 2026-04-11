@@ -48,9 +48,16 @@ from config.risk_params import (
     TIER1_MIN_FUNDING, TIER1_MIN_PREMIUM, TIER1_MIN_VOLUME,
     TIER2_MIN_FUNDING, TIER2_MIN_PREMIUM, TIER2_MIN_VOLUME,
 )
+from config.regime_thresholds import get_regime_thresholds, DEFAULT_REGIME
+from scripts.regime_detector import (
+    detect_regime_from_api_response,
+    save_regime_state,
+    get_active_regime,
+    get_active_thresholds,
+)
 from utils.alerting import (
     alert_entry, alert_exit, alert_circuit_breaker,
-    alert_engine_event, alert_error,
+    alert_engine_event, alert_error, send_alert,
 )
 
 import logging
@@ -665,12 +672,15 @@ class TradingEngine:
         self.last_scan = time.time()
     
     def run_scanner(self) -> list[dict]:
-        """Run tiered scanner and return qualifying signals.
+        """Run tiered scanner with regime-aware thresholds.
 
-        Uses thresholds from config/risk_params.py and capital-proportional
-        position sizing.  Filters out assets already held.
+        1. Fetches metaAndAssetCtxs from Hyperliquid API (single call)
+        2. Runs regime detector on the same data (no extra API call)
+        3. Uses regime thresholds for signal classification
+        4. Logs regime changes and sends Telegram alerts
         """
         import urllib.request
+        from scripts.tiered_scanner import classify_signal
 
         resp = json.loads(urllib.request.urlopen(
             urllib.request.Request('https://api.hyperliquid.xyz/info',
@@ -679,14 +689,43 @@ class TradingEngine:
             timeout=10
         ).read())
 
-        # Fetch account balance for capital-proportional sizing
+        # --- Regime detection (reuses same API response) ---
+        previous_regime = get_active_regime()
+        regime_result = detect_regime_from_api_response(resp)
+        regime_state = save_regime_state(regime_result)
+        current_regime = regime_result["regime"]
+        thresholds = regime_result["thresholds"]
+
+        # Log regime change + Telegram alert
+        if current_regime != previous_regime:
+            top_asset = regime_result["top_assets"][0] if regime_result["top_assets"] else None
+            top_info = f" | Max funding: {regime_result['max_funding_apy'] * 100:.0f}% APY"
+            if top_asset:
+                top_info += f" ({top_asset['asset']})"
+
+            log_event({
+                "event": "regime_updated",
+                "previous_regime": previous_regime,
+                "new_regime": current_regime,
+                "max_funding_apy": regime_result["max_funding_apy"],
+                "pct_above_100": regime_result["pct_above_100"],
+                "thresholds": thresholds,
+            })
+            send_alert(
+                f"REGIME CHANGE: {previous_regime} → {current_regime}{top_info}",
+                "WARN" if current_regime in ("LOW_FUNDING", "MODERATE") else "INFO",
+            )
+
+        # --- Scanner with regime thresholds ---
         try:
             account_balance = self.client.get_state()["account_value"]
         except Exception:
             account_balance = 95.0  # fallback
 
-        # Assets we already hold — skip to avoid duplicates
         held = set(self.state.data["open_positions"].keys())
+
+        t1_funding = thresholds["tier1_min_funding"]
+        t2_funding = thresholds["tier2_min_funding"]
 
         signals = []
 
@@ -702,25 +741,17 @@ class TradingEngine:
             mid = float(ctx.get('midPx', 0) or 0)
             funding_annual = abs(funding) * 3 * 365
 
-            # Skip if funding is positive (we'd pay, not earn)
             if funding >= 0:
                 continue
 
-            # Tier 1
-            if (funding_annual >= TIER1_MIN_FUNDING
-                    and premium < TIER1_MIN_PREMIUM
-                    and volume >= TIER1_MIN_VOLUME):
-                tier = 1
-                score = 7.5
-            # Tier 2
-            elif (funding_annual >= TIER2_MIN_FUNDING
-                    and premium < TIER2_MIN_PREMIUM
-                    and volume >= TIER2_MIN_VOLUME):
-                tier = 2
-                score = 5.5
-            else:
+            tier = classify_signal(funding_annual, premium, volume,
+                                   tier1_min_funding=t1_funding,
+                                   tier2_min_funding=t2_funding)
+
+            if tier == 3:
                 continue
 
+            score = 7.5 if tier == 1 else 5.5
             position_size = calculate_position_size(account_balance, tier)
 
             signals.append({
@@ -737,41 +768,29 @@ class TradingEngine:
                 "position_size_usd": position_size,
             })
 
-        # Sort by tier, then score
         signals.sort(key=lambda x: (x['tier'], -x['score']))
 
-        # --- Regime indicator ---
-        # Log funding regime status so operator can see active vs idle periods
+        # --- Regime status log ---
         if signals:
             best = signals[0]
             log_event({
                 "event": "regime_status",
-                "regime": "HIGH_FUNDING",
+                "regime": current_regime,
                 "signals_found": len(signals),
                 "best_asset": best["asset"],
                 "best_funding_apy": round(best["annualized_rate"] * 100, 1),
                 "best_tier": best["tier"],
+                "thresholds": thresholds,
             })
         else:
-            # Check if any assets had notable (but sub-threshold) funding
-            max_funding_apy = 0.0
-            max_funding_asset = None
-            for u, ctx in zip(resp[0]['universe'], resp[1]):
-                funding = float(ctx.get('funding', 0) or 0)
-                if funding < 0:  # Only negative rates (long opportunities)
-                    apy = abs(funding) * 3 * 365
-                    if apy > max_funding_apy:
-                        max_funding_apy = apy
-                        max_funding_asset = u['name']
-
             log_event({
                 "event": "regime_status",
-                "regime": "LOW_FUNDING",
+                "regime": current_regime,
                 "signals_found": 0,
                 "message": "no opportunities above threshold",
-                "highest_funding_apy": round(max_funding_apy * 100, 1),
-                "highest_funding_asset": max_funding_asset,
-                "threshold_apy": round(TIER2_MIN_FUNDING * 100, 1),
+                "max_funding_apy": round(regime_result["max_funding_apy"] * 100, 1),
+                "top_asset": regime_result["top_assets"][0]["asset"] if regime_result["top_assets"] else None,
+                "thresholds": thresholds,
             })
 
         return signals
@@ -1188,20 +1207,23 @@ def main() -> None:
     # === END SELF-HEALING ===
     
     # PID lock to prevent concurrent instances
+    # In Docker, skip check — container restart reuses PIDs and Docker
+    # already ensures single instance via docker-compose.
     pid_file = LOGS_DIR / "trading_engine.pid"
-    if pid_file.exists():
+    in_docker = Path("/.dockerenv").exists()
+    if pid_file.exists() and not in_docker:
         try:
             old_pid = int(pid_file.read_text().strip())
-            # Check if process still running
-            import subprocess
-            result = subprocess.run(["ps", "-p", str(old_pid)], capture_output=True)
-            if result.returncode == 0:
-                logger.error(f"ENGINE ALREADY RUNNING (PID {old_pid})")
-                logger.error("   Stop existing instance before starting new one")
-                sys.exit(1)
+            if old_pid != os.getpid():
+                import subprocess
+                result = subprocess.run(["ps", "-p", str(old_pid)], capture_output=True)
+                if result.returncode == 0:
+                    logger.error(f"ENGINE ALREADY RUNNING (PID {old_pid})")
+                    logger.error("   Stop existing instance before starting new one")
+                    sys.exit(1)
         except Exception:
             pass
-    
+
     # Write PID
     pid_file.write_text(str(os.getpid()))
     

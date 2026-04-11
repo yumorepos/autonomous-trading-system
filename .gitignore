@@ -15,12 +15,16 @@ __pycache__/
 workspace/logs/
 logs/
 *.state.json
+workspace/regime_state.json
 circuit-breaker-state.json
 risk-guardian-state.json
 hl-entry-state.json
 
 # === Data ===
 data/historical/
+
+# === Claude Code artifacts ===
+.claude/worktrees/
 
 # === IDE / OS ===
 .DS_Store
@@ -31,3 +35,4 @@ dist/
 build/
 .venv/
 venv/
+data/historical/

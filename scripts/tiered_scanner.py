@@ -4,6 +4,7 @@ TIERED CAPITAL ALLOCATION SCANNER
 Classifies signals by strength and assigns appropriate position size.
 
 All thresholds imported from config/risk_params.py (single source of truth).
+Supports dynamic thresholds from regime detector (overrides static defaults).
 """
 
 import json
@@ -22,18 +23,42 @@ from config.risk_params import (
 )
 
 
-def classify_signal(funding_annual, premium, volume):
-    """Classify signal into Tier 1, 2, or 3."""
-    if funding_annual >= TIER1_MIN_FUNDING and premium < TIER1_MIN_PREMIUM and volume >= TIER1_MIN_VOLUME:
+def classify_signal(funding_annual, premium, volume,
+                    tier1_min_funding=None, tier2_min_funding=None):
+    """Classify signal into Tier 1, 2, or 3.
+
+    Args:
+        funding_annual: annualized funding rate (decimal, e.g. 1.0 = 100%)
+        premium: premium as decimal (e.g. -0.01 = -1%)
+        volume: 24h volume in USD
+        tier1_min_funding: override for Tier 1 funding threshold (from regime)
+        tier2_min_funding: override for Tier 2 funding threshold (from regime)
+    """
+    t1_funding = tier1_min_funding if tier1_min_funding is not None else TIER1_MIN_FUNDING
+    t2_funding = tier2_min_funding if tier2_min_funding is not None else TIER2_MIN_FUNDING
+
+    if funding_annual >= t1_funding and premium < TIER1_MIN_PREMIUM and volume >= TIER1_MIN_VOLUME:
         return 1
-    elif funding_annual >= TIER2_MIN_FUNDING and premium < TIER2_MIN_PREMIUM and volume >= TIER2_MIN_VOLUME:
+    elif funding_annual >= t2_funding and premium < TIER2_MIN_PREMIUM and volume >= TIER2_MIN_VOLUME:
         return 2
     else:
         return 3
 
 
-def scan_tiered(account_balance: float = 95.0):
-    """Scan for signals with tiered classification and capital-proportional sizing."""
+def scan_tiered(account_balance: float = 95.0, regime_thresholds: dict | None = None):
+    """Scan for signals with tiered classification and capital-proportional sizing.
+
+    Args:
+        account_balance: current account balance in USD
+        regime_thresholds: optional dict with keys 'tier1_min_funding',
+                          'tier2_min_funding', 'max_concurrent' from regime detector.
+                          If None, uses static defaults from risk_params.
+    """
+    t1_funding = None
+    t2_funding = None
+    if regime_thresholds:
+        t1_funding = regime_thresholds.get("tier1_min_funding")
+        t2_funding = regime_thresholds.get("tier2_min_funding")
 
     resp = json.loads(urllib.request.urlopen(
         urllib.request.Request('https://api.hyperliquid.xyz/info',
@@ -56,7 +81,9 @@ def scan_tiered(account_balance: float = 95.0):
         if funding >= 0:
             continue
 
-        tier = classify_signal(funding_annual, premium, volume)
+        tier = classify_signal(funding_annual, premium, volume,
+                               tier1_min_funding=t1_funding,
+                               tier2_min_funding=t2_funding)
 
         # Skip Tier 3
         if tier == 3:
@@ -86,7 +113,10 @@ def scan_tiered(account_balance: float = 95.0):
     return signals
 
 if __name__ == "__main__":
-    signals = scan_tiered()
+    # When run standalone, use regime-aware thresholds if available
+    from scripts.regime_detector import get_active_thresholds
+    thresholds = get_active_thresholds()
+    signals = scan_tiered(regime_thresholds=thresholds)
 
     tier1 = [s for s in signals if s['tier'] == 1]
     tier2 = [s for s in signals if s['tier'] == 2]
