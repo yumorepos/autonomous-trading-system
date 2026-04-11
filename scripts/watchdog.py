@@ -25,7 +25,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import logging
+
 from config.runtime import LOGS_DIR, WORKSPACE_ROOT
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
 
 WATCHDOG_LOG = LOGS_DIR / "watchdog.jsonl"
 GUARDIAN_STATE = LOGS_DIR / "risk-guardian-state.json"
@@ -163,11 +172,11 @@ def watchdog_cycle() -> None:
     })
 
 def main() -> None:
-    print("=" * 60)
-    print("  SYSTEM WATCHDOG — Continuous Protection")
-    print("  30-second cycle, ZERO TOLERANCE for unprotected capital")
-    print("=" * 60)
-    print()
+    logger.info("=" * 60)
+    logger.info("  SYSTEM WATCHDOG — Continuous Protection")
+    logger.info("  30-second cycle, ZERO TOLERANCE for unprotected capital")
+    logger.info("=" * 60)
+    logger.info("")
     
     log({"event": "watchdog_started", "pid": os.getpid()})
     
@@ -179,12 +188,13 @@ def main() -> None:
             time.sleep(30)
         except KeyboardInterrupt:
             log({"event": "watchdog_stopped", "cycles": cycle_count})
-            print(f"\nWatchdog stopped after {cycle_count} cycles.")
+            logger.info(f"Watchdog stopped after {cycle_count} cycles.")
             break
         except Exception as e:
             log({"event": "watchdog_error", "error": str(e), "cycles": cycle_count})
-            print(f"ERROR: {e}")
+            logger.error(f"ERROR: {e}")
             time.sleep(30)
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     main()

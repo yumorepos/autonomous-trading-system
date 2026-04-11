@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # EXPANSION ROADMAP — Multi-Venue Trading System
 
 **Created:** 2026-04-06  

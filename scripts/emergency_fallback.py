@@ -38,7 +38,28 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import logging
+
 from config.runtime import LOGS_DIR
+
+logger = logging.getLogger(__name__)
+
+class _StdoutHandler(logging.StreamHandler):
+    """Handler that always writes to the current sys.stdout (not the one at init time)."""
+    def __init__(self):
+        super().__init__()
+    @property
+    def stream(self):
+        return sys.stdout
+    @stream.setter
+    def stream(self, _):
+        pass
+
+if not logger.handlers:
+    _handler = _StdoutHandler()
+    _handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
 
 # Import HyperliquidClient from trading_engine
 # (emergency fallback must be independent but can share client code)
@@ -113,7 +134,7 @@ def emergency_close_all() -> None:
             "event": "emergency_no_positions",
             "action": "none_needed",
         })
-        print("No positions to close")
+        logger.info("No positions to close")
         return
     
     # Filter out positions with active ownership
@@ -161,26 +182,26 @@ def emergency_close_all() -> None:
             "event": "positions_skipped_ownership",
             "skipped": positions_skipped,
         })
-        print(f"Skipped {len(positions_skipped)} positions (owned or concurrent)")
+        logger.warning(f"Skipped {len(positions_skipped)} positions (owned or concurrent)")
     
     if not positions_to_close:
-        print("No positions to close (all owned or concurrent)")
+        logger.info("No positions to close (all owned or concurrent)")
         return
     
-    print("=" * 70)
-    print("🚨 EMERGENCY FALLBACK ACTIVATED")
-    print("=" * 70)
-    print()
-    print(f"Closing {len(positions_to_close)} positions...")
+    logger.error("=" * 70)
+    logger.error("EMERGENCY FALLBACK ACTIVATED")
+    logger.error("=" * 70)
+    logger.error("")
+    logger.error(f"Closing {len(positions_to_close)} positions...")
     if positions_skipped:
-        print(f"Skipped {len(positions_skipped)} (engine actively exiting)")
-    print()
+        logger.warning(f"Skipped {len(positions_skipped)} (engine actively exiting)")
+    logger.error("")
     
     results = []
     
     for pos, trade_id in positions_to_close:
         coin = pos["coin"]
-        print(f"Closing {coin}...")
+        logger.info(f"Closing {coin}...")
         
         # Force close (market order, no slippage check)
         response = client.market_close(coin)
@@ -197,11 +218,11 @@ def emergency_close_all() -> None:
         }
         
         if response["status"] == "ok":
-            print(f"  ✅ {coin} closed")
+            logger.info(f"  {coin} closed")
             # Release ownership after success
             release_exit(coin, trade_id)
         else:
-            print(f"  ❌ {coin} FAILED: {response}")
+            logger.error(f"  {coin} FAILED: {response}")
             # Keep ownership (for retry or manual intervention)
         
         results.append(result)
@@ -213,10 +234,10 @@ def emergency_close_all() -> None:
         "results": results,
     })
     
-    print()
-    print("=" * 70)
-    print("🚨 EMERGENCY CLOSE COMPLETE")
-    print("=" * 70)
+    logger.error("")
+    logger.error("=" * 70)
+    logger.error("EMERGENCY CLOSE COMPLETE")
+    logger.error("=" * 70)
 
 def main() -> None:
     """Main fallback check."""
@@ -229,7 +250,7 @@ def main() -> None:
             "event": "fallback_check_ok",
             "reason": reason,
         })
-        print(f"✅ Engine healthy: {reason}")
+        logger.info(f"Engine healthy: {reason}")
         return
     
     # Engine is unhealthy
@@ -239,16 +260,17 @@ def main() -> None:
         "action": "emergency_close_all",
     })
     
-    print("=" * 70)
-    print("🚨 CRITICAL: ENGINE UNHEALTHY")
-    print("=" * 70)
-    print()
-    print(f"Reason: {reason}")
-    print()
-    print("Activating emergency fallback...")
-    print()
+    logger.error("=" * 70)
+    logger.error("CRITICAL: ENGINE UNHEALTHY")
+    logger.error("=" * 70)
+    logger.error("")
+    logger.error(f"Reason: {reason}")
+    logger.error("")
+    logger.error("Activating emergency fallback...")
+    logger.error("")
     
     emergency_close_all()
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     main()

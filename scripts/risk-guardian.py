@@ -16,12 +16,20 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -104,7 +112,7 @@ class GuardianState:
         # Log to unified trade ledger
         try:
             from trade_logger import TradeLogger
-            logger = TradeLogger()
+            trade_logger = TradeLogger()
             trade_id = f"hl-{coin.lower()}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
             
             # Create mock trade entry (guardian doesn't have open timestamp)
@@ -117,11 +125,11 @@ class GuardianState:
             
             # Log entry (backdated estimate — will fix when we have entry tracker)
             if entry_price > 0:
-                logger.log_entry(signal, size=0, entry_price=entry_price, trade_id=trade_id)
-            
+                trade_logger.log_entry(signal, size=0, entry_price=entry_price, trade_id=trade_id)
+
             # Log exit
             if exit_price > 0:
-                logger.log_exit(
+                trade_logger.log_exit(
                     trade_id=trade_id,
                     exit_price=exit_price,
                     exit_reason=trigger,
@@ -604,7 +612,7 @@ def run_guardian(dry_run: bool = False, status_only: bool = False) -> dict[str, 
 
     if not status_only and not _acquire_lock():
         msg = "Another guardian instance is running (lock held < 5 min). Exiting."
-        print(f"⚠️ {msg}")
+        logger.warning(msg)
         log_event({"event": "guardian_skipped", "reason": "lock_held", "timestamp": now.isoformat()})
         return {"status": "SKIPPED", "reason": "lock_held"}
 
@@ -616,10 +624,10 @@ def run_guardian(dry_run: bool = False, status_only: bool = False) -> dict[str, 
 
 
 def _run_guardian_inner(dry_run: bool, status_only: bool, now: datetime, mode: str) -> dict[str, Any]:
-    print(f"\n{'='*60}")
-    print(f"  RISK GUARDIAN — {mode}")
-    print(f"  {now.isoformat()}")
-    print(f"{'='*60}\n")
+    logger.info("=" * 60)
+    logger.info("  RISK GUARDIAN — %s", mode)
+    logger.info("  %s", now.isoformat())
+    logger.info("=" * 60)
 
     state = GuardianState()
     client = HLClient()
@@ -633,14 +641,14 @@ def _run_guardian_inner(dry_run: bool, status_only: bool, now: datetime, mode: s
         state.update_peak(total_value)
     positions = acct["positions"]
 
-    print(f"[1/4] Wallet: ${total_value:.2f} (spot: ${spot_usd:.2f} | perps: ${perp_value:.6f})")
-    print(f"       Funded: {'✅' if acct.get('wallet_funded') else '❌'} | Perps allocated: {'✅' if acct.get('perps_allocated') else '❌'} | Positions: {len(positions)}")
+    logger.info("[1/4] Wallet: $%.2f (spot: $%.2f | perps: $%.6f)", total_value, spot_usd, perp_value)
+    logger.info("       Funded: %s | Perps allocated: %s | Positions: %d", acct.get('wallet_funded'), acct.get('perps_allocated'), len(positions))
 
     if status_only:
         for p in positions:
-            print(f"  {p['coin']} {p['direction']} {p['size']} | ROE: {p['roe']:+.1%} | PnL: ${p['unrealized_pnl']:+.4f}")
+            logger.info("  %s %s %s | ROE: %+.1f%% | PnL: $%+.4f", p['coin'], p['direction'], p['size'], p['roe'] * 100, p['unrealized_pnl'])
         safe, reason = state.check_circuit_breaker(total_value)
-        print(f"  Circuit breaker: {'🟢 ' + reason if safe else '🔴 ' + reason}")
+        logger.info("  Circuit breaker: %s", reason if safe else reason)
         return {"status": "OK", "positions": len(positions)}
 
     # 2. Evaluate
@@ -648,25 +656,25 @@ def _run_guardian_inner(dry_run: bool, status_only: bool, now: datetime, mode: s
     closes_needed = [p for p in evaluated if p["action"] == "CLOSE"]
     alerts = [p for p in evaluated if p["action"] == "ALERT"]
     holds = [p for p in evaluated if p["action"] == "HOLD"]
-    print(f"[2/4] Evaluated: {len(holds)} HOLD | {len(closes_needed)} CLOSE | {len(alerts)} ALERT")
+    logger.info("[2/4] Evaluated: %d HOLD | %d CLOSE | %d ALERT", len(holds), len(closes_needed), len(alerts))
 
     for a in alerts:
-        print(f"  ⚠️ ALERT: {a['coin']} — {'; '.join(a['triggers'])}")
+        logger.warning("ALERT: %s — %s", a['coin'], '; '.join(a['triggers']))
 
     # 3. Execute closes
     actions_taken = []
     for p in closes_needed:
-        print(f"[3/4] CLOSING {p['coin']} — {'; '.join(p['triggers'])}")
+        logger.info("[3/4] CLOSING %s — %s", p['coin'], '; '.join(p['triggers']))
         result = execute_close(client, p, state, dry_run)
         actions_taken.append(result)
-        print(f"       Result: {result.get('result', '?')}")
+        logger.info("       Result: %s", result.get('result', '?'))
 
     if not closes_needed:
-        print(f"[3/4] No closes needed")
+        logger.info("[3/4] No closes needed")
 
     # 4. Report
     write_report(acct, evaluated, actions_taken, state, dry_run)
-    print(f"[4/4] Report: {GUARDIAN_REPORT}")
+    logger.info("[4/4] Report: %s", GUARDIAN_REPORT)
 
     summary = {
         "timestamp": now.isoformat(),
@@ -678,13 +686,14 @@ def _run_guardian_inner(dry_run: bool, status_only: bool, now: datetime, mode: s
     log_event({"event": "guardian_run", **summary})
     state.save()
 
-    print(f"\n{'='*60}")
-    print(f"  DONE — {len(holds)} held, {len(actions_taken)} acted, {len(alerts)} alerted")
-    print(f"{'='*60}\n")
+    logger.info("=" * 60)
+    logger.info("  DONE — %d held, %d acted, %d alerted", len(holds), len(actions_taken), len(alerts))
+    logger.info("=" * 60)
     return summary
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     args = sys.argv[1:]
     dry = "--dry-run" in args
     status = "--status" in args

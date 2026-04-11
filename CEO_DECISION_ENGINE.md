@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # CEO DECISION ENGINE
 
 **Purpose:** Automated decision-making based on daily update data  

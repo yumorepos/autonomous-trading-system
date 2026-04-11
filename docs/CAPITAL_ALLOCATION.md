@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # Dynamic Capital Allocation System
 **Version:** 1.0  
 **Document scope:** research-stage portfolio allocation notes  

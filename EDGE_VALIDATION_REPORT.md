@@ -1,3 +1,5 @@
+> **Status: ACCURATE** — verified against current codebase.
+
 # Edge Validation Report
 
 Generated: 2026-04-10 21:25 UTC

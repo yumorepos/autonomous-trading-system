@@ -5,6 +5,7 @@ Exchange is single source of truth. Never throws, always reconciles or skips.
 """
 
 import json
+import os
 import time
 from pathlib import Path
 from datetime import datetime, timezone
@@ -12,7 +13,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from hyperliquid.info import Info
 from hyperliquid.utils import constants
 
-ENGINE_ADDRESS = "0x8743f51c57e90644a0c141eD99064C4e9efFC01c"
+ENGINE_ADDRESS = os.environ.get("HL_WALLET_ADDRESS", "")
 
 class SelfHealingValidator:
     """Defensive validator that never crashes, always recovers."""
@@ -187,11 +188,11 @@ class SelfHealingValidator:
                         age = (datetime.now(timezone.utc) - hb).total_seconds()
                         if age > 300:  # 5 minutes
                             return True
-                    except:
+                    except (ValueError, TypeError):
                         pass
-            
+
             return False
-            
+
         except Exception:
             return False
     
@@ -301,7 +302,7 @@ class CrashProofExecutionGuard:
             
             with open(self.log_file, 'a') as f:
                 f.write(json.dumps(entry) + '\n')
-        except:
+        except Exception:
             pass  # Even logging failure is non-fatal
 
 

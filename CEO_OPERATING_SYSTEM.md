@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # CEO OPERATING SYSTEM
 
 > **Mission:** Double $97 → $194 in 30 days through disciplined capital allocation, systematic execution, and continuous optimization.

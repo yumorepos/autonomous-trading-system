@@ -1,6 +1,15 @@
 __pycache__/
+*.pyc
 
-# === SECURITY: Runtime artifacts ===
+# === SECURITY: Credentials and secrets ===
+.env
+.env.*
+!.env.example
+*.key
+*.secret
+*.plist
+
+# === Runtime artifacts ===
 *.jsonl
 *.log
 workspace/logs/
@@ -9,7 +18,16 @@ logs/
 circuit-breaker-state.json
 risk-guardian-state.json
 hl-entry-state.json
-*.key
-*.secret
-.env
-.env.*
+
+# === Data ===
+data/historical/
+
+# === IDE / OS ===
+.DS_Store
+.vscode/
+.idea/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/

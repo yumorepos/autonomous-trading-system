@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # CEO MANDATE: FULL AUTONOMOUS EXECUTION
 
 > **Effective:** 2026-03-26 20:26 UTC

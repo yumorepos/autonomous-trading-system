@@ -1,3 +1,5 @@
+> **Status: ACCURATE** — verified against current codebase.
+
 # Operator Quickstart
 
 Copy-paste-friendly commands for running the canonical **paper-trading** system locally.

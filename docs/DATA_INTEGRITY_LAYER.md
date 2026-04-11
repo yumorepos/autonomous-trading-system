@@ -1,3 +1,5 @@
+> **Status: ACCURATE** — verified against current codebase.
+
 # Data Integrity Layer
 
 **Version:** 1.1  

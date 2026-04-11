@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # Three-Stage Governance Model
 **Version:** 3.1 (Research / Paper-Trading Governance)  
 **Implemented:** 2026-03-20 18:57 EDT  

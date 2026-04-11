@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # PERMANENT VALIDATION PROTOCOL
 
 **Purpose:** Ensure trading system remains production-safe as it evolves.

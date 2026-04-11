@@ -1,3 +1,5 @@
+> **Status: ACCURATE** — verified against current codebase.
+
 # System Status
 
 - Hyperliquid = canonical paper-trading path

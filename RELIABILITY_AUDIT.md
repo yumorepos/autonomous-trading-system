@@ -1,3 +1,5 @@
+> **Status: ASPIRATIONAL** — describes design intent or goals, not verified current state.
+
 # RELIABILITY AUDIT — Before/After Report
 
 **Changes deployed:**

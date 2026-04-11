@@ -1,3 +1,5 @@
+> **Status: ACCURATE** — verified against current codebase.
+
 # Execution Safety Layer
 
 **Version:** 1.1  
