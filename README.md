@@ -112,6 +112,20 @@ workspace/        Runtime state, logs, operator controls (gitignored)
 | docs/RUNBOOK.md | Aspirational | Operations procedures (needs update) |
 | docs/OPERATOR_QUICKSTART.md | Accurate | Paper trading quickstart |
 
+## Paper Trading Pipeline Truth
+
+The paper trading pipeline (`scripts/trading-agency-phase1.py`) remains available
+for offline validation. Its truthful scope:
+
+- **Hyperliquid:** canonical paper-trading path
+- **Polymarket:** canonical paper path, experimental overall, not live-integrated
+- **Mixed mode:** limited, asymmetric (one entry per cycle, Hyperliquid priority)
+- **CI:** offline proof only, not live exchange validation
+- **Live trading:** not implemented (in the paper pipeline)
+- **Real-money execution:** not supported (in the paper pipeline)
+- **Production deployment claim:** unsupported (for the paper pipeline)
+- **Audience:** research, audit, portfolio review
+
 ## Disclaimer
 
 This is a personal trading system, not a product. It is not financial advice.
