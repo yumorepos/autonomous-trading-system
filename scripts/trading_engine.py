@@ -1029,28 +1029,31 @@ class TradingEngine:
         """Main always-on loop."""
         # === STARTUP ASSERTION: VERIFY ENGINE IS SOLE AUTHORITY ===
         # Check that no other trading processes are running
-        import subprocess
-        ps_check = subprocess.run(
-            ["ps", "aux"],
-            capture_output=True,
-            text=True
-        )
-        trading_procs = [
-            line for line in ps_check.stdout.split("\n")
-            if ("hl_entry.py" in line or "hl_executor.py" in line or "manual_entry.py" in line)
-            and "grep" not in line
-        ]
-        if trading_procs:
-            logger.error("=" * 70)
-            logger.error("STARTUP BLOCKED: LEGACY TRADING SCRIPTS RUNNING")
-            logger.error("=" * 70)
-            logger.error("")
-            for proc in trading_procs:
-                logger.error(f"  {proc}")
-            logger.error("")
-            logger.error("These scripts must not run. Engine is sole trading authority.")
-            logger.error("")
-            raise RuntimeError("Legacy trading scripts detected. Engine cannot start safely.")
+        # In Docker, skip — container isolation ensures single instance,
+        # and python:3.12-slim doesn't ship 'ps'.
+        if not Path("/.dockerenv").exists():
+            import subprocess
+            ps_check = subprocess.run(
+                ["ps", "aux"],
+                capture_output=True,
+                text=True
+            )
+            trading_procs = [
+                line for line in ps_check.stdout.split("\n")
+                if ("hl_entry.py" in line or "hl_executor.py" in line or "manual_entry.py" in line)
+                and "grep" not in line
+            ]
+            if trading_procs:
+                logger.error("=" * 70)
+                logger.error("STARTUP BLOCKED: LEGACY TRADING SCRIPTS RUNNING")
+                logger.error("=" * 70)
+                logger.error("")
+                for proc in trading_procs:
+                    logger.error(f"  {proc}")
+                logger.error("")
+                logger.error("These scripts must not run. Engine is sole trading authority.")
+                logger.error("")
+                raise RuntimeError("Legacy trading scripts detected. Engine cannot start safely.")
         
         self.startup_reconciliation()
 
