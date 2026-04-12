@@ -60,6 +60,7 @@ from utils.alerting import (
     alert_engine_event, alert_error, send_alert,
 )
 from utils.health_server import start_health_server, update_health
+from utils.healthcheck_ping import ping_healthcheck
 
 import logging
 logger = logging.getLogger(__name__)
@@ -1120,6 +1121,7 @@ class TradingEngine:
                     regime=get_active_regime(),
                     open_positions=len(self.state.data["open_positions"]),
                 )
+                ping_healthcheck()
 
                 # 6. SLEEP
                 elapsed = time.time() - cycle_start
