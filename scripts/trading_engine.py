@@ -59,6 +59,7 @@ from utils.alerting import (
     alert_entry, alert_exit, alert_circuit_breaker,
     alert_engine_event, alert_error, send_alert,
 )
+from utils.health_server import start_health_server, update_health
 
 import logging
 logger = logging.getLogger(__name__)
@@ -1109,8 +1110,15 @@ class TradingEngine:
                 
                 # 4. HEARTBEAT
                 self.state.update_heartbeat()
-                
-                # 5. SLEEP
+
+                # 5. HEALTH ENDPOINT UPDATE
+                update_health(
+                    scan_count=cycle,
+                    regime=get_active_regime(),
+                    open_positions=len(self.state.data["open_positions"]),
+                )
+
+                # 6. SLEEP
                 elapsed = time.time() - cycle_start
                 sleep_time = max(0.1, LOOP_INTERVAL_SEC - elapsed)
                 time.sleep(sleep_time)
@@ -1236,6 +1244,9 @@ def main() -> None:
     pid_file.write_text(str(os.getpid()))
     
     try:
+        start_health_server(port=8080)
+        send_alert("Health endpoint active on port 8080", level="INFO")
+
         engine = TradingEngine(dry_run=args.dry_run)
         engine.run()
     finally:

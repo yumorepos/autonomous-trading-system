@@ -4,11 +4,14 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    ports:
+      - "8080:8080"
     volumes:
       - ./workspace/logs:/app/workspace/logs
       - ./workspace/data:/app/workspace/data
     healthcheck:
-      test: ["CMD", "python3", "scripts/trading_engine.py", "--status"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 60s
       timeout: 10s
       retries: 3
+      start_period: 30s
