@@ -25,6 +25,20 @@ MODERATE_MIN_MAX_APY = 0.75         # At least one asset at 75%+ APY
 
 # Below MODERATE → LOW_FUNDING (current state, wait patiently)
 
+# ---------------------------------------------------------------------------
+# Hysteresis: EXIT thresholds (to downgrade from a regime)
+# ---------------------------------------------------------------------------
+# To ENTER a regime (upgrade) we use the thresholds above.
+# To EXIT a regime (downgrade) the metric must drop further, creating a
+# dead zone that prevents oscillation around a boundary.
+
+REGIME_EXIT_THRESHOLDS: dict[str, dict] = {
+    "EXTREME":      {"pct_above_100": 0.05},       # must drop to 5%, not just below 10%
+    "HIGH_FUNDING": {"max_funding_apy": 1.20},      # must drop to 120%, not just below 150%
+    "MODERATE":     {"max_funding_apy": 0.60},       # must drop to 60%, not just below 75%
+    "LOW_FUNDING":  {},                              # can't downgrade further
+}
+
 
 # ---------------------------------------------------------------------------
 # Scanner Thresholds Per Regime

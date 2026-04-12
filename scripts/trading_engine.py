@@ -690,7 +690,10 @@ class TradingEngine:
         ).read())
 
         # --- Regime detection (reuses same API response) ---
+        from scripts.regime_detector import load_regime_state as _load_regime_state
         previous_regime = get_active_regime()
+        prev_state = _load_regime_state()
+        prev_duration_secs = prev_state.get("regime_duration_seconds", 0) if prev_state else 0
         regime_result = detect_regime_from_api_response(resp)
         regime_state = save_regime_state(regime_result)
         current_regime = regime_result["regime"]
@@ -702,6 +705,11 @@ class TradingEngine:
             top_info = f" | Max funding: {regime_result['max_funding_apy'] * 100:.0f}% APY"
             if top_asset:
                 top_info += f" ({top_asset['asset']})"
+
+            # Include previous regime duration in alert
+            if prev_duration_secs > 0:
+                from scripts.regime_detector import _format_duration
+                top_info += f" | Previous regime lasted {_format_duration(prev_duration_secs)}"
 
             log_event({
                 "event": "regime_updated",

@@ -32,14 +32,17 @@ from config.regime_thresholds import (
     REGIME_STALE_SECONDS,
     get_regime_thresholds,
 )
+from config.regime_thresholds import REGIME_EXIT_THRESHOLDS
 from scripts.regime_detector import (
     compute_regime_metrics,
     classify_regime,
+    apply_hysteresis,
     detect_regime_from_api_response,
     load_regime_state,
     save_regime_state,
     get_active_regime,
     get_active_thresholds,
+    _format_duration,
     REGIME_STATE_FILE,
 )
 from scripts.tiered_scanner import classify_signal
@@ -515,6 +518,230 @@ class TestRegimeChangeDetection(unittest.TestCase):
                 if prev != curr:
                     self.assertNotEqual(prev, curr,
                         f"Transition {prev} → {curr} should be detected")
+
+
+class TestApplyHysteresis(unittest.TestCase):
+    """Test hysteresis prevents flapping between regimes."""
+
+    def _metrics(self, max_apy=0.0, pct_above_100=0.0):
+        return {
+            "max_funding_apy": max_apy,
+            "avg_top10_funding_apy": max_apy * 0.5,
+            "pct_above_50": 0.0,
+            "pct_above_100": pct_above_100,
+            "top_assets": [],
+        }
+
+    def test_flapping_prevention(self):
+        """Oscillating around 75% APY should NOT cause flapping when in MODERATE."""
+        oscillating = [0.78, 0.72, 0.76, 0.71, 0.80, 0.74, 0.68, 0.65, 0.62, 0.61]
+        for apy in oscillating:
+            regime = apply_hysteresis("MODERATE", self._metrics(max_apy=apy))
+            self.assertEqual(regime, "MODERATE",
+                f"Should stay MODERATE at {apy*100:.0f}% APY (exit threshold is 60%)")
+
+    def test_quick_upgrade(self):
+        """LOW_FUNDING → MODERATE should happen immediately when above 75%."""
+        regime = apply_hysteresis("LOW_FUNDING", self._metrics(max_apy=0.80))
+        self.assertEqual(regime, "MODERATE")
+
+    def test_slow_downgrade_held(self):
+        """MODERATE should NOT downgrade at 70% (above 60% exit threshold)."""
+        regime = apply_hysteresis("MODERATE", self._metrics(max_apy=0.70))
+        self.assertEqual(regime, "MODERATE")
+
+    def test_actual_downgrade(self):
+        """MODERATE → LOW_FUNDING when below 60% exit threshold."""
+        regime = apply_hysteresis("MODERATE", self._metrics(max_apy=0.55))
+        self.assertEqual(regime, "LOW_FUNDING")
+
+    def test_multi_level_upgrade(self):
+        """LOW_FUNDING → EXTREME in one step when pct_above_100 >= 10%."""
+        regime = apply_hysteresis("LOW_FUNDING", self._metrics(max_apy=3.0, pct_above_100=0.12))
+        self.assertEqual(regime, "EXTREME")
+
+    def test_multi_level_downgrade(self):
+        """EXTREME → LOW_FUNDING when below all exit thresholds."""
+        regime = apply_hysteresis(
+            "EXTREME",
+            self._metrics(max_apy=0.50, pct_above_100=0.01),
+        )
+        self.assertEqual(regime, "LOW_FUNDING")
+
+    def test_high_funding_exit_hysteresis(self):
+        """HIGH_FUNDING should stay at 130% (above 120% exit threshold)."""
+        regime = apply_hysteresis("HIGH_FUNDING", self._metrics(max_apy=1.30))
+        self.assertEqual(regime, "HIGH_FUNDING")
+
+    def test_high_funding_actual_exit(self):
+        """HIGH_FUNDING → MODERATE when below 120% but above 75%."""
+        regime = apply_hysteresis("HIGH_FUNDING", self._metrics(max_apy=1.10))
+        self.assertEqual(regime, "MODERATE")
+
+    def test_extreme_exit_hysteresis(self):
+        """EXTREME should stay at pct_above_100=0.07 (above 0.05 exit)."""
+        regime = apply_hysteresis(
+            "EXTREME",
+            self._metrics(max_apy=2.0, pct_above_100=0.07),
+        )
+        self.assertEqual(regime, "EXTREME")
+
+    def test_extreme_actual_exit(self):
+        """EXTREME → HIGH_FUNDING when pct drops below 5% but max_apy >= 150%."""
+        regime = apply_hysteresis(
+            "EXTREME",
+            self._metrics(max_apy=2.0, pct_above_100=0.03),
+        )
+        self.assertEqual(regime, "HIGH_FUNDING")
+
+    def test_same_regime_no_change(self):
+        """Same raw regime as previous → no change."""
+        regime = apply_hysteresis("LOW_FUNDING", self._metrics(max_apy=0.10))
+        self.assertEqual(regime, "LOW_FUNDING")
+
+
+class TestRegimeDurationTracking(unittest.TestCase):
+    """Test regime_duration_seconds and transitions_last_24h."""
+
+    def setUp(self):
+        self._tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+        self._tmp.close()
+        self._tmp_path = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp_path.unlink(missing_ok=True)
+
+    def _patch_state_file(self):
+        return patch("scripts.regime_detector.REGIME_STATE_FILE", self._tmp_path)
+
+    def _regime_result(self, regime="LOW_FUNDING", max_apy=0.14):
+        return {
+            "regime": regime,
+            "raw_regime": regime,
+            "previous_regime": "LOW_FUNDING",
+            "max_funding_apy": max_apy,
+            "avg_top10_funding_apy": max_apy * 0.5,
+            "pct_above_50": 0.0,
+            "pct_above_100": 0.0,
+            "top_assets": [],
+            "thresholds": {},
+        }
+
+    def test_duration_updates_on_same_regime(self):
+        """Duration should grow when regime stays the same."""
+        past = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        self._tmp_path.write_text(json.dumps({
+            "regime": "MODERATE",
+            "max_funding_apy": 0.80,
+            "avg_top10_funding_apy": 0.40,
+            "pct_above_50": 0.0,
+            "pct_above_100": 0.0,
+            "top_assets": [],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "scan_count": 1,
+            "regime_since": past,
+            "regime_duration_seconds": 3600,
+            "transitions_last_24h": 0,
+            "transition_log": [],
+        }))
+
+        with self._patch_state_file():
+            state = save_regime_state(self._regime_result("MODERATE", 0.80))
+
+        # Should be ~2 hours (7200s), not 0
+        self.assertGreater(state["regime_duration_seconds"], 7000)
+
+    def test_duration_resets_on_regime_change(self):
+        """Duration should reset to 0 on regime change."""
+        self._tmp_path.write_text(json.dumps({
+            "regime": "MODERATE",
+            "max_funding_apy": 0.80,
+            "avg_top10_funding_apy": 0.40,
+            "pct_above_50": 0.0,
+            "pct_above_100": 0.0,
+            "top_assets": [],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "scan_count": 1,
+            "regime_since": (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat(),
+            "regime_duration_seconds": 18000,
+            "transitions_last_24h": 0,
+            "transition_log": [],
+        }))
+
+        with self._patch_state_file():
+            state = save_regime_state(self._regime_result("LOW_FUNDING", 0.14))
+
+        self.assertLess(state["regime_duration_seconds"], 5)
+
+    def test_transition_counter(self):
+        """Transition counter should count transitions in last 24h."""
+        now = datetime.now(timezone.utc)
+        recent_transitions = [
+            (now - timedelta(hours=i)).isoformat() for i in range(3)
+        ]
+        old_transition = (now - timedelta(hours=25)).isoformat()
+
+        self._tmp_path.write_text(json.dumps({
+            "regime": "MODERATE",
+            "max_funding_apy": 0.80,
+            "avg_top10_funding_apy": 0.40,
+            "pct_above_50": 0.0,
+            "pct_above_100": 0.0,
+            "top_assets": [],
+            "updated_at": now.isoformat(),
+            "scan_count": 5,
+            "regime_since": now.isoformat(),
+            "regime_duration_seconds": 0,
+            "transitions_last_24h": 4,
+            "transition_log": [old_transition] + recent_transitions,
+        }))
+
+        with self._patch_state_file():
+            # Change regime to trigger a new transition
+            state = save_regime_state(self._regime_result("LOW_FUNDING", 0.14))
+
+        # 3 recent (old one pruned) + 1 new = 4
+        self.assertEqual(state["transitions_last_24h"], 4)
+        # Old transition should have been pruned
+        self.assertNotIn(old_transition, state["transition_log"])
+
+    def test_no_transition_on_same_regime(self):
+        """Transition counter should NOT increment when regime stays the same."""
+        self._tmp_path.write_text(json.dumps({
+            "regime": "LOW_FUNDING",
+            "max_funding_apy": 0.14,
+            "avg_top10_funding_apy": 0.07,
+            "pct_above_50": 0.0,
+            "pct_above_100": 0.0,
+            "top_assets": [],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "scan_count": 1,
+            "regime_since": datetime.now(timezone.utc).isoformat(),
+            "regime_duration_seconds": 100,
+            "transitions_last_24h": 0,
+            "transition_log": [],
+        }))
+
+        with self._patch_state_file():
+            state = save_regime_state(self._regime_result("LOW_FUNDING", 0.14))
+
+        self.assertEqual(state["transitions_last_24h"], 0)
+
+
+class TestFormatDuration(unittest.TestCase):
+    """Test human-readable duration formatting."""
+
+    def test_seconds(self):
+        self.assertEqual(_format_duration(45), "45s")
+
+    def test_minutes(self):
+        self.assertEqual(_format_duration(300), "5m")
+
+    def test_hours_minutes(self):
+        self.assertEqual(_format_duration(11520), "3h 12m")
+
+    def test_days(self):
+        self.assertEqual(_format_duration(90000), "1d 1h")
 
 
 if __name__ == "__main__":

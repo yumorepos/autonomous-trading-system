@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -30,10 +30,14 @@ from config.regime_thresholds import (
     MODERATE_MIN_MAX_APY,
     DEFAULT_REGIME,
     REGIME_STALE_SECONDS,
+    REGIME_EXIT_THRESHOLDS,
     get_regime_thresholds,
 )
 
 REGIME_STATE_FILE = WORKSPACE_ROOT / "regime_state.json"
+
+# Ordered from lowest to highest severity
+REGIME_ORDER = ["LOW_FUNDING", "MODERATE", "HIGH_FUNDING", "EXTREME"]
 
 
 def compute_regime_metrics(asset_funding: list[dict]) -> dict:
@@ -99,6 +103,49 @@ def classify_regime(metrics: dict) -> str:
         return "LOW_FUNDING"
 
 
+def apply_hysteresis(previous_regime: str, metrics: dict) -> str:
+    """Apply hysteresis to regime classification.
+
+    Quick to upgrade (catch spikes fast), slow to downgrade (avoid flapping).
+
+    - If raw regime is HIGHER than previous → upgrade immediately.
+    - If raw regime equals previous → no change.
+    - If raw regime is LOWER than previous → only downgrade if metrics
+      dropped below the EXIT threshold for the current regime.
+    """
+    raw_regime = classify_regime(metrics)
+
+    prev_idx = REGIME_ORDER.index(previous_regime) if previous_regime in REGIME_ORDER else 0
+    raw_idx = REGIME_ORDER.index(raw_regime)
+
+    # Upgrade or same → use raw classification
+    if raw_idx >= prev_idx:
+        return raw_regime
+
+    # Downgrade path: check exit thresholds level by level from current down
+    new_idx = prev_idx
+    for level in range(prev_idx, 0, -1):
+        regime_at_level = REGIME_ORDER[level]
+        exit_thresh = REGIME_EXIT_THRESHOLDS.get(regime_at_level, {})
+
+        should_exit = False
+        if "pct_above_100" in exit_thresh:
+            if metrics["pct_above_100"] < exit_thresh["pct_above_100"]:
+                should_exit = True
+        elif "max_funding_apy" in exit_thresh:
+            if metrics["max_funding_apy"] < exit_thresh["max_funding_apy"]:
+                should_exit = True
+        else:
+            should_exit = False
+
+        if should_exit:
+            new_idx = level - 1
+        else:
+            break  # Can't exit this level, so stay here
+
+    return REGIME_ORDER[new_idx]
+
+
 def detect_regime_from_api_response(resp: list) -> dict:
     """Run regime detection on a raw Hyperliquid metaAndAssetCtxs response.
 
@@ -119,11 +166,17 @@ def detect_regime_from_api_response(resp: list) -> dict:
             asset_funding.append({"asset": u["name"], "funding_apy": apy})
 
     metrics = compute_regime_metrics(asset_funding)
-    regime = classify_regime(metrics)
+
+    # Apply hysteresis: read previous regime, use asymmetric thresholds
+    previous_state = load_regime_state()
+    previous_regime = previous_state.get("regime", "LOW_FUNDING") if previous_state else "LOW_FUNDING"
+    regime = apply_hysteresis(previous_regime, metrics)
     thresholds = get_regime_thresholds(regime)
 
     return {
         "regime": regime,
+        "raw_regime": classify_regime(metrics),
+        "previous_regime": previous_regime,
         **metrics,
         "thresholds": thresholds,
     }
@@ -167,21 +220,65 @@ def save_regime_state(regime_result: dict, scan_count: int | None = None) -> dic
     Returns:
         The full state dict that was written.
     """
-    # Load previous scan_count if not provided
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+
+    # Load previous state for scan_count, duration, and transition tracking
+    prev = load_regime_state()
     if scan_count is None:
-        prev = load_regime_state()
         scan_count = (prev.get("scan_count", 0) + 1) if prev else 1
 
+    # Duration tracking: how long the current regime has been active
+    new_regime = regime_result["regime"]
+    if prev and prev.get("regime") == new_regime:
+        # Same regime — carry forward the regime_since timestamp
+        regime_since = prev.get("regime_since", now_iso)
+    else:
+        # New regime — reset timestamp
+        regime_since = now_iso
+
+    # Compute regime_duration_seconds from regime_since
+    try:
+        since_dt = datetime.fromisoformat(regime_since)
+        if since_dt.tzinfo is None:
+            since_dt = since_dt.replace(tzinfo=timezone.utc)
+        regime_duration_seconds = round((now - since_dt).total_seconds())
+    except (ValueError, TypeError):
+        regime_duration_seconds = 0
+
+    # Transition counter: count transitions in the last 24 hours
+    transition_log: list[str] = prev.get("transition_log", []) if prev else []
+
+    # Record new transition if regime changed
+    if prev and prev.get("regime") != new_regime:
+        transition_log.append(now_iso)
+
+    # Prune transitions older than 24 hours
+    cutoff = (now - timedelta(hours=24)).isoformat()
+    transition_log = [t for t in transition_log if t > cutoff]
+
     state = {
-        "regime": regime_result["regime"],
+        "regime": new_regime,
         "max_funding_apy": regime_result["max_funding_apy"],
         "avg_top10_funding_apy": regime_result["avg_top10_funding_apy"],
         "pct_above_50": regime_result["pct_above_50"],
         "pct_above_100": regime_result["pct_above_100"],
         "top_assets": regime_result["top_assets"],
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": now_iso,
         "scan_count": scan_count,
+        "regime_since": regime_since,
+        "regime_duration_seconds": regime_duration_seconds,
+        "transitions_last_24h": len(transition_log),
+        "transition_log": transition_log,
     }
+
+    if len(transition_log) > 10:
+        import logging
+        logging.getLogger(__name__).warning(
+            "High regime transition rate: %d transitions in last 24h — "
+            "consider widening hysteresis buffer",
+            len(transition_log),
+        )
 
     REGIME_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     REGIME_STATE_FILE.write_text(json.dumps(state, indent=2))
@@ -226,16 +323,35 @@ def _fetch_and_detect() -> dict:
     return detect_regime_from_api_response(resp)
 
 
+def _format_duration(seconds: int) -> str:
+    """Format seconds as human-readable duration."""
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours = minutes // 60
+    remaining_min = minutes % 60
+    if hours < 24:
+        return f"{hours}h {remaining_min}m"
+    days = hours // 24
+    remaining_hours = hours % 24
+    return f"{days}d {remaining_hours}h"
+
+
 def main():
     """Run standalone regime detection."""
     result = _fetch_and_detect()
     state = save_regime_state(result)
 
     regime = result["regime"]
+    raw_regime = result.get("raw_regime", regime)
     thresholds = result["thresholds"]
 
     print("=" * 60)
     print(f"  REGIME: {regime}")
+    if raw_regime != regime:
+        print(f"  (raw classification: {raw_regime}, held by hysteresis)")
     print("=" * 60)
     print()
     print("  Metrics:")
@@ -247,6 +363,12 @@ def main():
     print("  Top assets:")
     for a in result["top_assets"]:
         print(f"    {a['asset']:12s} {a['funding_apy'] * 100:>6.1f}% APY")
+    print()
+    print("  Hysteresis state:")
+    duration = state.get("regime_duration_seconds", 0)
+    print(f"    Current regime since:  {state.get('regime_since', 'N/A')}")
+    print(f"    Regime duration:       {_format_duration(duration)}")
+    print(f"    Transitions (24h):     {state.get('transitions_last_24h', 0)}")
     print()
     print("  Active thresholds:")
     print(f"    Tier 1 min funding:   {thresholds['tier1_min_funding'] * 100:>6.0f}% APY")
