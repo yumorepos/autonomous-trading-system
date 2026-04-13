@@ -1,10 +1,12 @@
 """
 ATSConnector — Bridges live regime transitions from the existing ATS engine.
 
-Monitors workspace/logs/trading_engine.jsonl for regime_updated events
-and workspace/regime_state.json for enriched state (top_assets).
+Monitors workspace/logs/trading_engine.jsonl for regime_updated events.
+Enriches with top_asset data from either:
+  1. regime_state.json (if it exists — local dev), or
+  2. The most recent regime_status event in the JSONL (production server)
 
-Pattern B: JSONL file log tailing with regime_state.json supplement.
+Pattern B: JSONL file log tailing.
 """
 
 from __future__ import annotations
@@ -50,6 +52,7 @@ class ATSConnector:
         self._file_position: int = 0
         self._running = False
         self._callbacks: list[Callable] = []
+        self._last_regime_status: dict | None = None  # Cache latest regime_status event
 
     def on_event(self, callback: Callable[[RegimeTransitionEvent], None]):
         """Register a callback for regime transition events."""
@@ -76,14 +79,47 @@ class ATSConnector:
             return asset, exchange
         return "UNKNOWN", self.default_exchange
 
+    def _resolve_top_asset(self) -> tuple[str, str]:
+        """Resolve the top asset from available sources.
+
+        Priority:
+          1. regime_state.json (if it exists)
+          2. Last regime_status event from JSONL (cached in memory)
+          3. Fallback to UNKNOWN
+        """
+        # Try regime_state.json first
+        state = self._read_regime_state()
+        if state and state.get("top_assets"):
+            asset, exchange = self._extract_top_asset(state)
+            if asset != "UNKNOWN":
+                return asset, exchange
+
+        # Fall back to cached regime_status from JSONL
+        if self._last_regime_status:
+            asset = self._last_regime_status.get("top_asset", "UNKNOWN")
+            if asset != "UNKNOWN":
+                return asset, self.default_exchange
+
+        return "UNKNOWN", self.default_exchange
+
     def parse_event(self, line: str) -> RegimeTransitionEvent | None:
-        """Parse a JSONL line into a RegimeTransitionEvent if applicable."""
+        """Parse a JSONL line into a RegimeTransitionEvent if applicable.
+
+        Also caches regime_status events for top_asset enrichment.
+        """
         try:
             data = json.loads(line.strip())
         except (json.JSONDecodeError, ValueError):
             return None
 
-        if data.get("event") != "regime_updated":
+        event_type = data.get("event")
+
+        # Cache regime_status events for top_asset enrichment
+        if event_type == "regime_status":
+            self._last_regime_status = data
+            return None
+
+        if event_type != "regime_updated":
             return None
 
         new_regime_str = data.get("new_regime", "")
@@ -100,9 +136,8 @@ class ATSConnector:
         max_funding_decimal = data.get("max_funding_apy", 0.0)
         max_apy_annualized = max_funding_decimal * 100  # Convert to percentage
 
-        # Enrich with top_asset from regime_state.json
-        state = self._read_regime_state()
-        asset, exchange = self._extract_top_asset(state)
+        # Resolve top asset from available sources
+        asset, exchange = self._resolve_top_asset()
 
         # Parse timestamp
         ts_str = data.get("timestamp")
@@ -155,11 +190,42 @@ class ATSConnector:
         return lines
 
     def seek_to_end(self):
-        """Move file position to end of file (skip existing events)."""
-        if self.jsonl_path.exists():
-            self._file_position = self.jsonl_path.stat().st_size
-        else:
+        """Move file position to end of file (skip existing events).
+
+        Also pre-seeds _last_regime_status from the most recent regime_status
+        event in the file, so the first regime_updated event can be enriched.
+        """
+        if not self.jsonl_path.exists():
             self._file_position = 0
+            return
+
+        self._file_position = self.jsonl_path.stat().st_size
+
+        # Scan the last ~50KB for the most recent regime_status event
+        try:
+            file_size = self._file_position
+            read_start = max(0, file_size - 50_000)
+            with open(self.jsonl_path, "r") as f:
+                f.seek(read_start)
+                if read_start > 0:
+                    f.readline()  # skip partial line
+                for line in f:
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    try:
+                        data = json.loads(stripped)
+                        if data.get("event") == "regime_status":
+                            self._last_regime_status = data
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+            if self._last_regime_status:
+                logger.info(
+                    "Pre-seeded top_asset=%s from regime_status",
+                    self._last_regime_status.get("top_asset", "?"),
+                )
+        except OSError as e:
+            logger.warning("Failed to pre-seed regime_status: %s", e)
 
     def poll_once(self) -> list[RegimeTransitionEvent]:
         """Poll for new events. Returns list of parsed events."""

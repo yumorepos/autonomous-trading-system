@@ -188,3 +188,80 @@ class TestPollOnce:
         connector.poll_once()
         assert len(received) == 1
         assert received[0].new_regime == RegimeTier.HIGH_FUNDING
+
+
+class TestRegimeStatusEnrichment:
+    def test_regime_status_caches_top_asset(self, tmp_path):
+        """Without regime_state.json, connector uses regime_status events."""
+        jsonl = tmp_path / "engine.jsonl"
+        state = tmp_path / "nonexistent.json"  # No regime_state.json
+        connector = ATSConnector(jsonl_path=jsonl, state_path=state)
+
+        # Write a regime_status followed by regime_updated
+        with open(jsonl, "w") as f:
+            f.write(json.dumps({
+                "event": "regime_status",
+                "regime": "MODERATE",
+                "top_asset": "YZY",
+                "max_funding_apy": 82.0,
+                "timestamp": "2026-04-13T18:50:00Z",
+            }) + "\n")
+            f.write(_make_event() + "\n")
+
+        events = connector.poll_once()
+        assert len(events) == 1
+        assert events[0].asset == "YZY"  # Enriched from regime_status
+        assert events[0].exchange == "hyperliquid"
+
+    def test_seek_to_end_preseeds_regime_status(self, tmp_path):
+        """seek_to_end should cache the last regime_status from existing data."""
+        jsonl = tmp_path / "engine.jsonl"
+        state = tmp_path / "nonexistent.json"
+
+        # Write history with regime_status events
+        with open(jsonl, "w") as f:
+            f.write(json.dumps({
+                "event": "regime_status",
+                "regime": "MODERATE",
+                "top_asset": "BLAST",
+                "max_funding_apy": 90.0,
+                "timestamp": "2026-04-13T10:00:00Z",
+            }) + "\n")
+            f.write(json.dumps({"event": "scan_no_signals", "timestamp": "2026-04-13T10:01:00Z"}) + "\n")
+            f.write(json.dumps({
+                "event": "regime_status",
+                "regime": "HIGH_FUNDING",
+                "top_asset": "IMX",
+                "max_funding_apy": 120.0,
+                "timestamp": "2026-04-13T10:02:00Z",
+            }) + "\n")
+
+        connector = ATSConnector(jsonl_path=jsonl, state_path=state)
+        connector.seek_to_end()
+
+        # Should have pre-seeded with the last regime_status
+        assert connector._last_regime_status is not None
+        assert connector._last_regime_status["top_asset"] == "IMX"
+
+        # Now write a regime_updated and verify enrichment
+        with open(jsonl, "a") as f:
+            f.write(_make_event() + "\n")
+
+        events = connector.poll_once()
+        assert len(events) == 1
+        assert events[0].asset == "IMX"  # From pre-seeded regime_status
+
+    def test_regime_state_json_takes_priority(self, tmp_dir):
+        """When regime_state.json exists, it takes priority over regime_status."""
+        _, jsonl, state = tmp_dir  # state has top_assets: [{"asset": "ETH", ...}]
+        connector = ATSConnector(jsonl_path=jsonl, state_path=state)
+
+        # Cache a different asset from regime_status
+        connector._last_regime_status = {"top_asset": "YZY"}
+
+        with open(jsonl, "w") as f:
+            f.write(_make_event() + "\n")
+
+        events = connector.poll_once()
+        assert len(events) == 1
+        assert events[0].asset == "ETH"  # From regime_state.json, not regime_status
