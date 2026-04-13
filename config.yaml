@@ -66,6 +66,8 @@ api:
   port: 8081
 
 connector:
+  # Paths can also be set via env vars: ATS_ENGINE_JSONL_PATH, ATS_REGIME_STATE_PATH
+  # Production (Docker volume mount): /opt/trading/workspace/logs/trading_engine.jsonl
   jsonl_path: workspace/logs/trading_engine.jsonl
   state_path: workspace/regime_state.json
   poll_interval: 2.0

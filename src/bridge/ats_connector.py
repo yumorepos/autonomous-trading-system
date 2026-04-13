@@ -38,15 +38,27 @@ class ATSConnector:
     Enriches events with top_asset data from regime_state.json.
     """
 
+    # Default paths — overridable via env vars or constructor args
+    _DEFAULT_JSONL = "workspace/logs/trading_engine.jsonl"
+    _DEFAULT_STATE = "workspace/regime_state.json"
+
     def __init__(
         self,
-        jsonl_path: str | Path = "workspace/logs/trading_engine.jsonl",
-        state_path: str | Path = "workspace/regime_state.json",
+        jsonl_path: str | Path | None = None,
+        state_path: str | Path | None = None,
         poll_interval: float = 2.0,
         default_exchange: str = "hyperliquid",
     ):
-        self.jsonl_path = Path(jsonl_path)
-        self.state_path = Path(state_path)
+        self.jsonl_path = Path(
+            os.environ.get("ATS_ENGINE_JSONL_PATH")
+            or jsonl_path
+            or self._DEFAULT_JSONL
+        )
+        self.state_path = Path(
+            os.environ.get("ATS_REGIME_STATE_PATH")
+            or state_path
+            or self._DEFAULT_STATE
+        )
         self.poll_interval = poll_interval
         self.default_exchange = default_exchange
         self._file_position: int = 0

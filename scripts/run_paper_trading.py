@@ -55,10 +55,11 @@ def build_components(cfg: dict) -> tuple[ATSConnector, SignalFilterPipeline, Pap
     pipeline = SignalFilterPipeline(scorer)
 
     # ATS Connector
+    # Env vars ATS_ENGINE_JSONL_PATH / ATS_REGIME_STATE_PATH override config
     conn_cfg = cfg.get("connector", {})
     connector = ATSConnector(
-        jsonl_path=conn_cfg.get("jsonl_path", "workspace/logs/trading_engine.jsonl"),
-        state_path=conn_cfg.get("state_path", "workspace/regime_state.json"),
+        jsonl_path=conn_cfg.get("jsonl_path"),
+        state_path=conn_cfg.get("state_path"),
         poll_interval=conn_cfg.get("poll_interval", 2.0),
         default_exchange=conn_cfg.get("default_exchange", "hyperliquid"),
     )
