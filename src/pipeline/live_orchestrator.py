@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timezone
 
 from src.bridge.ats_connector import ATSConnector
+from src.execution.executor import Executor
 from src.models import RegimeTransitionEvent, RegimeTier, ScoredSignal
 from src.pipeline.signal_filter import SignalFilterPipeline
 from src.simulator.paper_trader import PaperTrader
@@ -32,14 +33,18 @@ class LiveOrchestrator:
         connector: ATSConnector,
         pipeline: SignalFilterPipeline,
         paper_trader: PaperTrader,
+        executor: Executor | None = None,
     ):
         self.connector = connector
         self.pipeline = pipeline
         self.paper_trader = paper_trader
+        self.executor = executor
         self._events_processed = 0
         self._signals_actionable = 0
         self._positions_opened = 0
         self._positions_closed = 0
+        self._executions_attempted = 0
+        self._executions_succeeded = 0
         self._started_at: datetime | None = None
 
     async def handle_event(self, event: RegimeTransitionEvent) -> ScoredSignal:
@@ -52,7 +57,7 @@ class LiveOrchestrator:
         if signal.is_actionable:
             self._signals_actionable += 1
 
-            # Open a new paper position
+            # Open a new paper position (always, regardless of execution)
             position = self.paper_trader.open_position(signal)
             if position is not None:
                 self._positions_opened += 1
@@ -60,6 +65,19 @@ class LiveOrchestrator:
                     "Orchestrator: opened paper position %s for %s on %s",
                     position.position_id, event.asset, event.exchange,
                 )
+
+            # Attempt real execution if executor is configured
+            if self.executor is not None:
+                try:
+                    self._executions_attempted += 1
+                    exec_result = self.executor.execute(signal)
+                    if exec_result.action == "executed":
+                        self._executions_succeeded += 1
+                except Exception as e:
+                    logger.error(
+                        "Executor error for %s: %s", event.asset, e,
+                        exc_info=True,
+                    )
         else:
             # If regime dropped from HIGH_FUNDING, close existing positions
             if event.previous_regime == RegimeTier.HIGH_FUNDING:
@@ -97,7 +115,7 @@ class LiveOrchestrator:
         if self._started_at:
             uptime_seconds = (datetime.now(timezone.utc) - self._started_at).total_seconds()
 
-        return {
+        status = {
             "orchestrator": {
                 "started_at": self._started_at.isoformat() if self._started_at else None,
                 "uptime_seconds": round(uptime_seconds, 0),
@@ -109,3 +127,13 @@ class LiveOrchestrator:
             "paper_trading": paper_stats.model_dump(),
             "open_positions": self.paper_trader.get_open_positions_summary(),
         }
+
+        if self.executor is not None:
+            status["execution"] = {
+                "enabled": self.executor.enabled,
+                "dry_run": self.executor.dry_run,
+                "attempted": self._executions_attempted,
+                "succeeded": self._executions_succeeded,
+            }
+
+        return status
