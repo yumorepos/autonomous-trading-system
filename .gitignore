@@ -7,7 +7,9 @@ __pycache__/
 !.env.example
 *.key
 *.secret
+# Keep *.plist in general but track deploy/ plists
 *.plist
+!deploy/*.plist
 
 # === Runtime artifacts ===
 *.jsonl

@@ -8,14 +8,22 @@ echo "║   $(date -u '+%Y-%m-%d %H:%M:%S UTC')          ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 
-# Process check
-PID=$(cat data/paper_trader.pid 2>/dev/null)
-if [ -n "$PID" ] && kill -0 $PID 2>/dev/null; then
+# Process check — try launchd first, fall back to PID file
+LAUNCHD_INFO=$(launchctl list 2>/dev/null | grep paper-trader)
+if [ -n "$LAUNCHD_INFO" ]; then
+    PID=$(echo "$LAUNCHD_INFO" | awk '{print $1}')
+    EXIT=$(echo "$LAUNCHD_INFO" | awk '{print $2}')
     UPTIME=$(ps -p $PID -o etime= 2>/dev/null || echo "unknown")
-    echo "  Process: RUNNING (PID: $PID, uptime:$UPTIME)"
+    echo "  Process: RUNNING via launchd (PID: $PID, uptime:$UPTIME)"
 else
-    echo "  Process: NOT RUNNING"
-    echo "  Start with: nohup python3 scripts/run_paper_trading.py > data/paper_stdout.log 2>&1 &"
+    PID=$(cat data/paper_trader.pid 2>/dev/null)
+    if [ -n "$PID" ] && kill -0 $PID 2>/dev/null; then
+        UPTIME=$(ps -p $PID -o etime= 2>/dev/null || echo "unknown")
+        echo "  Process: RUNNING via nohup (PID: $PID, uptime:$UPTIME)"
+    else
+        echo "  Process: NOT RUNNING"
+        echo "  Start with: launchctl load ~/Library/LaunchAgents/com.ats.paper-trader.plist"
+    fi
 fi
 
 # API check
@@ -95,5 +103,6 @@ fi
 echo ""
 echo "  ─────────────────────────────────────"
 echo "  Full logs:  tail -50 data/paper_stdout.log"
-echo "  Stop:       kill \$(cat data/paper_trader.pid)"
-echo "  Restart:    nohup python3 scripts/run_paper_trading.py > data/paper_stdout.log 2>&1 &"
+echo "  Stop:       launchctl unload ~/Library/LaunchAgents/com.ats.paper-trader.plist"
+echo "  Start:      launchctl load ~/Library/LaunchAgents/com.ats.paper-trader.plist"
+echo "  Restart:    bash deploy/uninstall.sh && bash deploy/install.sh"
