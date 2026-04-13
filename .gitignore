@@ -38,3 +38,12 @@ dist/
 build/
 .venv/
 venv/
+CURRENT_MISSION.json
+.discipline-lock
+workspace/
+memory/
+truth/
+*.sqlite3
+*.bak
+*.backup
+*.old

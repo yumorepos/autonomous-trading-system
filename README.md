@@ -105,9 +105,9 @@ workspace/        Runtime state, logs, operator controls (gitignored)
 
 | Document | Status | Purpose |
 |----------|--------|---------|
-| EDGE_VALIDATION_REPORT.md | Accurate | Backtested edge analysis, GO/NO-GO verdict |
-| EXECUTION_PROOF_PROTOCOL.md | Accurate | Post-mortem on execution truth failures |
-| CAPITAL_PROTECTION_RULES.md | Aspirational | Design intent for protection rules |
+| docs/audits/EDGE_VALIDATION_REPORT.md | Accurate | Backtested edge analysis, GO/NO-GO verdict |
+| docs/architecture/EXECUTION_PROOF_PROTOCOL.md | Accurate | Post-mortem on execution truth failures |
+| docs/architecture/CAPITAL_PROTECTION_RULES.md | Aspirational | Design intent for protection rules |
 | docs/SYSTEM_ARCHITECTURE.md | Accurate | Paper trading pipeline architecture |
 | docs/RUNBOOK.md | Aspirational | Operations procedures (needs update) |
 | docs/OPERATOR_QUICKSTART.md | Accurate | Paper trading quickstart |
