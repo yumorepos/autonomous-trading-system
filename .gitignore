@@ -21,7 +21,8 @@ risk-guardian-state.json
 hl-entry-state.json
 
 # === Data ===
-data/historical/
+data/
+*.db
 
 # === Claude Code artifacts ===
 .claude/worktrees/
@@ -35,4 +36,3 @@ dist/
 build/
 .venv/
 venv/
-data/historical/

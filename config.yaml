@@ -1,0 +1,80 @@
+regime_thresholds:
+  low_funding_max_apy: 20
+  moderate_max_apy: 80
+  # HIGH_FUNDING = anything above moderate_max_apy
+
+duration_filter:
+  min_duration_minutes: 15
+  min_survival_probability: 0.40
+
+liquidity_filter:
+  min_liquidity_score: 0.15
+
+scoring_weights:
+  net_apy: 0.35
+  duration_confidence: 0.30
+  liquidity: 0.20
+  cross_exchange_spread: 0.15
+
+min_composite_score: 35.0
+min_net_apy_annualized: 15.0
+
+exchanges:
+  binance:
+    enabled: true
+    base_url: https://fapi.binance.com
+    fee_rate_round_trip: 0.0008
+    funding_interval_hours: 8
+  hyperliquid:
+    enabled: true
+    base_url: https://api.hyperliquid.xyz
+    fee_rate_round_trip: 0.0005
+    funding_interval_hours: 1
+  bybit:
+    enabled: true
+    base_url: https://api.bybit.com
+    fee_rate_round_trip: 0.0008
+    funding_interval_hours: 8
+
+assets:
+  - BLAST
+  - 0G
+  - YZY
+  - IMX
+  - JTO
+  - STABLE
+
+symbol_aliases:
+  "0G": ["OG", "ZEROG"]
+  "STABLE": ["STBL"]
+
+symbol_exchange_overrides:
+  hyperliquid:
+    "0G": "OG"
+
+telegram:
+  bot_token: ${TELEGRAM_BOT_TOKEN}
+  chat_id: ${TELEGRAM_CHAT_ID}
+  send_rejected: false
+
+history:
+  backfill_days: 30
+  db_path: data/regime_history.db
+  signal_log_path: data/signal_log.db
+
+api:
+  port: 8081
+
+connector:
+  jsonl_path: workspace/logs/trading_engine.jsonl
+  state_path: workspace/regime_state.json
+  poll_interval: 2.0
+  default_exchange: hyperliquid
+
+simulator:
+  notional_per_trade: 1000.0
+  max_open_positions: 5
+  entry_fee_bps: 4.0
+  exit_fee_bps: 4.0
+  slippage_bps: 2.0
+  log_path: data/paper_trades.jsonl
