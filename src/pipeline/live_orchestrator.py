@@ -122,22 +122,38 @@ class LiveOrchestrator:
         if signal.is_actionable:
             self._signals_actionable += 1
 
-            # Open a new paper position (always, regardless of execution).
-            # Fetch entry price for directional ROE tracking. In HIGH_FUNDING
-            # the scanner surfaces the asset with the highest (positive)
-            # funding rate, so the backtester convention is "short" to earn
-            # funding. Match that here.
-            prices_for_entry = self._get_mid_prices()
-            entry_price = float(prices_for_entry.get(event.asset, 0.0) or 0.0)
-            position = self.paper_trader.open_position(
-                signal, entry_price=entry_price, direction="short",
-            )
-            if position is not None:
-                self._positions_opened += 1
+            # Skip if we already hold this asset — prevents restart duplicates
+            # and repeated transitions from stacking size.
+            if self.paper_trader.has_open_position(event.asset, event.exchange):
                 logger.info(
-                    "Orchestrator: opened paper position %s for %s on %s",
-                    position.position_id, event.asset, event.exchange,
+                    "Skipping — already holding %s on %s",
+                    event.asset, event.exchange,
                 )
+            else:
+                # Open a new paper position (always, regardless of execution).
+                # Fetch entry price for directional ROE tracking. In HIGH_FUNDING
+                # the scanner surfaces the asset with the highest (positive)
+                # funding rate, so the backtester convention is "short" to earn
+                # funding. Match that here.
+                prices_for_entry = self._get_mid_prices()
+                entry_price = float(prices_for_entry.get(event.asset, 0.0) or 0.0)
+                if entry_price <= 0:
+                    logger.warning(
+                        "Entry price fetch failed for %s — opening with "
+                        "entry_price=0 (exit checks will skip until backfilled)",
+                        event.asset,
+                    )
+                position = self.paper_trader.open_position(
+                    signal, entry_price=entry_price, direction="short",
+                )
+                if position is not None:
+                    self._positions_opened += 1
+                    logger.info(
+                        "Orchestrator: opened paper position %s for %s on %s "
+                        "(entry_price=%.6f)",
+                        position.position_id, event.asset, event.exchange,
+                        entry_price,
+                    )
 
             # Attempt real execution if executor is configured
             if self.executor is not None:

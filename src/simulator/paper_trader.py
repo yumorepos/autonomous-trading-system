@@ -58,9 +58,115 @@ class PaperTrader:
         self.positions: list[SimulatedPosition] = []
         self.closed_positions: list[SimulatedPosition] = []
 
+        # Reload prior open positions from JSONL log so that a process
+        # restart doesn't drop state and open duplicate positions.
+        self._reload_open_positions_from_log()
+
     @property
     def open_positions(self) -> list[SimulatedPosition]:
         return [p for p in self.positions if p.is_open]
+
+    def has_open_position(self, asset: str, exchange: str | None = None) -> bool:
+        """True if there's an open position for this asset (+ optional exchange)."""
+        for p in self.open_positions:
+            if p.asset == asset and (exchange is None or p.exchange == exchange):
+                return True
+        return False
+
+    def _reload_open_positions_from_log(self) -> None:
+        """Reconstruct still-open positions from the JSONL log on startup.
+
+        For each OPEN record with no matching CLOSE, rebuild a
+        SimulatedPosition and place it in self.positions. Any rebuilt
+        position missing entry_price (legacy records) is closed as
+        'stale_cleanup' so it cannot linger unmonitored forever.
+        """
+        if not self.log_path.exists():
+            return
+
+        open_records: dict[str, dict] = {}
+        closed_ids: set[str] = set()
+        try:
+            with open(self.log_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    pid = rec.get("position_id")
+                    if not pid:
+                        continue
+                    action = rec.get("action")
+                    if action == "OPEN":
+                        open_records[pid] = rec
+                    elif action == "CLOSE":
+                        closed_ids.add(pid)
+        except OSError as e:
+            logger.warning("Failed to reload paper trades log: %s", e)
+            return
+
+        still_open = [
+            rec for pid, rec in open_records.items() if pid not in closed_ids
+        ]
+        if not still_open:
+            return
+
+        reloaded = 0
+        stale: list[SimulatedPosition] = []
+        for rec in still_open:
+            try:
+                entry_time = datetime.fromisoformat(
+                    rec.get("entry_time") or rec.get("timestamp")
+                )
+                if entry_time.tzinfo is None:
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+                regime_str = rec.get("entry_regime") or "HIGH_FUNDING"
+                try:
+                    entry_regime = RegimeTier(regime_str)
+                except ValueError:
+                    entry_regime = RegimeTier.HIGH_FUNDING
+                pos = SimulatedPosition(
+                    position_id=rec["position_id"],
+                    asset=rec["asset"],
+                    exchange=rec["exchange"],
+                    entry_time_utc=entry_time,
+                    entry_regime=entry_regime,
+                    notional_usd=float(rec.get("notional_usd", 0.0)),
+                    entry_funding_apy=float(rec.get("entry_funding_apy", 0.0)),
+                    entry_price=float(rec.get("entry_price", 0.0)),
+                    direction=rec.get("direction", "short"),
+                    peak_roe=float(rec.get("peak_roe", 0.0)),
+                    current_roe=float(rec.get("current_roe", 0.0)),
+                    price_pnl_usd=float(rec.get("price_pnl_usd", 0.0)),
+                    accumulated_funding_usd=float(rec.get("accumulated_funding_usd", 0.0)),
+                    accumulated_fees_usd=float(rec.get("accumulated_fees_usd", 0.0)),
+                    funding_payments=int(rec.get("funding_payments", 0)),
+                    is_open=True,
+                )
+            except (KeyError, ValueError, TypeError) as e:
+                logger.warning(
+                    "Skipping malformed OPEN record %s: %s",
+                    rec.get("position_id"), e,
+                )
+                continue
+            self.positions.append(pos)
+            reloaded += 1
+            if pos.entry_price <= 0:
+                stale.append(pos)
+
+        logger.info(
+            "Reloaded %d open paper position(s) from log (%d stale)",
+            reloaded, len(stale),
+        )
+        for pos in stale:
+            logger.warning(
+                "Stale position %s (%s) has no entry_price — closing as stale_cleanup",
+                pos.position_id, pos.asset,
+            )
+            self.close_position(pos, reason="stale_cleanup")
 
     @property
     def all_positions(self) -> list[SimulatedPosition]:
@@ -87,14 +193,26 @@ class PaperTrader:
             "exchange": position.exchange,
             "notional_usd": position.notional_usd,
             "entry_funding_apy": position.entry_funding_apy,
+            "entry_price": position.entry_price,
+            "direction": position.direction,
+            "peak_roe": position.peak_roe,
+            "current_roe": position.current_roe,
+            "price_pnl_usd": position.price_pnl_usd,
             "accumulated_funding_usd": position.accumulated_funding_usd,
             "accumulated_fees_usd": position.accumulated_fees_usd,
             "funding_payments": position.funding_payments,
             "net_pnl_usd": position.net_pnl_usd,
+            "entry_time": position.entry_time_utc.isoformat(),
+            "entry_regime": position.entry_regime.value
+                if hasattr(position.entry_regime, "value") else str(position.entry_regime),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         if position.exit_reason:
             record["exit_reason"] = position.exit_reason
+        if position.exit_price is not None:
+            record["exit_price"] = position.exit_price
+        if position.exit_time_utc is not None:
+            record["exit_time"] = position.exit_time_utc.isoformat()
 
         try:
             with open(self.log_path, "a") as f:
