@@ -17,8 +17,8 @@ from __future__ import annotations
 # What percentage of assets must have >100% APY funding to trigger EXTREME
 EXTREME_PCT_ABOVE_100 = 0.10        # 10% of assets
 
-# Minimum max funding APY (as decimal, 1.50 = 150%) for HIGH_FUNDING
-HIGH_FUNDING_MIN_MAX_APY = 1.50     # At least one asset at 150%+ APY
+# Minimum max funding APY (as decimal, 1.00 = 100%) for HIGH_FUNDING
+HIGH_FUNDING_MIN_MAX_APY = 1.00     # At least one asset at 100%+ APY (aligned with backtest entry threshold)
 
 # Minimum max funding APY for MODERATE
 MODERATE_MIN_MAX_APY = 0.75         # At least one asset at 75%+ APY
@@ -34,7 +34,7 @@ MODERATE_MIN_MAX_APY = 0.75         # At least one asset at 75%+ APY
 
 REGIME_EXIT_THRESHOLDS: dict[str, dict] = {
     "EXTREME":      {"pct_above_100": 0.05},       # must drop to 5%, not just below 10%
-    "HIGH_FUNDING": {"max_funding_apy": 1.20},      # must drop to 120%, not just below 150%
+    "HIGH_FUNDING": {"max_funding_apy": 0.80},      # must drop to 80%, not just below 100%
     "MODERATE":     {"max_funding_apy": 0.60},       # must drop to 60%, not just below 75%
     "LOW_FUNDING":  {},                              # can't downgrade further
 }

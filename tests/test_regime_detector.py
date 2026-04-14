@@ -569,13 +569,13 @@ class TestApplyHysteresis(unittest.TestCase):
         self.assertEqual(regime, "LOW_FUNDING")
 
     def test_high_funding_exit_hysteresis(self):
-        """HIGH_FUNDING should stay at 130% (above 120% exit threshold)."""
-        regime = apply_hysteresis("HIGH_FUNDING", self._metrics(max_apy=1.30))
+        """HIGH_FUNDING should stay at 90% (above 80% exit threshold)."""
+        regime = apply_hysteresis("HIGH_FUNDING", self._metrics(max_apy=0.90))
         self.assertEqual(regime, "HIGH_FUNDING")
 
     def test_high_funding_actual_exit(self):
-        """HIGH_FUNDING → MODERATE when below 120% but above 75%."""
-        regime = apply_hysteresis("HIGH_FUNDING", self._metrics(max_apy=1.10))
+        """HIGH_FUNDING → MODERATE when below 80% but above 75%."""
+        regime = apply_hysteresis("HIGH_FUNDING", self._metrics(max_apy=0.78))
         self.assertEqual(regime, "MODERATE")
 
     def test_extreme_exit_hysteresis(self):
