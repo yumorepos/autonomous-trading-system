@@ -72,7 +72,7 @@ BACKTEST_INITIAL_CAPITAL = 1000.0
 # Execution Bridge (signal filter pipeline → real trades)
 # ---------------------------------------------------------------------------
 
-EXECUTION_ENABLED = False            # Master switch — must be manually set True
+EXECUTION_ENABLED = True             # Master switch — must be manually set True
 EXECUTION_DRY_RUN = True             # Default: simulate only (log, don't trade)
 EXECUTION_MIN_SCORE = 0.7            # Minimum composite score (0-1 scale, maps to 0-100)
 EXECUTION_MAX_TRADE_USD = 35.0       # Hard ceiling per trade (USD) — raised from 15.0 per backtest sweep (180d, PF 2.02 at 100% APY threshold, 4.95% DD)
