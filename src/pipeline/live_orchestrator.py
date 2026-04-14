@@ -48,6 +48,8 @@ class LiveOrchestrator:
         self._started_at: datetime | None = None
         self._hl_info = None  # lazy HL SDK client for mid-price fetch
         self._price_fetch_failures = 0
+        self._exit_check_iterations = 0
+        self._last_exit_check_ts: datetime | None = None
 
         # Run exit checks on every engine scan cycle (~2 min), not just on
         # regime transitions. Without this, a stable HIGH_FUNDING regime
@@ -63,7 +65,11 @@ class LiveOrchestrator:
         try:
             if self._hl_info is None:
                 from hyperliquid.info import Info  # type: ignore
-                self._hl_info = Info(skip_ws=True)
+                # CRITICAL: timeout=10 — without this, the SDK's underlying
+                # requests.post() runs with timeout=None and will block the
+                # entire asyncio event loop forever on any network hiccup,
+                # silently hanging the exit-check loop.
+                self._hl_info = Info(skip_ws=True, timeout=10)
             mids = self._hl_info.all_mids()
             if not isinstance(mids, dict):
                 return {}
@@ -83,33 +89,64 @@ class LiveOrchestrator:
             return {}
 
     def _check_paper_exits(self) -> None:
-        """Run SL/TP/TIMEOUT/TRAILING checks on open paper positions."""
-        open_before = list(self.paper_trader.open_positions)
-        if not open_before:
-            return
-        prices = self._get_mid_prices()
-        if not prices:
-            return
-        # Log current state before check_exits mutates ROE/peak.
-        for pos in open_before:
-            logger.info(
-                "Exit check: %d open position(s), %s ROE=%.2f%% peak_roe=%.2f%%",
-                len(open_before), pos.asset,
-                pos.current_roe * 100, pos.peak_roe * 100,
-            )
+        """Run SL/TP/TIMEOUT/TRAILING checks on open paper positions.
+
+        Wrapped in a blanket try/except so NO exception from any step
+        (price fetch, logging, check_exits, etc.) can propagate out and
+        kill the tick-callback chain. A single bad tick must never
+        silence the loop.
+        """
         try:
-            closed = self.paper_trader.check_exits(prices)
+            self._exit_check_iterations += 1
+            self._last_exit_check_ts = datetime.now(timezone.utc)
+
+            # Heartbeat every 10 iterations (~20 min at 2-min scan cadence).
+            # Gives us a last-known-good timestamp if the loop hangs again.
+            if self._exit_check_iterations % 10 == 0:
+                uptime_h = 0.0
+                if self._started_at:
+                    uptime_h = (
+                        datetime.now(timezone.utc) - self._started_at
+                    ).total_seconds() / 3600.0
+                logger.info(
+                    "Orchestrator heartbeat: iter=%d open=%d price_fetch_failures=%d uptime=%.2fh",
+                    self._exit_check_iterations,
+                    len(self.paper_trader.open_positions),
+                    self._price_fetch_failures,
+                    uptime_h,
+                )
+
+            open_before = list(self.paper_trader.open_positions)
+            if not open_before:
+                return
+            prices = self._get_mid_prices()
+            if not prices:
+                return
+            # Log current state before check_exits mutates ROE/peak.
+            for pos in open_before:
+                logger.info(
+                    "Exit check: %d open position(s), %s ROE=%.2f%% peak_roe=%.2f%%",
+                    len(open_before), pos.asset,
+                    pos.current_roe * 100, pos.peak_roe * 100,
+                )
+            try:
+                closed = self.paper_trader.check_exits(prices)
+            except Exception as e:
+                logger.error("Paper exit check raised: %s", e, exc_info=True)
+                return
+            for pos in closed:
+                self._positions_closed += 1
+                logger.info(
+                    "PAPER EXIT: %s %s reason=%s roe=%.2f%% hold=%.2fh pnl=$%.2f",
+                    pos.asset, pos.direction, pos.exit_reason,
+                    pos.current_roe * 100,
+                    pos.holding_duration_seconds / 3600.0,
+                    pos.pnl_usd,
+                )
         except Exception as e:
-            logger.error("Paper exit check raised: %s", e, exc_info=True)
-            return
-        for pos in closed:
-            self._positions_closed += 1
-            logger.info(
-                "PAPER EXIT: %s %s reason=%s roe=%.2f%% hold=%.2fh pnl=$%.2f",
-                pos.asset, pos.direction, pos.exit_reason,
-                pos.current_roe * 100,
-                pos.holding_duration_seconds / 3600.0,
-                pos.pnl_usd,
+            logger.error(
+                "Exit check loop error (swallowed to keep loop alive): %s",
+                e, exc_info=True,
             )
 
     async def handle_event(self, event: RegimeTransitionEvent) -> ScoredSignal:
@@ -238,11 +275,27 @@ class LiveOrchestrator:
         # waiting for the next transition.
         await self._evaluate_startup_regime()
 
-        async for event in self.connector.watch():
+        # Outer while guards the async-for itself: if the connector.watch()
+        # generator ever raises (e.g. unrecoverable file error), we log
+        # and restart watching rather than letting the exception propagate
+        # out to TaskGroup which would tear down uvicorn too.
+        while True:
             try:
-                await self.handle_event(event)
+                async for event in self.connector.watch():
+                    try:
+                        await self.handle_event(event)
+                    except Exception as e:
+                        logger.error("Failed to handle event: %s", e, exc_info=True)
+                # watch() returned normally (stop()) — exit the run loop.
+                break
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                logger.error("Failed to handle event: %s", e, exc_info=True)
+                logger.error(
+                    "connector.watch() raised — restarting watch in 5s: %s",
+                    e, exc_info=True,
+                )
+                await asyncio.sleep(5)
 
     def get_status(self) -> dict:
         """Return orchestrator status for the stats API."""

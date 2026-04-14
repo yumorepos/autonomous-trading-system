@@ -206,13 +206,21 @@ class ATSConnector:
             return []
 
         lines = []
-        with open(self.jsonl_path, "r") as f:
-            f.seek(self._file_position)
-            for line in f:
-                stripped = line.strip()
-                if stripped:
-                    lines.append(stripped)
-            self._file_position = f.tell()
+        try:
+            with open(self.jsonl_path, "r") as f:
+                f.seek(self._file_position)
+                for line in f:
+                    stripped = line.strip()
+                    if stripped:
+                        lines.append(stripped)
+                self._file_position = f.tell()
+        except OSError as e:
+            # Transient: JSONL briefly unavailable (log rotation, Docker
+            # volume hiccup). Skip this tick; do not propagate and kill
+            # the watch generator — which would kill the whole orchestrator
+            # task and (via TaskGroup) the uvicorn server alongside it.
+            logger.warning("Failed to read JSONL this tick: %s — skipping", e)
+            return []
 
         return lines
 
@@ -286,7 +294,17 @@ class ATSConnector:
         )
 
         while self._running:
-            events = self.poll_once()
+            try:
+                events = self.poll_once()
+            except Exception as e:
+                # Blanket safety: never let a single bad poll kill the
+                # watch generator. Callbacks already have their own
+                # try/except; this guards against anything we missed
+                # (unexpected parse errors, stat failures, etc.).
+                logger.error(
+                    "poll_once raised — continuing loop: %s", e, exc_info=True,
+                )
+                events = []
             for event in events:
                 yield event
 
