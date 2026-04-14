@@ -49,6 +49,11 @@ class LiveOrchestrator:
         self._hl_info = None  # lazy HL SDK client for mid-price fetch
         self._price_fetch_failures = 0
 
+        # Run exit checks on every engine scan cycle (~2 min), not just on
+        # regime transitions. Without this, a stable HIGH_FUNDING regime
+        # would leave open positions unmonitored for SL/TP/trailing/timeout.
+        self.connector.on_tick(self._check_paper_exits)
+
     def _get_mid_prices(self) -> dict[str, float]:
         """Fetch latest mid prices for all Hyperliquid perps.
 
@@ -79,11 +84,19 @@ class LiveOrchestrator:
 
     def _check_paper_exits(self) -> None:
         """Run SL/TP/TIMEOUT/TRAILING checks on open paper positions."""
-        if not self.paper_trader.open_positions:
+        open_before = list(self.paper_trader.open_positions)
+        if not open_before:
             return
         prices = self._get_mid_prices()
         if not prices:
             return
+        # Log current state before check_exits mutates ROE/peak.
+        for pos in open_before:
+            logger.info(
+                "Exit check: %d open position(s), %s ROE=%.2f%% peak_roe=%.2f%%",
+                len(open_before), pos.asset,
+                pos.current_roe * 100, pos.peak_roe * 100,
+            )
         try:
             closed = self.paper_trader.check_exits(prices)
         except Exception as e:

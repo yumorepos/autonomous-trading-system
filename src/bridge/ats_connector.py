@@ -64,11 +64,21 @@ class ATSConnector:
         self._file_position: int = 0
         self._running = False
         self._callbacks: list[Callable] = []
+        self._tick_callbacks: list[Callable] = []
         self._last_regime_status: dict | None = None  # Cache latest regime_status event
 
     def on_event(self, callback: Callable[[RegimeTransitionEvent], None]):
         """Register a callback for regime transition events."""
         self._callbacks.append(callback)
+
+    def on_tick(self, callback: Callable[[], None]):
+        """Register a callback that fires on every regime_status line.
+
+        This runs on every engine scan cycle (~2 min), not just on
+        regime transitions. Useful for periodic tasks like exit checks
+        that must run while the regime is stable.
+        """
+        self._tick_callbacks.append(callback)
 
     def _read_regime_state(self) -> dict | None:
         """Read the current regime_state.json for enrichment."""
@@ -129,6 +139,11 @@ class ATSConnector:
         # Cache regime_status events for top_asset enrichment
         if event_type == "regime_status":
             self._last_regime_status = data
+            for cb in self._tick_callbacks:
+                try:
+                    cb()
+                except Exception as e:
+                    logger.error("Tick callback error: %s", e, exc_info=True)
             return None
 
         if event_type != "regime_updated":
