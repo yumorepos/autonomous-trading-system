@@ -125,6 +125,15 @@ class CompositeSignalScorer:
         is_actionable = len(rejection_reasons) == 0
         rejection_reason = "; ".join(rejection_reasons) if rejection_reasons else None
 
+        # Direction inference: HIGH_FUNDING regime is overwhelmingly the
+        # positive-funding case (the scanner picks the asset with the highest
+        # funding APY, which is virtually always positive at these levels).
+        # Backtester convention: "short" when funding > 0 (we earn funding).
+        # TODO: when the engine starts emitting the signed funding rate per
+        # asset in the JSONL stream, switch this to:
+        #   direction = "short" if event.funding_rate > 0 else "long"
+        direction = "short"
+
         return ScoredSignal(
             event=event,
             composite_score=composite,
@@ -135,6 +144,7 @@ class CompositeSignalScorer:
             is_actionable=is_actionable,
             rejection_reason=rejection_reason,
             cross_exchange_spread=cross_spread,
+            direction=direction,
         )
 
     async def _compute_cross_exchange_spread(

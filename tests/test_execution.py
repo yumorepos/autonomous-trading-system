@@ -458,10 +458,15 @@ class TestLiveExecution:
         assert result.action == "executed"
         mock_exchange.market_open.assert_called_once()
 
-        # Verify the order was placed with correct direction (long = True)
+        # Verify the order was placed with the correct direction.
+        # Default ScoredSignal.direction is now "short" (HIGH_FUNDING
+        # convention: positive funding → short earns funding), so is_buy
+        # must be False. Previously this test asserted is_buy=True, which
+        # encoded the "always LONG" bug in the executor — see
+        # TestDirectionRouting for full coverage.
         call_args = mock_exchange.market_open.call_args
-        assert call_args[0][0] == "BTC"  # coin
-        assert call_args[0][1] is True   # is_buy (long)
+        assert call_args[0][0] == "BTC"
+        assert call_args[0][1] is False  # is_buy=False → SHORT
 
     def test_exchange_error_doesnt_crash(self):
         mock_exchange = MagicMock()
@@ -572,3 +577,95 @@ class TestExecutionResult:
         assert d["asset"] == "BTC"
         assert d["signal_score"] == 80.0
         assert "timestamp" in d
+
+
+
+# ============================================================
+# Direction handling — guards against the "always LONG" bug
+# ============================================================
+
+def _exec_with_full_mocks(direction_on_signal=None, direction_kw=True):
+    """Build an executor + mocks ready to reach market_open."""
+    mock_exchange = MagicMock()
+    mock_exchange.market_open.return_value = {
+        "status": "ok",
+        "response": {
+            "type": "order",
+            "data": {"statuses": [{"filled": {"avgPx": "100.0", "totalSz": "1.0"}}]},
+        },
+    }
+    mock_info = MagicMock()
+    mock_info.user_state.return_value = {
+        "marginSummary": {"accountValue": "100"},
+        "assetPositions": [],
+    }
+    mock_info.spot_user_state.return_value = {"balances": []}
+    mock_info.all_mids.return_value = {"BTC": "100.0"}
+    mock_info.meta.return_value = {"universe": [{"name": "BTC", "szDecimals": 4}]}
+
+    executor = _make_executor(
+        enabled=True, dry_run=False, hl_exchange=mock_exchange, hl_info=mock_info,
+    )
+    sig_kwargs = {"score": 80.0}
+    signal = _make_signal(**sig_kwargs)
+    if direction_kw and direction_on_signal is not None:
+        signal.direction = direction_on_signal
+    return executor, mock_exchange, signal
+
+
+class TestDirectionRouting:
+    """Verify the executor converts signal.direction into the correct
+    is_buy flag for hyperliquid.exchange.Exchange.market_open.
+
+    HL SDK convention (verified on VPS): market_open(name, is_buy=True)
+    opens LONG, is_buy=False opens SHORT.
+    """
+
+    def test_short_signal_routes_to_is_buy_false(self):
+        executor, mock_exchange, signal = _exec_with_full_mocks(direction_on_signal="short")
+        with patch.object(executor, "_log_execution"):
+            executor.execute(signal)
+        assert mock_exchange.market_open.called
+        args, kwargs = mock_exchange.market_open.call_args
+        # market_open(asset, is_buy, size_coins)
+        assert args[0] == "BTC"
+        assert args[1] is False, "short signal must call market_open with is_buy=False"
+
+    def test_long_signal_routes_to_is_buy_true(self):
+        executor, mock_exchange, signal = _exec_with_full_mocks(direction_on_signal="long")
+        with patch.object(executor, "_log_execution"):
+            executor.execute(signal)
+        assert mock_exchange.market_open.called
+        args, _ = mock_exchange.market_open.call_args
+        assert args[1] is True
+
+    def test_missing_direction_defaults_to_short(self):
+        """If signal has no direction attribute, executor must default
+        to SHORT (matches backtester convention for HIGH_FUNDING).
+        Defending against the historical "always LONG" bug.
+        """
+        executor, mock_exchange, signal = _exec_with_full_mocks(direction_kw=False)
+        # Force-remove the field on this signal instance
+        try:
+            object.__delattr__(signal, "direction")
+        except AttributeError:
+            pass
+        with patch.object(executor, "_log_execution"):
+            executor.execute(signal)
+        assert mock_exchange.market_open.called
+        args, _ = mock_exchange.market_open.call_args
+        assert args[1] is False, "missing direction must default to SHORT (is_buy=False)"
+
+    def test_default_scoredsignal_direction_is_short(self):
+        """Defense in depth: a freshly constructed ScoredSignal that
+        omits direction must default to short.
+        """
+        signal = _make_signal()
+        assert signal.direction == "short"
+
+    def test_unknown_direction_falls_back_to_short(self):
+        executor, mock_exchange, signal = _exec_with_full_mocks(direction_on_signal="sideways")
+        with patch.object(executor, "_log_execution"):
+            executor.execute(signal)
+        args, _ = mock_exchange.market_open.call_args
+        assert args[1] is False

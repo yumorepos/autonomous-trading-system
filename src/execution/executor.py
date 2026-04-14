@@ -382,9 +382,20 @@ class Executor:
         context["size_coins"] = size_coins
         context["leverage"] = self.leverage
 
+        # Resolve trade direction from the signal. Default to "short" if
+        # the signal didn't carry one — that matches the backtester /
+        # paper-trader convention for HIGH_FUNDING (positive funding,
+        # short earns). Inverting this on a real-money trade would
+        # cause us to PAY funding instead of collecting it.
+        direction = (getattr(signal, "direction", None) or "short").lower()
+        if direction not in ("long", "short"):
+            direction = "short"
+        is_buy = direction == "long"
+        context["direction"] = direction
+
         # Place market order
         try:
-            response = self.hl_exchange.market_open(asset, True, size_coins)
+            response = self.hl_exchange.market_open(asset, is_buy, size_coins)
         except Exception as e:
             result = ExecutionResult(
                 action="rejected",
@@ -442,7 +453,7 @@ class Executor:
             asset, size_usd, price, size_coins, signal.composite_score,
         )
         self._alert(
-            f"EXECUTED: {asset} LONG ${size_usd:.2f} @ {price:.4f} "
+            f"EXECUTED: {asset} {direction.upper()} ${size_usd:.2f} @ {price:.4f} "
             f"(score={signal.composite_score:.0f}, APY={signal.net_expected_apy:.1f}%)"
         )
         return result
