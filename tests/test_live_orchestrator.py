@@ -139,6 +139,61 @@ class TestHandleEvent:
         assert orchestrator._positions_opened == 3
 
 
+class TestStartupRegimeEvaluation:
+    @pytest.mark.asyncio
+    async def test_startup_high_funding_opens_position(self, orchestrator):
+        """On startup with HIGH_FUNDING regime cached, a position opens."""
+        orchestrator.connector.current_regime_status.return_value = {
+            "regime": "HIGH_FUNDING",
+            "max_funding_apy": 1.01,
+            "top_asset": "YZY",
+        }
+        orchestrator.connector._resolve_top_asset.return_value = ("YZY", "hyperliquid")
+
+        signal_event = _make_event(asset="YZY", apy=101.0)
+        signal = _make_signal(signal_event, actionable=True)
+        orchestrator.pipeline.process.return_value = signal
+
+        await orchestrator._evaluate_startup_regime()
+
+        assert orchestrator._events_processed == 1
+        assert orchestrator._positions_opened == 1
+        assert len(orchestrator.paper_trader.open_positions) == 1
+
+    @pytest.mark.asyncio
+    async def test_startup_non_high_funding_does_nothing(self, orchestrator):
+        orchestrator.connector.current_regime_status.return_value = {
+            "regime": "MODERATE",
+            "max_funding_apy": 0.80,
+            "top_asset": "YZY",
+        }
+
+        await orchestrator._evaluate_startup_regime()
+
+        assert orchestrator._events_processed == 0
+        assert orchestrator._positions_opened == 0
+
+    @pytest.mark.asyncio
+    async def test_startup_no_status_does_nothing(self, orchestrator):
+        orchestrator.connector.current_regime_status.return_value = None
+
+        await orchestrator._evaluate_startup_regime()
+
+        assert orchestrator._events_processed == 0
+
+    @pytest.mark.asyncio
+    async def test_startup_unknown_asset_skips(self, orchestrator):
+        orchestrator.connector.current_regime_status.return_value = {
+            "regime": "HIGH_FUNDING",
+            "max_funding_apy": 1.05,
+        }
+        orchestrator.connector._resolve_top_asset.return_value = ("UNKNOWN", "hyperliquid")
+
+        await orchestrator._evaluate_startup_regime()
+
+        assert orchestrator._events_processed == 0
+
+
 class TestGetStatus:
     @pytest.mark.asyncio
     async def test_status_structure(self, orchestrator):

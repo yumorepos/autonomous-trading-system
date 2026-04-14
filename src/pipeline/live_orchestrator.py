@@ -154,6 +154,48 @@ class LiveOrchestrator:
 
         return signal
 
+    async def _evaluate_startup_regime(self) -> None:
+        """If already in HIGH_FUNDING on startup, synthesize a transition event.
+
+        The orchestrator otherwise only acts on fresh regime_updated events
+        in the JSONL. A restart while already in HIGH_FUNDING would sit
+        idle until the next transition. Use the cached regime_status from
+        ATSConnector.seek_to_end() to evaluate the current top asset
+        immediately via the same handle_event() path as a live transition.
+        """
+        status = self.connector.current_regime_status()
+        if not status:
+            return
+        regime_str = status.get("regime") or status.get("new_regime")
+        if regime_str != "HIGH_FUNDING":
+            return
+
+        asset, exchange = self.connector._resolve_top_asset()
+        if asset == "UNKNOWN":
+            logger.info(
+                "Startup: current regime is HIGH_FUNDING but no top asset "
+                "available — skipping startup evaluation"
+            )
+            return
+
+        max_apy_pct = float(status.get("max_funding_apy", 0.0)) * 100
+        event = RegimeTransitionEvent(
+            asset=asset,
+            exchange=exchange,
+            new_regime=RegimeTier.HIGH_FUNDING,
+            previous_regime=RegimeTier.MODERATE,
+            max_apy_annualized=max_apy_pct,
+            timestamp_utc=datetime.now(timezone.utc),
+        )
+        logger.info(
+            "Startup: current regime is HIGH_FUNDING, evaluating top asset %s",
+            asset,
+        )
+        try:
+            await self.handle_event(event)
+        except Exception as e:
+            logger.error("Startup regime evaluation failed: %s", e, exc_info=True)
+
     async def run(self):
         """Main loop: watch for events and process them."""
         self._started_at = datetime.now(timezone.utc)
@@ -162,6 +204,10 @@ class LiveOrchestrator:
         self.connector.seek_to_end()
 
         logger.info("LiveOrchestrator started — watching for regime transitions")
+
+        # Startup evaluation: if already in HIGH_FUNDING, act now instead of
+        # waiting for the next transition.
+        await self._evaluate_startup_regime()
 
         async for event in self.connector.watch():
             try:

@@ -239,6 +239,14 @@ class ATSConnector:
         except OSError as e:
             logger.warning("Failed to pre-seed regime_status: %s", e)
 
+    def current_regime_status(self) -> dict | None:
+        """Return the latest cached regime_status event (or None).
+
+        Populated by seek_to_end() on startup and updated on every
+        regime_status line parsed during watch().
+        """
+        return self._last_regime_status
+
     def poll_once(self) -> list[RegimeTransitionEvent]:
         """Poll for new events. Returns list of parsed events."""
         lines = self.read_new_lines()
