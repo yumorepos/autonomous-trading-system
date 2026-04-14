@@ -72,6 +72,14 @@ class ScoredSignal(BaseModel):
     is_actionable: bool
     rejection_reason: str | None = None
     cross_exchange_spread: float | None = None
+    # Trade direction: "short" earns positive funding (the HIGH_FUNDING
+    # regime convention used by the backtester); "long" earns negative
+    # funding. Default "short" because the engine currently emits only
+    # the absolute funding APY — the sign isn't propagated through the
+    # JSONL event stream yet, and HIGH_FUNDING is overwhelmingly the
+    # positive-funding case in practice. Override when the upstream
+    # event carries a signed funding rate.
+    direction: str = "short"  # "short" or "long" 
 
 
 class TickerInfo(BaseModel):
@@ -85,7 +93,13 @@ class TickerInfo(BaseModel):
 # --- Paper Trading Models ---
 
 class SimulatedPosition(BaseModel):
-    """A simulated delta-neutral position (long spot + short perp)."""
+    """A simulated directional perp position with ROE-based exits.
+
+    Matches backtester / trading_engine semantics: single-leg perp, price-PnL
+    via ROE on (direction, entry_price, current_price), plus any funding
+    accrual on top. Fields default-valued for backward compat with older
+    delta-neutral tests that don't pass price/direction.
+    """
     position_id: str
     asset: str
     exchange: str
@@ -93,6 +107,14 @@ class SimulatedPosition(BaseModel):
     entry_regime: RegimeTier
     notional_usd: float
     entry_funding_apy: float
+    # --- directional fields (new) ---
+    entry_price: float = 0.0
+    direction: str = "short"  # "short" or "long"
+    peak_roe: float = 0.0     # high-water mark of ROE for trailing stop
+    current_roe: float = 0.0  # latest computed ROE
+    exit_price: float | None = None
+    price_pnl_usd: float = 0.0
+    # --- existing funding/fee bookkeeping ---
     accumulated_funding_usd: float = 0.0
     accumulated_fees_usd: float = 0.0
     funding_payments: int = 0
@@ -103,12 +125,24 @@ class SimulatedPosition(BaseModel):
 
     @property
     def net_pnl_usd(self) -> float:
-        return self.accumulated_funding_usd - self.accumulated_fees_usd
+        return (
+            self.price_pnl_usd
+            + self.accumulated_funding_usd
+            - self.accumulated_fees_usd
+        )
 
     @property
     def holding_duration_seconds(self) -> float:
         end = self.exit_time_utc or datetime.now(timezone.utc)
         return (end - self.entry_time_utc).total_seconds()
+
+    def compute_roe(self, current_price: float) -> float:
+        """Compute current ROE for the position given latest price."""
+        if self.entry_price <= 0 or current_price <= 0:
+            return 0.0
+        if self.direction == "short":
+            return (self.entry_price - current_price) / self.entry_price
+        return (current_price - self.entry_price) / self.entry_price
 
 
 class PaperTradeStats(BaseModel):

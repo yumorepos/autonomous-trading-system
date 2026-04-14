@@ -67,7 +67,10 @@ def orchestrator(tmp_path):
             log_path=tmp_path / "trades.jsonl",
         )
 
-    return LiveOrchestrator(connector, pipeline, paper_trader)
+    orch = LiveOrchestrator(connector, pipeline, paper_trader)
+    # Stub price fetch so unit tests don't hit Hyperliquid API
+    orch._get_mid_prices = lambda: {}
+    return orch
 
 
 class TestHandleEvent:
@@ -98,7 +101,11 @@ class TestHandleEvent:
         assert orchestrator._positions_opened == 0
 
     @pytest.mark.asyncio
-    async def test_regime_exit_closes_positions(self, orchestrator):
+    async def test_regime_downgrade_does_not_close_position(self, orchestrator):
+        """Regime downgrade from HIGH_FUNDING must NOT close the paper
+        position — SL/TP/TIMEOUT/TRAILING now manage exits (matches
+        backtester). Behavior diverged from legacy regime_exit close.
+        """
         # First: open a position
         event1 = _make_event(asset="ETH")
         signal1 = _make_signal(event1, actionable=True)
@@ -116,8 +123,9 @@ class TestHandleEvent:
         orchestrator.pipeline.process.return_value = signal2
         await orchestrator.handle_event(event2)
 
-        assert len(orchestrator.paper_trader.open_positions) == 0
-        assert orchestrator._positions_closed == 1
+        # Position still open — only SL/TP/TIMEOUT/TRAILING can close it.
+        assert len(orchestrator.paper_trader.open_positions) == 1
+        assert orchestrator._positions_closed == 0
 
     @pytest.mark.asyncio
     async def test_multiple_assets_tracked(self, orchestrator):
@@ -146,3 +154,86 @@ class TestGetStatus:
         assert status["orchestrator"]["events_processed"] == 1
         assert status["orchestrator"]["positions_opened"] == 1
         assert len(status["open_positions"]) == 1
+
+
+
+# --- New tests: directional exit triggers via _check_paper_exits ---
+
+from datetime import timedelta
+
+
+class TestPaperExitChecks:
+    @pytest.mark.asyncio
+    async def test_stop_loss_closes_position(self, orchestrator):
+        """With entry_price set, a big adverse move closes via STOP_LOSS."""
+        from config.risk_params import STOP_LOSS_ROE
+        # Open short at 100
+        event = _make_event(asset="ETH")
+        event.timestamp_utc = datetime.now(timezone.utc)
+        signal = _make_signal(event, actionable=True)
+        orchestrator.pipeline.process.return_value = signal
+        orchestrator._get_mid_prices = lambda: {"ETH": 100.0}
+        await orchestrator.handle_event(event)
+        assert len(orchestrator.paper_trader.open_positions) == 1
+        pos = orchestrator.paper_trader.open_positions[0]
+        assert pos.entry_price == 100.0
+        assert pos.direction == "short"
+
+        # Price spikes up — short loses. Use |SL|+1% buffer.
+        bad_price = 100.0 * (1 + abs(STOP_LOSS_ROE) + 0.01)
+        orchestrator._get_mid_prices = lambda: {"ETH": bad_price}
+        # Any further event triggers the exit check
+        event2 = _make_event(asset="BTC", new_regime=RegimeTier.MODERATE,
+                             prev_regime=RegimeTier.MODERATE)
+        signal2 = _make_signal(event2, actionable=False)
+        orchestrator.pipeline.process.return_value = signal2
+        await orchestrator.handle_event(event2)
+
+        assert len(orchestrator.paper_trader.open_positions) == 0
+        closed = orchestrator.paper_trader.closed_positions[-1]
+        assert closed.exit_reason == "STOP_LOSS"
+
+    @pytest.mark.asyncio
+    async def test_timeout_closes_position(self, orchestrator):
+        from config.risk_params import TIMEOUT_HOURS
+        event = _make_event(asset="ETH")
+        event.timestamp_utc = datetime.now(timezone.utc)
+        signal = _make_signal(event, actionable=True)
+        orchestrator.pipeline.process.return_value = signal
+        orchestrator._get_mid_prices = lambda: {"ETH": 100.0}
+        await orchestrator.handle_event(event)
+        pos = orchestrator.paper_trader.open_positions[0]
+        # Backdate entry so it looks like TIMEOUT_HOURS+1h old
+        pos.entry_time_utc = datetime.now(timezone.utc) - timedelta(
+            hours=TIMEOUT_HOURS + 1
+        )
+        # Price unchanged — TIMEOUT should fire before any ROE trigger
+        event2 = _make_event(asset="BTC", new_regime=RegimeTier.MODERATE,
+                             prev_regime=RegimeTier.MODERATE)
+        signal2 = _make_signal(event2, actionable=False)
+        orchestrator.pipeline.process.return_value = signal2
+        await orchestrator.handle_event(event2)
+
+        assert len(orchestrator.paper_trader.open_positions) == 0
+        assert orchestrator.paper_trader.closed_positions[-1].exit_reason == "TIMEOUT"
+
+    @pytest.mark.asyncio
+    async def test_price_fetch_failure_is_graceful(self, orchestrator):
+        """If mid-price fetch returns {}, exit check must skip silently."""
+        event = _make_event(asset="ETH")
+        event.timestamp_utc = datetime.now(timezone.utc)
+        signal = _make_signal(event, actionable=True)
+        orchestrator.pipeline.process.return_value = signal
+        orchestrator._get_mid_prices = lambda: {"ETH": 100.0}
+        await orchestrator.handle_event(event)
+
+        # Simulate fetch failure
+        orchestrator._get_mid_prices = lambda: {}
+        event2 = _make_event(asset="BTC", new_regime=RegimeTier.MODERATE,
+                             prev_regime=RegimeTier.MODERATE)
+        signal2 = _make_signal(event2, actionable=False)
+        orchestrator.pipeline.process.return_value = signal2
+        await orchestrator.handle_event(event2)
+
+        # Position still open; no crash.
+        assert len(orchestrator.paper_trader.open_positions) == 1

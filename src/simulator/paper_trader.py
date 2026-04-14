@@ -13,6 +13,13 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from config.risk_params import (
+    STOP_LOSS_ROE,
+    TAKE_PROFIT_ROE,
+    TIMEOUT_HOURS,
+    TRAILING_STOP_ACTIVATE,
+    TRAILING_STOP_DISTANCE,
+)
 from src.config import get_config
 from src.models import (
     PaperTradeStats,
@@ -95,8 +102,18 @@ class PaperTrader:
         except OSError as e:
             logger.warning("Failed to log trade: %s", e)
 
-    def open_position(self, signal: ScoredSignal) -> SimulatedPosition | None:
+    def open_position(
+        self,
+        signal: ScoredSignal,
+        entry_price: float = 0.0,
+        direction: str = "short",
+    ) -> SimulatedPosition | None:
         """Open a new paper position based on an actionable signal.
+
+        Args:
+            signal: scored signal from the pipeline
+            entry_price: mid price at entry (used for ROE-based exits)
+            direction: "short" (earn positive funding) or "long"
 
         Returns the SimulatedPosition or None if at capacity.
         """
@@ -127,6 +144,8 @@ class PaperTrader:
             notional_usd=self.notional_per_trade,
             entry_funding_apy=signal.net_expected_apy,
             accumulated_fees_usd=entry_fees,
+            entry_price=entry_price,
+            direction=direction,
         )
 
         self.positions.append(position)
@@ -144,10 +163,23 @@ class PaperTrader:
         self,
         position: SimulatedPosition,
         reason: str = "regime_change",
+        exit_price: float | None = None,
     ) -> SimulatedPosition:
-        """Close an open paper position."""
+        """Close an open paper position.
+
+        If ``exit_price`` is supplied and the position has a valid
+        ``entry_price``, a directional price PnL is recorded
+        (``notional_usd * roe``) in addition to any accrued funding.
+        """
         if not position.is_open:
             return position
+
+        # Directional price PnL (matches backtester / engine ROE math)
+        if exit_price is not None and position.entry_price > 0:
+            roe = position.compute_roe(exit_price)
+            position.exit_price = exit_price
+            position.current_roe = roe
+            position.price_pnl_usd = position.notional_usd * roe
 
         exit_fees = self._compute_exit_fees(position.notional_usd)
         position.accumulated_fees_usd += exit_fees
@@ -207,6 +239,73 @@ class PaperTrader:
                     "Funding accrual: %s +$%.4f (total $%.2f, %d payments)",
                     p.asset, payment, p.accumulated_funding_usd, p.funding_payments,
                 )
+
+    def check_exits(
+        self, current_prices: dict[str, float]
+    ) -> list[SimulatedPosition]:
+        """Evaluate all open positions against SL/TP/TIMEOUT/TRAILING triggers.
+
+        Mirrors the exit-priority order used by the backtester
+        (``scripts/backtest/engine.py::_check_exits``) and the live
+        trading engine (``scripts/trading_engine.py::evaluate_triggers``):
+        STOP_LOSS → TIMEOUT → TAKE_PROFIT → TRAILING_STOP.
+
+        Parameters come from ``config/risk_params.py`` — never hardcoded.
+
+        Args:
+            current_prices: mapping of asset symbol → current mid price.
+                Positions with no entry_price or missing current price
+                are skipped.
+
+        Returns:
+            List of positions that were closed this call.
+        """
+        now = datetime.now(timezone.utc)
+        closed: list[SimulatedPosition] = []
+
+        for pos in list(self.open_positions):
+            if pos.entry_price <= 0:
+                continue  # legacy / unpriced — cannot evaluate ROE
+            price = current_prices.get(pos.asset)
+            if price is None or price <= 0:
+                continue  # no price this cycle — try again later
+
+            roe = pos.compute_roe(price)
+            pos.current_roe = roe
+            if roe > pos.peak_roe:
+                pos.peak_roe = roe
+
+            age_hours = (now - pos.entry_time_utc).total_seconds() / 3600.0
+
+            # 1. Stop-loss (highest priority)
+            if roe <= STOP_LOSS_ROE:
+                self.close_position(pos, reason="STOP_LOSS", exit_price=price)
+                closed.append(pos)
+                continue
+
+            # 2. Timeout
+            if age_hours >= TIMEOUT_HOURS:
+                self.close_position(pos, reason="TIMEOUT", exit_price=price)
+                closed.append(pos)
+                continue
+
+            # 3. Take-profit
+            if roe >= TAKE_PROFIT_ROE:
+                self.close_position(pos, reason="TAKE_PROFIT", exit_price=price)
+                closed.append(pos)
+                continue
+
+            # 4. Trailing stop (only after peak_roe exceeds activation)
+            if pos.peak_roe >= TRAILING_STOP_ACTIVATE:
+                trail_threshold = pos.peak_roe - TRAILING_STOP_DISTANCE
+                if roe <= trail_threshold:
+                    self.close_position(
+                        pos, reason="TRAILING_STOP", exit_price=price
+                    )
+                    closed.append(pos)
+                    continue
+
+        return closed
 
     def get_stats(self) -> PaperTradeStats:
         """Compute aggregate paper trading statistics."""

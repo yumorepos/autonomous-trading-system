@@ -46,6 +46,58 @@ class LiveOrchestrator:
         self._executions_attempted = 0
         self._executions_succeeded = 0
         self._started_at: datetime | None = None
+        self._hl_info = None  # lazy HL SDK client for mid-price fetch
+        self._price_fetch_failures = 0
+
+    def _get_mid_prices(self) -> dict[str, float]:
+        """Fetch latest mid prices for all Hyperliquid perps.
+
+        Returns an empty dict on any failure — callers must treat an
+        empty result as "skip exit checks this cycle, try next time".
+        """
+        try:
+            if self._hl_info is None:
+                from hyperliquid.info import Info  # type: ignore
+                self._hl_info = Info(skip_ws=True)
+            mids = self._hl_info.all_mids()
+            if not isinstance(mids, dict):
+                return {}
+            out: dict[str, float] = {}
+            for asset, px in mids.items():
+                try:
+                    out[asset] = float(px)
+                except (TypeError, ValueError):
+                    continue
+            return out
+        except Exception as e:
+            self._price_fetch_failures += 1
+            logger.warning(
+                "Paper exit check: failed to fetch mid prices (%s) — skipping",
+                e,
+            )
+            return {}
+
+    def _check_paper_exits(self) -> None:
+        """Run SL/TP/TIMEOUT/TRAILING checks on open paper positions."""
+        if not self.paper_trader.open_positions:
+            return
+        prices = self._get_mid_prices()
+        if not prices:
+            return
+        try:
+            closed = self.paper_trader.check_exits(prices)
+        except Exception as e:
+            logger.error("Paper exit check raised: %s", e, exc_info=True)
+            return
+        for pos in closed:
+            self._positions_closed += 1
+            logger.info(
+                "PAPER EXIT: %s %s reason=%s roe=%.2f%% hold=%.2fh pnl=$%.2f",
+                pos.asset, pos.direction, pos.exit_reason,
+                pos.current_roe * 100,
+                pos.holding_duration_seconds / 3600.0,
+                pos.pnl_usd,
+            )
 
     async def handle_event(self, event: RegimeTransitionEvent) -> ScoredSignal:
         """Process a single regime transition event through the full chain."""
@@ -57,8 +109,16 @@ class LiveOrchestrator:
         if signal.is_actionable:
             self._signals_actionable += 1
 
-            # Open a new paper position (always, regardless of execution)
-            position = self.paper_trader.open_position(signal)
+            # Open a new paper position (always, regardless of execution).
+            # Fetch entry price for directional ROE tracking. In HIGH_FUNDING
+            # the scanner surfaces the asset with the highest (positive)
+            # funding rate, so the backtester convention is "short" to earn
+            # funding. Match that here.
+            prices_for_entry = self._get_mid_prices()
+            entry_price = float(prices_for_entry.get(event.asset, 0.0) or 0.0)
+            position = self.paper_trader.open_position(
+                signal, entry_price=entry_price, direction="short",
+            )
             if position is not None:
                 self._positions_opened += 1
                 logger.info(
@@ -79,17 +139,18 @@ class LiveOrchestrator:
                         exc_info=True,
                     )
         else:
-            # If regime dropped from HIGH_FUNDING, close existing positions
+            # Regime downgrade no longer force-closes positions. SL/TP/
+            # TIMEOUT/TRAILING (evaluated in _check_paper_exits below)
+            # manage the exit — matches backtester / trading_engine.
             if event.previous_regime == RegimeTier.HIGH_FUNDING:
-                closed = self.paper_trader.close_positions_for_asset(
-                    event.asset, event.exchange, reason="regime_exit",
+                logger.info(
+                    "Regime downgrade from HIGH_FUNDING for %s on %s — "
+                    "holding position (SL/TP/timeout will manage exit)",
+                    event.asset, event.exchange,
                 )
-                self._positions_closed += len(closed)
-                if closed:
-                    logger.info(
-                        "Orchestrator: closed %d position(s) for %s (regime exit)",
-                        len(closed), event.asset,
-                    )
+
+        # Evaluate exit triggers on every event cycle (~scan interval).
+        self._check_paper_exits()
 
         return signal
 

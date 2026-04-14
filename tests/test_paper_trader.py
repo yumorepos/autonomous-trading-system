@@ -188,3 +188,88 @@ class TestStats:
         close_rec = json.loads(lines[1])
         assert close_rec["action"] == "CLOSE"
         assert close_rec["exit_reason"] == "regime_change"
+
+
+
+class TestDirectionalROE:
+    def test_short_roe_sign(self, trader):
+        """Short: profit when price falls."""
+        pos = trader.open_position(_make_signal(), entry_price=100.0, direction="short")
+        assert pos.entry_price == 100.0
+        assert pos.direction == "short"
+        assert pos.compute_roe(90.0) == pytest.approx(0.10)
+        assert pos.compute_roe(110.0) == pytest.approx(-0.10)
+
+    def test_long_roe_sign(self, trader):
+        pos = trader.open_position(_make_signal(), entry_price=100.0, direction="long")
+        assert pos.compute_roe(110.0) == pytest.approx(0.10)
+        assert pos.compute_roe(90.0) == pytest.approx(-0.10)
+
+    def test_close_with_exit_price_records_price_pnl(self, trader):
+        pos = trader.open_position(_make_signal(), entry_price=100.0, direction="short")
+        closed = trader.close_position(pos, reason="TEST", exit_price=80.0)
+        # 20% favorable move on $1000 → +$200 price PnL
+        assert closed.price_pnl_usd == pytest.approx(200.0)
+        assert closed.exit_price == 80.0
+
+
+class TestCheckExits:
+    def test_stop_loss(self, trader):
+        from config.risk_params import STOP_LOSS_ROE
+        pos = trader.open_position(_make_signal(), entry_price=100.0, direction="short")
+        pos.entry_time_utc = datetime.now(timezone.utc)
+        # Adverse move past SL threshold
+        bad = 100.0 * (1 + abs(STOP_LOSS_ROE) + 0.01)
+        closed = trader.check_exits({"ETH": bad})
+        assert len(closed) == 1
+        assert closed[0].exit_reason == "STOP_LOSS"
+
+    def test_take_profit(self, trader):
+        from config.risk_params import TAKE_PROFIT_ROE
+        pos = trader.open_position(_make_signal(), entry_price=100.0, direction="short")
+        pos.entry_time_utc = datetime.now(timezone.utc)
+        # Favorable move past TP threshold
+        good = 100.0 * (1 - TAKE_PROFIT_ROE - 0.01)
+        closed = trader.check_exits({"ETH": good})
+        assert len(closed) == 1
+        assert closed[0].exit_reason == "TAKE_PROFIT"
+
+    def test_timeout(self, trader):
+        from datetime import timedelta
+        from config.risk_params import TIMEOUT_HOURS
+        pos = trader.open_position(_make_signal(), entry_price=100.0, direction="short")
+        pos.entry_time_utc = datetime.now(timezone.utc) - timedelta(hours=TIMEOUT_HOURS + 1)
+        closed = trader.check_exits({"ETH": 100.0})
+        assert len(closed) == 1
+        assert closed[0].exit_reason == "TIMEOUT"
+
+    def test_trailing_stop(self, trader):
+        from config.risk_params import TRAILING_STOP_ACTIVATE, TRAILING_STOP_DISTANCE, TAKE_PROFIT_ROE
+        pos = trader.open_position(_make_signal(), entry_price=100.0, direction="short")
+        pos.entry_time_utc = datetime.now(timezone.utc)
+        # First push ROE above activation but below TP
+        favorable_roe = min(TRAILING_STOP_ACTIVATE + 0.01, TAKE_PROFIT_ROE - 0.01)
+        peak_price = 100.0 * (1 - favorable_roe)
+        trader.check_exits({"ETH": peak_price})
+        assert pos.peak_roe >= TRAILING_STOP_ACTIVATE
+        # Now price retraces by more than TRAILING_STOP_DISTANCE
+        retrace_roe = favorable_roe - TRAILING_STOP_DISTANCE - 0.005
+        retrace_price = 100.0 * (1 - retrace_roe)
+        closed = trader.check_exits({"ETH": retrace_price})
+        assert len(closed) == 1
+        assert closed[0].exit_reason == "TRAILING_STOP"
+
+    def test_no_price_skips(self, trader):
+        """Missing price for an asset must not crash or close the position."""
+        trader.open_position(_make_signal(asset="ETH"), entry_price=100.0, direction="short")
+        closed = trader.check_exits({})  # no prices
+        assert closed == []
+        assert len(trader.open_positions) == 1
+
+    def test_legacy_unpriced_position_skipped(self, trader):
+        """Positions opened without entry_price (legacy path) are skipped."""
+        pos = trader.open_position(_make_signal(asset="ETH"))  # default entry_price=0
+        assert pos.entry_price == 0.0
+        closed = trader.check_exits({"ETH": 9999.0})
+        assert closed == []
+        assert len(trader.open_positions) == 1
