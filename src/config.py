@@ -12,7 +12,7 @@ import yaml
 
 
 _CONFIG: dict | None = None
-_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
+_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "config.yaml"
 
 
 def _substitute_env_vars(value: str) -> str:
