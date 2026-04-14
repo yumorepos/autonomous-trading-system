@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.models import RegimeTransitionEvent, RegimeTier, ScoredSignal
-from src.execution.executor import Executor, ExecutionResult, HALT_FILE, _ABSOLUTE_MAX_TRADE_USD
+from src.execution.executor import Executor, ExecutionResult, HALT_FILE
 
 
 def _make_signal(
@@ -57,10 +57,10 @@ def _make_executor(
         EXECUTION_ENABLED=enabled,
         EXECUTION_DRY_RUN=dry_run,
         EXECUTION_MIN_SCORE=min_score,
-        EXECUTION_MAX_TRADE_USD=15.0,
+        EXECUTION_MAX_TRADE_USD=35.0,
         EXECUTION_DAILY_LOSS_LIMIT=10.0,
         EXECUTION_MIN_BALANCE=20.0,
-        MAX_CONCURRENT=5,
+        MAX_CONCURRENT=1,
         LEVERAGE=3,
         CIRCUIT_BREAKER_LOSSES=3,
     ):
@@ -120,7 +120,7 @@ class TestDryRunMode:
 
         assert result.action == "dry_run"
         assert "position_size_usd" in result.details
-        assert result.details["position_size_usd"] <= _ABSOLUTE_MAX_TRADE_USD
+        assert result.details["position_size_usd"] <= 35.0
 
 
 class TestHaltFile:
@@ -342,7 +342,7 @@ class TestPositionSizeRespects:
             result = executor.execute(signal)
 
         assert result.action == "dry_run"
-        assert result.details["position_size_usd"] <= _ABSOLUTE_MAX_TRADE_USD
+        assert result.details["position_size_usd"] <= 35.0
 
     def test_size_capped_at_config_max(self):
         mock_info = MagicMock()
@@ -359,7 +359,7 @@ class TestPositionSizeRespects:
             result = executor.execute(signal)
 
         assert result.action == "dry_run"
-        assert result.details["position_size_usd"] <= 15.0
+        assert result.details["position_size_usd"] <= 35.0
 
 
 class TestExecutionEnabled:

@@ -26,8 +26,8 @@ TIMEOUT_HOURS = 24               # Max hold time (hours) — extended from 8h pe
 
 RISK_PER_TRADE_PCT = 0.05        # Risk 5% of capital per trade
 MIN_POSITION_USD = 10.0          # Hyperliquid minimum effective size
-MAX_EXPOSURE_PER_TRADE = 20.0    # Per-trade max (USD)
-MAX_CONCURRENT = 5               # Max simultaneous positions
+MAX_EXPOSURE_PER_TRADE = 35.0    # Per-trade max (USD) — aligned with EXECUTION_MAX_TRADE_USD
+MAX_CONCURRENT = 1               # Max simultaneous positions — backtest validated 1-at-a-time model
 MAX_EXPOSURE_PCT = 0.50          # 50% of capital max deployed
 LEVERAGE = 3                     # Default leverage on HL
 

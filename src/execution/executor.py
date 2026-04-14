@@ -6,7 +6,7 @@ SAFETY DEFAULTS:
   - EXECUTION_ENABLED = False  (master switch, must be manually enabled)
   - EXECUTION_DRY_RUN = True   (logs what it WOULD do, no real orders)
   - HALT file at /opt/trading/HALT blocks all execution immediately
-  - Max single trade: $15 (hardcoded, not configurable)
+  - Max single trade: config.EXECUTION_MAX_TRADE_USD (single source of truth)
   - Daily loss limit: $10
 
 This module is ADDITIVE to paper trading — it never replaces it.
@@ -23,9 +23,6 @@ from pathlib import Path
 from src.models import ScoredSignal, RegimeTier
 
 logger = logging.getLogger(__name__)
-
-# Hardcoded safety ceiling — not configurable, not overridable
-_ABSOLUTE_MAX_TRADE_USD = 15.0
 
 # HALT file path — if this file exists, all execution is refused
 HALT_FILE = Path("/opt/trading/HALT")
@@ -106,7 +103,7 @@ class Executor:
         self.enabled = EXECUTION_ENABLED
         self.dry_run = EXECUTION_DRY_RUN
         self.min_score = EXECUTION_MIN_SCORE
-        self.max_trade_usd = min(EXECUTION_MAX_TRADE_USD, _ABSOLUTE_MAX_TRADE_USD)
+        self.max_trade_usd = EXECUTION_MAX_TRADE_USD
         self.daily_loss_limit = EXECUTION_DAILY_LOSS_LIMIT
         self.min_balance = EXECUTION_MIN_BALANCE
         self.max_concurrent = MAX_CONCURRENT
@@ -302,7 +299,7 @@ class Executor:
         size_usd = calculate_position_size(balance, tier=1)
 
         # Enforce hard ceiling
-        size_usd = min(size_usd, self.max_trade_usd, _ABSOLUTE_MAX_TRADE_USD)
+        size_usd = min(size_usd, self.max_trade_usd)
 
         context["position_size_usd"] = size_usd
         context["account_balance"] = balance
