@@ -85,6 +85,15 @@ if not logger.handlers:
 # Import idempotent exit coordinator
 from scripts.idempotent_exit import execute_exit_idempotent
 
+# Hyperliquid SDK error class — used for 429 retry logic in get_state().
+# Imported with fallback so tooling that runs this module without the SDK
+# installed (e.g. docs generation) does not break.
+try:
+    from hyperliquid.utils.error import ClientError as _HLClientError
+except Exception:  # pragma: no cover - defensive
+    class _HLClientError(Exception):
+        status_code = None
+
 STATE_FILE = LOGS_DIR / "trading_engine_state.json"
 ENGINE_LOG = LOGS_DIR / "trading_engine.jsonl"
 
@@ -235,8 +244,35 @@ class HyperliquidClient:
             }
     
     def get_state(self) -> dict:
-        """Get account state (positions + capital)."""
-        state = self.info.user_state(self.address)
+        """Get account state (positions + capital).
+
+        Retries up to 3 times on HL 429 rate-limit with exponential
+        backoff (1s, 2s, 4s). Non-429 errors propagate immediately.
+        """
+        state = None
+        for attempt in range(4):  # initial + up to 3 retries
+            try:
+                state = self.info.user_state(self.address)
+                break
+            except _HLClientError as e:
+                status = getattr(e, 'status_code', None)
+                if status is None and getattr(e, 'args', None):
+                    status = e.args[0] if e.args else None
+                if status == 429 and attempt < 3:
+                    delay = 2 ** attempt  # 1, 2, 4
+                    logger.warning(
+                        f"HL 429 on user_state; retry {attempt + 1}/3 after {delay}s"
+                    )
+                    log_event({
+                        "event": "hl_429_retry",
+                        "call": "user_state",
+                        "attempt": attempt + 1,
+                        "delay_sec": delay,
+                    })
+                    time.sleep(delay)
+                    continue
+                raise
+        assert state is not None  # loop either breaks with state or raises
         margin = state.get("marginSummary", {})
         
         positions = []
@@ -628,8 +664,24 @@ class TradingEngine:
         logger.info("")
     
     def protect_capital(self) -> None:
-        """Enforce stop-loss / take-profit (HIGHEST PRIORITY)."""
-        account = self.client.get_state()
+        """Enforce stop-loss / take-profit (HIGHEST PRIORITY).
+
+        Catches transient API errors and skips the cycle rather than
+        crashing the engine. The next run() iteration retries.
+        """
+        try:
+            account = self.client.get_state()
+        except Exception as e:
+            log_event({
+                "event": "protect_capital_error",
+                "error_type": type(e).__name__,
+                "error": str(e),
+                "action": "skip_cycle",
+            })
+            logger.warning(
+                f"protect_capital: skipping cycle ({type(e).__name__}: {e})"
+            )
+            return
         positions = account["positions"]
         
         for pos in positions:
@@ -996,12 +1048,28 @@ class TradingEngine:
 
     
     def periodic_reconciliation(self) -> None:
-        """Periodic reconciliation: detect positions closed outside engine."""
+        """Periodic reconciliation: detect positions closed outside engine.
+
+        Transient HL API errors skip this cycle (next one retries).
+        """
         # Run every 60 seconds
         if time.time() - self.last_reconcile < 60:
             return
         
-        account = self.client.get_state()
+        try:
+            account = self.client.get_state()
+        except Exception as e:
+            log_event({
+                "event": "periodic_reconciliation_error",
+                "error_type": type(e).__name__,
+                "error": str(e),
+                "action": "skip_cycle",
+            })
+            logger.warning(
+                f"periodic_reconciliation: skipping cycle ({type(e).__name__}: {e})"
+            )
+            self.last_reconcile = time.time()  # advance timer so we don't spin
+            return
         live_positions = account["positions"]
         tracked_coins = set(self.state.data["open_positions"].keys())
         live_coins = set(p["coin"] for p in live_positions)
