@@ -75,7 +75,7 @@ BACKTEST_INITIAL_CAPITAL = 1000.0
 EXECUTION_ENABLED = False            # Master switch — must be manually set True
 EXECUTION_DRY_RUN = True             # Default: simulate only (log, don't trade)
 EXECUTION_MIN_SCORE = 0.7            # Minimum composite score (0-1 scale, maps to 0-100)
-EXECUTION_MAX_TRADE_USD = 15.0       # Hard ceiling per trade (USD)
+EXECUTION_MAX_TRADE_USD = 35.0       # Hard ceiling per trade (USD) — raised from 15.0 per backtest sweep (180d, PF 2.02 at 100% APY threshold, 4.95% DD)
 EXECUTION_DAILY_LOSS_LIMIT = 10.0    # Halt execution for the day after this loss (USD)
 EXECUTION_MIN_BALANCE = 20.0         # Minimum account balance to allow execution (USD)
 

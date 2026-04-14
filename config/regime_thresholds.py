@@ -57,13 +57,13 @@ REGIME_THRESHOLDS: dict[str, dict] = {
         "max_concurrent": 2,            # Current default
     },
     "MODERATE": {
-        "tier1_min_funding": 1.50,      # Higher bar — be more selective
+        "tier1_min_funding": 1.00,      # Capped at 100% per sweep (PF 2.02 vs 0.96 @ 150%)
         "tier2_min_funding": 1.00,      # Only strong signals
         "max_concurrent": 1,            # Conservative
     },
     "LOW_FUNDING": {
-        "tier1_min_funding": 2.00,      # Very high bar — only extremes
-        "tier2_min_funding": 1.50,      # Reject almost everything
+        "tier1_min_funding": 1.00,      # Capped at 100% per sweep (was 2.00)
+        "tier2_min_funding": 1.00,      # Capped at 100% per sweep (was 1.50, PF 0.96)
         "max_concurrent": 1,            # Minimal exposure
     },
 }
