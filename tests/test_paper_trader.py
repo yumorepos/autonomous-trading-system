@@ -68,7 +68,7 @@ def trader(tmp_path):
 class TestOpenPosition:
     def test_opens_position(self, trader):
         signal = _make_signal()
-        pos = trader.open_position(signal)
+        pos = trader.open_position(signal, entry_price=100.0)
         assert pos is not None
         assert pos.asset == "ETH"
         assert pos.exchange == "hyperliquid"
@@ -78,34 +78,53 @@ class TestOpenPosition:
 
     def test_entry_fees_computed(self, trader):
         signal = _make_signal()
-        pos = trader.open_position(signal)
+        pos = trader.open_position(signal, entry_price=100.0)
         # 4 bps fee + 2 bps slippage = 6 bps on $1000 = $0.60
         assert abs(pos.accumulated_fees_usd - 0.60) < 0.01
 
     def test_respects_max_positions(self, trader):
         for asset in ["ETH", "BTC", "SOL"]:
-            pos = trader.open_position(_make_signal(asset=asset))
+            pos = trader.open_position(_make_signal(asset=asset), entry_price=100.0)
             assert pos is not None
 
         # 4th should be rejected (max=3)
-        pos = trader.open_position(_make_signal(asset="AVAX"))
+        pos = trader.open_position(_make_signal(asset="AVAX"), entry_price=100.0)
         assert pos is None
 
     def test_no_duplicate_asset_exchange(self, trader):
-        trader.open_position(_make_signal(asset="ETH"))
-        pos = trader.open_position(_make_signal(asset="ETH"))
+        trader.open_position(_make_signal(asset="ETH"), entry_price=100.0)
+        pos = trader.open_position(_make_signal(asset="ETH"), entry_price=100.0)
         assert pos is None
 
     def test_same_asset_different_exchange_allowed(self, trader):
-        trader.open_position(_make_signal(asset="ETH", exchange="hyperliquid"))
-        pos = trader.open_position(_make_signal(asset="ETH", exchange="binance"))
+        trader.open_position(_make_signal(asset="ETH", exchange="hyperliquid"), entry_price=100.0)
+        pos = trader.open_position(_make_signal(asset="ETH", exchange="binance"), entry_price=100.0)
         assert pos is not None
+
+    def test_rejects_none_entry_price(self, trader):
+        """Guard: entry_price=None must raise ValueError, not silently open a
+        ghost position that gets stale_cleanup'd on restart. See Apr 2026
+        incident where 3 YZY signals were lost this way during peak funding.
+        """
+        with pytest.raises(ValueError, match="entry_price"):
+            trader.open_position(_make_signal(), entry_price=None)  # type: ignore[arg-type]
+        assert len(trader.open_positions) == 0
+
+    def test_rejects_zero_entry_price(self, trader):
+        with pytest.raises(ValueError, match="entry_price"):
+            trader.open_position(_make_signal(), entry_price=0.0)
+        assert len(trader.open_positions) == 0
+
+    def test_rejects_negative_entry_price(self, trader):
+        with pytest.raises(ValueError, match="entry_price"):
+            trader.open_position(_make_signal(), entry_price=-1.0)
+        assert len(trader.open_positions) == 0
 
 
 class TestClosePosition:
     def test_close_position(self, trader):
         signal = _make_signal()
-        pos = trader.open_position(signal)
+        pos = trader.open_position(signal, entry_price=100.0)
         entry_fees = pos.accumulated_fees_usd
         closed = trader.close_position(pos, reason="regime_exit")
 
@@ -116,8 +135,8 @@ class TestClosePosition:
         assert closed.accumulated_fees_usd > entry_fees
 
     def test_close_positions_for_asset(self, trader):
-        trader.open_position(_make_signal(asset="ETH"))
-        trader.open_position(_make_signal(asset="BTC"))
+        trader.open_position(_make_signal(asset="ETH"), entry_price=100.0)
+        trader.open_position(_make_signal(asset="BTC"), entry_price=100.0)
 
         closed = trader.close_positions_for_asset("ETH", reason="test")
         assert len(closed) == 1
@@ -125,7 +144,7 @@ class TestClosePosition:
         assert len(trader.open_positions) == 1
 
     def test_close_already_closed_is_noop(self, trader):
-        pos = trader.open_position(_make_signal())
+        pos = trader.open_position(_make_signal(), entry_price=100.0)
         trader.close_position(pos)
         # Close again — should be a no-op
         result = trader.close_position(pos)
@@ -134,7 +153,7 @@ class TestClosePosition:
 
 class TestFundingAccrual:
     def test_accrue_funding(self, trader):
-        trader.open_position(_make_signal(asset="ETH", exchange="hyperliquid"))
+        trader.open_position(_make_signal(asset="ETH", exchange="hyperliquid"), entry_price=100.0)
         trader.accrue_funding("ETH", "hyperliquid", 150.0, interval_hours=1.0)
 
         pos = trader.open_positions[0]
@@ -148,8 +167,8 @@ class TestFundingAccrual:
         assert abs(pos.accumulated_funding_usd - expected) < 0.001
 
     def test_accrue_only_matches_asset_exchange(self, trader):
-        trader.open_position(_make_signal(asset="ETH", exchange="hyperliquid"))
-        trader.open_position(_make_signal(asset="BTC", exchange="binance"))
+        trader.open_position(_make_signal(asset="ETH", exchange="hyperliquid"), entry_price=100.0)
+        trader.open_position(_make_signal(asset="BTC", exchange="binance"), entry_price=100.0)
 
         trader.accrue_funding("ETH", "hyperliquid", 100.0)
         eth_pos = [p for p in trader.open_positions if p.asset == "ETH"][0]
@@ -231,8 +250,8 @@ class TestStats:
         assert stats.total_pnl_usd == 0.0
 
     def test_stats_with_open_and_closed(self, trader):
-        trader.open_position(_make_signal(asset="ETH"))
-        pos_btc = trader.open_position(_make_signal(asset="BTC"))
+        trader.open_position(_make_signal(asset="ETH"), entry_price=100.0)
+        pos_btc = trader.open_position(_make_signal(asset="BTC"), entry_price=100.0)
         trader.accrue_funding("BTC", "hyperliquid", 200.0, interval_hours=8.0)
         trader.close_position(pos_btc, reason="test")
 
@@ -243,7 +262,7 @@ class TestStats:
         assert stats.total_funding_collected_usd > 0
 
     def test_trade_logging(self, trader):
-        pos = trader.open_position(_make_signal())
+        pos = trader.open_position(_make_signal(), entry_price=100.0)
         trader.close_position(pos)
 
         lines = trader.log_path.read_text().strip().split("\n")
@@ -332,9 +351,17 @@ class TestCheckExits:
         assert len(trader.open_positions) == 1
 
     def test_legacy_unpriced_position_skipped(self, trader):
-        """Positions opened without entry_price (legacy path) are skipped."""
-        pos = trader.open_position(_make_signal(asset="ETH"))  # default entry_price=0
-        assert pos.entry_price == 0.0
+        """Legacy positions with entry_price=0 (from stale JSONL on disk,
+        before the open-time guard was added) are still tolerated by
+        check_exits — it skips them rather than crashing. New opens can
+        no longer produce these (open_position now raises on entry_price<=0),
+        so we synthesize the legacy state directly.
+        """
+        # Bypass open_position guard to simulate a legacy-on-disk position
+        pos = trader.open_position(
+            _make_signal(asset="ETH"), entry_price=100.0, direction="short",
+        )
+        pos.entry_price = 0.0  # mutate to legacy shape
         closed = trader.check_exits({"ETH": 9999.0})
         assert closed == []
         assert len(trader.open_positions) == 1

@@ -241,22 +241,29 @@ class LiveOrchestrator:
                 prices_for_entry = self._get_mid_prices()
                 entry_price = float(prices_for_entry.get(event.asset, 0.0) or 0.0)
                 if entry_price <= 0:
+                    # Do NOT open a position without a valid entry price.
+                    # A position missing entry_price can never be exit-checked
+                    # (SL/TP/trailing all need ROE vs entry), and on restart
+                    # it gets swept as stale_cleanup for a flat -fees loss.
+                    # Better to skip this signal entirely and let the next
+                    # tick (or next regime event) retry.
                     logger.warning(
-                        "Entry price fetch failed for %s — opening with "
-                        "entry_price=0 (exit checks will skip until backfilled)",
-                        event.asset,
+                        "Skipping position open for %s: could not fetch "
+                        "entry price (prices_available=%d)",
+                        event.asset, len(prices_for_entry),
                     )
-                position = self.paper_trader.open_position(
-                    signal, entry_price=entry_price, direction="short",
-                )
-                if position is not None:
-                    self._positions_opened += 1
-                    logger.info(
-                        "Orchestrator: opened paper position %s for %s on %s "
-                        "(entry_price=%.6f)",
-                        position.position_id, event.asset, event.exchange,
-                        entry_price,
+                else:
+                    position = self.paper_trader.open_position(
+                        signal, entry_price=entry_price, direction="short",
                     )
+                    if position is not None:
+                        self._positions_opened += 1
+                        logger.info(
+                            "Orchestrator: opened paper position %s for %s on %s "
+                            "(entry_price=%.6f)",
+                            position.position_id, event.asset, event.exchange,
+                            entry_price,
+                        )
 
             # Attempt real execution if executor is configured
             if self.executor is not None:

@@ -31,13 +31,17 @@ def _make_event(
     new_regime=RegimeTier.HIGH_FUNDING, prev_regime=RegimeTier.MODERATE,
     apy=150.0,
 ) -> RegimeTransitionEvent:
+    # Use "now" as the event timestamp so the immediately-after exit check
+    # (handle_event calls _check_paper_exits at the end) does not TIMEOUT
+    # a freshly opened position. Individual tests that need a specific
+    # entry timestamp override pos.entry_time_utc directly.
     return RegimeTransitionEvent(
         asset=asset,
         exchange=exchange,
         new_regime=new_regime,
         previous_regime=prev_regime,
         max_apy_annualized=apy,
-        timestamp_utc=datetime(2026, 4, 13, 12, 0, tzinfo=timezone.utc),
+        timestamp_utc=datetime.now(timezone.utc),
     )
 
 
@@ -68,8 +72,14 @@ def orchestrator(tmp_path):
         )
 
     orch = LiveOrchestrator(connector, pipeline, paper_trader)
-    # Stub price and funding fetches so unit tests don't hit Hyperliquid API
-    orch._get_mid_prices = lambda: {}
+    # Stub price and funding fetches so unit tests don't hit Hyperliquid API.
+    # Provide non-empty default prices: open_position now requires a valid
+    # entry_price (ValueError otherwise), and the orchestrator skips signals
+    # when the price fetch returns {}. Tests exercising the missing-price
+    # path override this stub explicitly.
+    orch._get_mid_prices = lambda: {
+        "ETH": 100.0, "BTC": 50000.0, "SOL": 20.0, "AVAX": 30.0, "YZY": 1.5,
+    }
     orch._get_funding_rates = lambda: {}
     return orch
 

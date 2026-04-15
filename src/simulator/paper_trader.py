@@ -223,18 +223,32 @@ class PaperTrader:
     def open_position(
         self,
         signal: ScoredSignal,
-        entry_price: float = 0.0,
+        entry_price: float,
         direction: str = "short",
     ) -> SimulatedPosition | None:
         """Open a new paper position based on an actionable signal.
 
         Args:
             signal: scored signal from the pipeline
-            entry_price: mid price at entry (used for ROE-based exits)
+            entry_price: mid price at entry (used for ROE-based exits).
+                Must be > 0 — a position without a valid entry price can
+                never be exit-checked (SL/TP/trailing all compute ROE vs
+                entry), and ends up swept as stale_cleanup on restart.
             direction: "short" (earn positive funding) or "long"
 
         Returns the SimulatedPosition or None if at capacity.
+
+        Raises:
+            ValueError: if entry_price is None or <= 0. This is the
+                belt-and-suspenders guard backing the orchestrator's
+                pre-call check (_get_mid_prices can silently return {}
+                when the HL SDK import fails on the VPS).
         """
+        if entry_price is None or entry_price <= 0:
+            raise ValueError(
+                f"open_position requires entry_price > 0, got {entry_price!r} "
+                f"for {signal.event.asset} on {signal.event.exchange}"
+            )
         if len(self.open_positions) >= self.max_open_positions:
             logger.info(
                 "At max open positions (%d), skipping %s",
