@@ -479,11 +479,31 @@ class PaperTrader:
 
         return closed
 
+    @staticmethod
+    def _is_admin_close(position: SimulatedPosition) -> bool:
+        """Admin-close positions are excluded from Gate 1 strategy stats.
+
+        An exit_reason starting with ``admin_`` marks a one-time
+        operational intervention (e.g. closing a bug-direction position
+        after a fix). These are NOT strategy samples — including them
+        would permanently contaminate win_rate / pnl aggregates with
+        legacy bug losses. Only automated exits (STOP_LOSS, TAKE_PROFIT,
+        TRAILING_STOP, TIMEOUT, stale_cleanup, regime_change) count.
+        """
+        reason = position.exit_reason or ""
+        return reason.startswith("admin_")
+
     def get_stats(self) -> PaperTradeStats:
-        """Compute aggregate paper trading statistics."""
-        all_pos = self.all_positions
-        closed = self.closed_positions
+        """Compute aggregate paper trading statistics.
+
+        Positions closed with an ``admin_*`` exit_reason are excluded from
+        every aggregate — see ``_is_admin_close``.
+        """
+        # Open positions always count (they reflect live exposure). Closed
+        # positions only count if they weren't admin-closed.
         open_pos = self.open_positions
+        closed = [p for p in self.closed_positions if not self._is_admin_close(p)]
+        all_pos = open_pos + closed
 
         if not all_pos:
             return PaperTradeStats()
@@ -492,11 +512,11 @@ class PaperTrader:
         total_fees = sum(p.accumulated_fees_usd for p in all_pos)
         total_pnl = sum(p.net_pnl_usd for p in all_pos)
 
-        # Win rate from closed positions
+        # Win rate from closed (non-admin) positions
         wins = sum(1 for p in closed if p.pnl_usd > 0) if closed else 0
         win_rate = wins / len(closed) if closed else 0.0
 
-        # Average holding duration (closed only)
+        # Average holding duration (closed non-admin only)
         if closed:
             avg_holding_secs = sum(p.holding_duration_seconds for p in closed) / len(closed)
             avg_holding_hours = avg_holding_secs / 3600
