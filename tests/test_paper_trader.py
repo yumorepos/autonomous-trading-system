@@ -194,6 +194,26 @@ class TestHourlyFundingAccrual:
         assert pos.funding_payments == 1
         assert pos.last_funding_update == now
 
+    def test_short_pays_negative_funding(self, trader):
+        """SHORT with negative funding rate → negative cumulative funding.
+
+        On HL, negative funding rate means shorts pay longs. A SHORT
+        position that entered while funding was positive can see the
+        instantaneous rate flip negative mid-hold; when that happens the
+        accumulation must turn negative (shorts pay), not stay positive.
+        """
+        from datetime import timedelta
+        pos = trader.open_position(
+            _make_signal(asset="ETH"), entry_price=100.0, direction="short",
+        )
+        now = datetime.now(timezone.utc)
+        pos.last_funding_update = now - timedelta(hours=4)
+        trader.accrue_hourly_funding({"ETH": -0.01}, now=now)
+
+        # sign(+1 for short) * rate(-0.01) * notional(1000) * 4h = -40
+        assert pos.accumulated_funding_usd == pytest.approx(-40.0)
+        assert pos.funding_payments == 1
+
     def test_long_pays_positive_funding(self, trader):
         """LONG with positive funding → negative cumulative funding."""
         from datetime import timedelta
