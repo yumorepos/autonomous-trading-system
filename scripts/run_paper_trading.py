@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from src.pipeline.signal_filter import SignalFilterPipeline
 from src.bridge.ats_connector import ATSConnector
 from src.simulator.paper_trader import PaperTrader
 from src.pipeline.live_orchestrator import LiveOrchestrator
+from src.execution.executor import Executor
 from src.api.stats_server import app, set_pipeline, set_orchestrator
 
 logging.basicConfig(
@@ -78,11 +80,82 @@ def build_components(cfg: dict) -> tuple[ATSConnector, SignalFilterPipeline, Pap
     return connector, pipeline, paper_trader
 
 
+def build_executor() -> Executor | None:
+    """Construct the Executor for dry-run / live execution.
+
+    Returns None on any failure — the orchestrator then runs paper-only,
+    matching the pre-wiring behavior. NEVER crashes service startup.
+
+    Safety invariants:
+      - hl_exchange=None: the signed-transaction client is deliberately
+        NOT instantiated. Even if EXECUTION_DRY_RUN were flipped to False,
+        executor.execute() would reject live orders at the
+        "No HL exchange/info client configured" gate. Two locks, not one.
+      - hl_info uses timeout=10, mirroring the loop-hang fix from bdf35f4.
+        Without a timeout the underlying requests.post() runs with
+        timeout=None and can block the asyncio event loop indefinitely.
+      - HL_WALLET_ADDRESS comes from .env (loaded by systemd
+        EnvironmentFile). If unset, the balance gate (Gate 9) will reject
+        every signal — which is still useful: we get structured rejection
+        logs proving the executor is wired and evaluating gates.
+    """
+    try:
+        from hyperliquid.info import Info  # type: ignore
+    except ImportError as e:
+        logger.warning(
+            "hyperliquid SDK not importable (%s) — executor disabled, "
+            "paper trading continues without execution telemetry", e,
+        )
+        return None
+
+    try:
+        hl_info = Info(skip_ws=True, timeout=10)
+    except Exception as e:
+        logger.warning(
+            "Failed to construct hyperliquid Info client (%s) — "
+            "executor disabled", e,
+        )
+        return None
+
+    hl_wallet_address = os.environ.get("HL_WALLET_ADDRESS") or None
+    if not hl_wallet_address:
+        logger.warning(
+            "HL_WALLET_ADDRESS not set — executor will reject every signal "
+            "on the balance gate (still useful: produces structured "
+            "rejection logs)",
+        )
+
+    try:
+        executor = Executor(
+            hl_exchange=None,               # deliberate: second safety lock
+            hl_info=hl_info,                # read-only price + balance queries
+            hl_address=hl_wallet_address,
+            telegram_send_fn=None,          # wire later if desired
+        )
+    except Exception as e:
+        logger.error(
+            "Executor construction failed (%s) — paper trading continues "
+            "without execution telemetry", e, exc_info=True,
+        )
+        return None
+
+    logger.info(
+        "Executor instantiated: enabled=%s dry_run=%s min_score=%.2f "
+        "max_trade=$%.0f hl_address_set=%s",
+        executor.enabled, executor.dry_run, executor.min_score,
+        executor.max_trade_usd, bool(hl_wallet_address),
+    )
+    return executor
+
+
 async def run():
     cfg = load_config()
     connector, pipeline, paper_trader = build_components(cfg)
 
-    orchestrator = LiveOrchestrator(connector, pipeline, paper_trader)
+    executor = build_executor()
+    orchestrator = LiveOrchestrator(
+        connector, pipeline, paper_trader, executor=executor,
+    )
 
     # Register with stats API
     set_pipeline(pipeline)
