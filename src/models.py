@@ -72,14 +72,18 @@ class ScoredSignal(BaseModel):
     is_actionable: bool
     rejection_reason: str | None = None
     cross_exchange_spread: float | None = None
-    # Trade direction: "short" earns positive funding (the HIGH_FUNDING
-    # regime convention used by the backtester); "long" earns negative
-    # funding. Default "short" because the engine currently emits only
-    # the absolute funding APY — the sign isn't propagated through the
-    # JSONL event stream yet, and HIGH_FUNDING is overwhelmingly the
-    # positive-funding case in practice. Override when the upstream
-    # event carries a signed funding rate.
-    direction: str = "short"  # "short" or "long" 
+    # Trade direction: "long" earns negative funding (longs collect when
+    # funding is negative; shorts pay). "short" earns positive funding.
+    # Default "long" because the live engine only emits NEGATIVE-funding
+    # assets as signals — see:
+    #   scripts/regime_detector.py:163-165  filters `if funding < 0`
+    #   scripts/trading_engine.py:806-807   filters `if funding >= 0: continue`
+    # HIGH_FUNDING regime_updated events therefore always reference an
+    # asset with negative HL funding, so LONG is the earning side. When
+    # the upstream event eventually carries a signed funding rate, derive
+    # direction from the sign (`"short" if rate > 0 else "long"`, matching
+    # scripts/backtest/strategies/funding_arb.py:72).
+    direction: str = "long"  # "short" or "long"
 
 
 class TickerInfo(BaseModel):

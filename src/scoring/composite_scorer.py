@@ -125,14 +125,19 @@ class CompositeSignalScorer:
         is_actionable = len(rejection_reasons) == 0
         rejection_reason = "; ".join(rejection_reasons) if rejection_reasons else None
 
-        # Direction inference: HIGH_FUNDING regime is overwhelmingly the
-        # positive-funding case (the scanner picks the asset with the highest
-        # funding APY, which is virtually always positive at these levels).
-        # Backtester convention: "short" when funding > 0 (we earn funding).
-        # TODO: when the engine starts emitting the signed funding rate per
-        # asset in the JSONL stream, switch this to:
-        #   direction = "short" if event.funding_rate > 0 else "long"
-        direction = "short"
+        # Direction inference: the live engine only emits NEGATIVE-funding
+        # assets as signals. See:
+        #   scripts/regime_detector.py:163-165  — filters `if funding < 0`
+        #   scripts/trading_engine.py:806-807   — filters `if funding >= 0: continue`
+        # The regime_updated JSONL events always reference an asset where
+        # HL funding is negative, so the earning side is LONG (longs
+        # collect when funding is negative; shorts pay).
+        # Backtester convention at scripts/backtest/strategies/funding_arb.py:72
+        # signs direction from the raw rate: `"short" if rate > 0 else "long"`.
+        # We match the earning-side semantics here given the current engine
+        # output. When the engine starts emitting a signed rate per asset,
+        # switch to the signed derivation directly.
+        direction = "long"
 
         return ScoredSignal(
             event=event,

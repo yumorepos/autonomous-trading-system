@@ -234,10 +234,15 @@ class LiveOrchestrator:
                 )
             else:
                 # Open a new paper position (always, regardless of execution).
-                # Fetch entry price for directional ROE tracking. In HIGH_FUNDING
-                # the scanner surfaces the asset with the highest (positive)
-                # funding rate, so the backtester convention is "short" to earn
-                # funding. Match that here.
+                # Fetch entry price for directional ROE tracking.
+                #
+                # Direction: use whatever the signal carries. The scorer now
+                # sets direction = "long" because the live engine only emits
+                # NEGATIVE-funding signals (regime_detector filters
+                # `if funding < 0`; trading_engine scanner filters
+                # `if funding >= 0: continue`). On a negative-funding asset,
+                # the earning side is LONG. Fallback is "long" for the same
+                # reason — inverting this pays funding instead of collecting.
                 prices_for_entry = self._get_mid_prices()
                 entry_price = float(prices_for_entry.get(event.asset, 0.0) or 0.0)
                 if entry_price <= 0:
@@ -253,8 +258,13 @@ class LiveOrchestrator:
                         event.asset, len(prices_for_entry),
                     )
                 else:
+                    direction = (
+                        getattr(signal, "direction", None) or "long"
+                    ).lower()
+                    if direction not in ("long", "short"):
+                        direction = "long"
                     position = self.paper_trader.open_position(
-                        signal, entry_price=entry_price, direction="short",
+                        signal, entry_price=entry_price, direction=direction,
                     )
                     if position is not None:
                         self._positions_opened += 1

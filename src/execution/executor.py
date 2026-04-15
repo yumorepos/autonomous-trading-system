@@ -379,14 +379,16 @@ class Executor:
         context["size_coins"] = size_coins
         context["leverage"] = self.leverage
 
-        # Resolve trade direction from the signal. Default to "short" if
-        # the signal didn't carry one — that matches the backtester /
-        # paper-trader convention for HIGH_FUNDING (positive funding,
-        # short earns). Inverting this on a real-money trade would
-        # cause us to PAY funding instead of collecting it.
-        direction = (getattr(signal, "direction", None) or "short").lower()
+        # Resolve trade direction from the signal. Default to "long" if
+        # the signal didn't carry one — the live engine only emits
+        # NEGATIVE-funding signals (regime_detector filters `if funding < 0`;
+        # trading_engine scanner filters `if funding >= 0: continue`). On a
+        # negative-funding asset the earning side is LONG (longs collect
+        # when funding is negative). Inverting this on a real-money trade
+        # would cause us to PAY funding instead of collecting it.
+        direction = (getattr(signal, "direction", None) or "long").lower()
         if direction not in ("long", "short"):
-            direction = "short"
+            direction = "long"
         is_buy = direction == "long"
         context["direction"] = direction
 

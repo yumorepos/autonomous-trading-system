@@ -459,14 +459,14 @@ class TestLiveExecution:
         mock_exchange.market_open.assert_called_once()
 
         # Verify the order was placed with the correct direction.
-        # Default ScoredSignal.direction is now "short" (HIGH_FUNDING
-        # convention: positive funding → short earns funding), so is_buy
-        # must be False. Previously this test asserted is_buy=True, which
-        # encoded the "always LONG" bug in the executor — see
-        # TestDirectionRouting for full coverage.
+        # Default ScoredSignal.direction is now "long" because the live
+        # engine only emits NEGATIVE-funding signals (regime_detector
+        # filters `funding < 0`; trading_engine scanner filters
+        # `funding >= 0: continue`). On a negative-funding asset the
+        # earning side is LONG. See TestDirectionRouting for full coverage.
         call_args = mock_exchange.market_open.call_args
         assert call_args[0][0] == "BTC"
-        assert call_args[0][1] is False  # is_buy=False → SHORT
+        assert call_args[0][1] is True  # is_buy=True → LONG
 
     def test_exchange_error_doesnt_crash(self):
         mock_exchange = MagicMock()
@@ -639,10 +639,12 @@ class TestDirectionRouting:
         args, _ = mock_exchange.market_open.call_args
         assert args[1] is True
 
-    def test_missing_direction_defaults_to_short(self):
+    def test_missing_direction_defaults_to_long(self):
         """If signal has no direction attribute, executor must default
-        to SHORT (matches backtester convention for HIGH_FUNDING).
-        Defending against the historical "always LONG" bug.
+        to LONG — the live engine only emits negative-funding signals
+        (see regime_detector.py:163-165 and trading_engine.py:806-807),
+        and on a negative-funding asset LONG is the earning side.
+        Inverting this pays funding instead of collecting it.
         """
         executor, mock_exchange, signal = _exec_with_full_mocks(direction_kw=False)
         # Force-remove the field on this signal instance
@@ -654,18 +656,19 @@ class TestDirectionRouting:
             executor.execute(signal)
         assert mock_exchange.market_open.called
         args, _ = mock_exchange.market_open.call_args
-        assert args[1] is False, "missing direction must default to SHORT (is_buy=False)"
+        assert args[1] is True, "missing direction must default to LONG (is_buy=True)"
 
-    def test_default_scoredsignal_direction_is_short(self):
+    def test_default_scoredsignal_direction_is_long(self):
         """Defense in depth: a freshly constructed ScoredSignal that
-        omits direction must default to short.
+        omits direction must default to long (earning side for the
+        negative-funding assets the live engine emits).
         """
         signal = _make_signal()
-        assert signal.direction == "short"
+        assert signal.direction == "long"
 
-    def test_unknown_direction_falls_back_to_short(self):
+    def test_unknown_direction_falls_back_to_long(self):
         executor, mock_exchange, signal = _exec_with_full_mocks(direction_on_signal="sideways")
         with patch.object(executor, "_log_execution"):
             executor.execute(signal)
         args, _ = mock_exchange.market_open.call_args
-        assert args[1] is False
+        assert args[1] is True

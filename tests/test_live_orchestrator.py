@@ -233,7 +233,7 @@ class TestPaperExitChecks:
     async def test_stop_loss_closes_position(self, orchestrator):
         """With entry_price set, a big adverse move closes via STOP_LOSS."""
         from config.risk_params import STOP_LOSS_ROE
-        # Open short at 100
+        # Open long at 100 (default direction after the negative-funding fix)
         event = _make_event(asset="ETH")
         event.timestamp_utc = datetime.now(timezone.utc)
         signal = _make_signal(event, actionable=True)
@@ -243,10 +243,10 @@ class TestPaperExitChecks:
         assert len(orchestrator.paper_trader.open_positions) == 1
         pos = orchestrator.paper_trader.open_positions[0]
         assert pos.entry_price == 100.0
-        assert pos.direction == "short"
+        assert pos.direction == "long"
 
-        # Price spikes up — short loses. Use |SL|+1% buffer.
-        bad_price = 100.0 * (1 + abs(STOP_LOSS_ROE) + 0.01)
+        # Price drops — long loses. Use |SL|+1% buffer below entry.
+        bad_price = 100.0 * (1 - abs(STOP_LOSS_ROE) - 0.01)
         orchestrator._get_mid_prices = lambda: {"ETH": bad_price}
         # Any further event triggers the exit check
         event2 = _make_event(asset="BTC", new_regime=RegimeTier.MODERATE,
@@ -327,8 +327,11 @@ class TestPaperExitChecks:
         # Backdate last_funding_update by 2h to simulate prior tick age
         pos.last_funding_update = datetime.now(timezone.utc) - timedelta(hours=2)
 
-        # Next tick: funding rate 0.005/hr on a SHORT → +$10 on $1000
-        orchestrator._get_funding_rates = lambda: {"ETH": 0.005}
+        # Next tick: funding rate -0.005/hr on a LONG → +$10 on $1000
+        # (long on negative funding collects: sign = -1, payment = -1 *
+        # -0.005 * 1000 * 2h = +$10). Matches the live-engine scenario
+        # where only negative-funding assets are emitted as signals.
+        orchestrator._get_funding_rates = lambda: {"ETH": -0.005}
         event2 = _make_event(asset="BTC", new_regime=RegimeTier.MODERATE,
                              prev_regime=RegimeTier.MODERATE)
         signal2 = _make_signal(event2, actionable=False)
