@@ -159,6 +159,71 @@ class TestFundingAccrual:
         assert btc_pos.funding_payments == 0
 
 
+class TestHourlyFundingAccrual:
+    def test_short_receives_positive_funding(self, trader):
+        """SHORT × 4 hours × 0.01/hr funding on $1000 = +$40."""
+        from datetime import timedelta
+        pos = trader.open_position(
+            _make_signal(asset="ETH"), entry_price=100.0, direction="short",
+        )
+        # Backdate last_funding_update by exactly 4 hours
+        now = datetime.now(timezone.utc)
+        pos.last_funding_update = now - timedelta(hours=4)
+        trader.accrue_hourly_funding({"ETH": 0.01}, now=now)
+
+        assert pos.accumulated_funding_usd == pytest.approx(40.0)
+        assert pos.funding_payments == 1
+        assert pos.last_funding_update == now
+
+    def test_long_pays_positive_funding(self, trader):
+        """LONG with positive funding → negative cumulative funding."""
+        from datetime import timedelta
+        pos = trader.open_position(
+            _make_signal(asset="ETH"), entry_price=100.0, direction="long",
+        )
+        now = datetime.now(timezone.utc)
+        pos.last_funding_update = now - timedelta(hours=4)
+        trader.accrue_hourly_funding({"ETH": 0.01}, now=now)
+
+        assert pos.accumulated_funding_usd == pytest.approx(-40.0)
+
+    def test_close_includes_funding_in_pnl(self, trader):
+        """Realized PnL on close must include accrued funding."""
+        from datetime import timedelta
+        pos = trader.open_position(
+            _make_signal(asset="ETH"), entry_price=100.0, direction="short",
+        )
+        now = datetime.now(timezone.utc)
+        pos.last_funding_update = now - timedelta(hours=2)
+        trader.accrue_hourly_funding({"ETH": 0.005}, now=now)
+        # +$10 funding; flat price → price_pnl = 0
+        assert pos.accumulated_funding_usd == pytest.approx(10.0)
+
+        fees_before_exit = pos.accumulated_fees_usd
+        closed = trader.close_position(pos, reason="TEST", exit_price=100.0)
+        # net_pnl = 0 (price) + 10 (funding) - fees
+        expected = 0.0 + 10.0 - closed.accumulated_fees_usd
+        assert closed.pnl_usd == pytest.approx(expected)
+        assert closed.pnl_usd > -fees_before_exit  # funding outweighs exit fees
+
+    def test_accrue_skipped_when_asset_missing(self, trader):
+        """Asset not in funding_rates dict → position untouched."""
+        pos = trader.open_position(
+            _make_signal(asset="ETH"), entry_price=100.0, direction="short",
+        )
+        trader.accrue_hourly_funding({"BTC": 0.01})
+        assert pos.accumulated_funding_usd == 0.0
+        assert pos.funding_payments == 0
+
+    def test_accrue_noop_on_empty_rates(self, trader):
+        """Empty funding_rates (e.g. API failure) → no crash, no change."""
+        pos = trader.open_position(
+            _make_signal(asset="ETH"), entry_price=100.0, direction="short",
+        )
+        trader.accrue_hourly_funding({})
+        assert pos.accumulated_funding_usd == 0.0
+
+
 class TestStats:
     def test_empty_stats(self, trader):
         stats = trader.get_stats()

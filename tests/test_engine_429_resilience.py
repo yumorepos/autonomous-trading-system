@@ -34,6 +34,13 @@ if "hyperliquid" not in sys.modules:
     hl_exchange = types.ModuleType("hyperliquid.exchange")
     hl_utils = types.ModuleType("hyperliquid.utils")
     hl_error = types.ModuleType("hyperliquid.utils.error")
+    # Minimal `constants` submodule — scripts/pre_trade_validator.py does
+    # `from hyperliquid.utils import constants`, so once we populate
+    # sys.modules["hyperliquid.utils"] we must also expose `constants`,
+    # otherwise later tests that import pre_trade_validator crash.
+    hl_constants = types.ModuleType("hyperliquid.utils.constants")
+    hl_constants.MAINNET_API_URL = "https://api.hyperliquid.xyz"
+    hl_constants.TESTNET_API_URL = "https://api.hyperliquid-testnet.xyz"
 
     class ClientError(Exception):
         def __init__(self, status_code, error_code=None, error_message=None,
@@ -51,6 +58,8 @@ if "hyperliquid" not in sys.modules:
     sys.modules["hyperliquid.exchange"] = hl_exchange
     sys.modules["hyperliquid.utils"] = hl_utils
     sys.modules["hyperliquid.utils.error"] = hl_error
+    sys.modules["hyperliquid.utils.constants"] = hl_constants
+    hl_utils.constants = hl_constants
 
 # eth_account stub (engine imports Account.from_key at client init, but we bypass
 # __init__ in these tests — still, guard against transitive imports).

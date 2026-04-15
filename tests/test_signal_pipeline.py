@@ -27,7 +27,10 @@ def _make_event(
         new_regime=new_regime,
         previous_regime=previous_regime,
         max_apy_annualized=max_apy,
-        timestamp_utc=datetime(2026, 4, 13, 12, 0, 0, tzinfo=timezone.utc),
+        # Use a "now"-anchored timestamp so stats queries with 24h windows
+        # in get_stats() keep finding these events as wall-clock time
+        # advances past the originally hardcoded 2026-04-13 date.
+        timestamp_utc=datetime.now(timezone.utc),
     )
 
 

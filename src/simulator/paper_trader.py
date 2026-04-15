@@ -264,6 +264,7 @@ class PaperTrader:
             accumulated_fees_usd=entry_fees,
             entry_price=entry_price,
             direction=direction,
+            last_funding_update=signal.event.timestamp_utc,
         )
 
         self.positions.append(position)
@@ -332,6 +333,45 @@ class PaperTrader:
             if p.asset == asset and (exchange is None or p.exchange == exchange)
         ]
         return [self.close_position(p, reason) for p in to_close]
+
+    def accrue_hourly_funding(
+        self,
+        funding_rates: dict[str, float],
+        now: datetime | None = None,
+    ) -> None:
+        """Accrue funding based on current per-hour funding rates.
+
+        ``funding_rates`` maps asset symbol → 1-hour funding rate (fraction,
+        not percent — e.g. 0.0001 for 0.01%/hr). For each matching open
+        position, funding accrues over the elapsed wall-clock time since
+        its ``last_funding_update`` (or ``entry_time_utc`` if unset).
+
+        SHORT positions RECEIVE positive funding (income); LONG positions
+        PAY positive funding (expense).
+        """
+        if not funding_rates:
+            return
+        now = now or datetime.now(timezone.utc)
+        for p in self.open_positions:
+            rate = funding_rates.get(p.asset)
+            if rate is None:
+                continue
+            last = p.last_funding_update or p.entry_time_utc
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            hours = (now - last).total_seconds() / 3600.0
+            if hours <= 0:
+                continue
+            sign = 1.0 if p.direction == "short" else -1.0
+            payment = sign * rate * p.notional_usd * hours
+            p.accumulated_funding_usd += payment
+            p.funding_payments += 1
+            p.last_funding_update = now
+            logger.debug(
+                "Hourly funding: %s %s %.6f/hr × %.3fh → $%.4f (total $%.2f)",
+                p.asset, p.direction, rate, hours, payment,
+                p.accumulated_funding_usd,
+            )
 
     def accrue_funding(
         self,

@@ -11,6 +11,8 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
+import requests
+
 from src.bridge.ats_connector import ATSConnector
 from src.execution.executor import Executor
 from src.models import RegimeTransitionEvent, RegimeTier, ScoredSignal
@@ -48,6 +50,7 @@ class LiveOrchestrator:
         self._started_at: datetime | None = None
         self._hl_info = None  # lazy HL SDK client for mid-price fetch
         self._price_fetch_failures = 0
+        self._funding_fetch_failures = 0
         self._exit_check_iterations = 0
         self._last_exit_check_ts: datetime | None = None
 
@@ -88,6 +91,47 @@ class LiveOrchestrator:
             )
             return {}
 
+    def _get_funding_rates(self) -> dict[str, float]:
+        """Fetch current 1-hour funding rates for all Hyperliquid perps.
+
+        Uses requests.post directly (not the hyperliquid SDK — it has
+        import issues on the VPS). Returns {asset: rate_per_hour} as a
+        float fraction (e.g. 0.0001 = 0.01%/hr). Returns an empty dict on
+        any failure — callers must treat an empty result as "skip funding
+        accrual this tick" and never crash the exit loop.
+        """
+        try:
+            response = requests.post(
+                "https://api.hyperliquid.xyz/info",
+                json={"type": "metaAndAssetCtxs"},
+                timeout=10,
+            )
+            response.raise_for_status()
+            data = response.json()
+            if not (isinstance(data, list) and len(data) >= 2):
+                return {}
+            universe = data[0].get("universe", [])
+            ctxs = data[1]
+            out: dict[str, float] = {}
+            for asset_meta, ctx in zip(universe, ctxs):
+                name = asset_meta.get("name")
+                funding = ctx.get("funding") if isinstance(ctx, dict) else None
+                if not name or funding is None:
+                    continue
+                try:
+                    out[name] = float(funding)
+                except (TypeError, ValueError):
+                    continue
+            return out
+        except Exception as e:
+            self._funding_fetch_failures += 1
+            logger.warning(
+                "Paper exit check: failed to fetch funding rates (%s) — "
+                "skipping funding accrual this tick",
+                e,
+            )
+            return {}
+
     def _check_paper_exits(self) -> None:
         """Run SL/TP/TIMEOUT/TRAILING checks on open paper positions.
 
@@ -122,12 +166,34 @@ class LiveOrchestrator:
             prices = self._get_mid_prices()
             if not prices:
                 return
+
+            # Accrue funding BEFORE the exit check so that total ROE
+            # reflects accrued funding at close time. Optional — a failed
+            # fetch logs a warning in _get_funding_rates and returns {},
+            # and accrue_hourly_funding is a no-op on an empty dict.
+            funding_rates = self._get_funding_rates()
+            try:
+                self.paper_trader.accrue_hourly_funding(funding_rates)
+            except Exception as e:
+                logger.warning(
+                    "Funding accrual raised (non-fatal, skipping): %s", e,
+                )
+
             # Log current state before check_exits mutates ROE/peak.
             for pos in open_before:
+                price_roe_pct = pos.current_roe * 100
+                funding_usd = pos.accumulated_funding_usd
+                funding_roe_pct = (
+                    (funding_usd / pos.notional_usd * 100)
+                    if pos.notional_usd > 0 else 0.0
+                )
+                total_pct = price_roe_pct + funding_roe_pct
                 logger.info(
-                    "Exit check: %d open position(s), %s ROE=%.2f%% peak_roe=%.2f%%",
+                    "Exit check: %d open position(s), %s ROE=%.2f%% "
+                    "funding=$%.2f total=%.2f%% peak=%.2f%%",
                     len(open_before), pos.asset,
-                    pos.current_roe * 100, pos.peak_roe * 100,
+                    price_roe_pct, funding_usd, total_pct,
+                    pos.peak_roe * 100,
                 )
             try:
                 closed = self.paper_trader.check_exits(prices)

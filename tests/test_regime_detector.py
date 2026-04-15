@@ -473,15 +473,18 @@ class TestClassifySignalWithRegime(unittest.TestCase):
         self.assertEqual(tier, 1)
 
     def test_low_funding_regime_raises_bar(self):
-        """LOW_FUNDING regime: 100% APY should NOT qualify as Tier 1."""
+        """LOW_FUNDING regime: APY just below the floor should NOT qualify."""
         thresholds = REGIME_THRESHOLDS["LOW_FUNDING"]
+        # After the sizing sweep, LOW_FUNDING tier1/tier2 were both capped
+        # at 100% APY (previously 200%/150%) — see config comments. Use a
+        # value just below the current floor so the test remains meaningful
+        # regardless of future threshold tweaks.
+        just_below = thresholds["tier2_min_funding"] - 0.01
         tier = classify_signal(
-            1.00, -0.02, 2_000_000,
+            just_below, -0.02, 2_000_000,
             tier1_min_funding=thresholds["tier1_min_funding"],
             tier2_min_funding=thresholds["tier2_min_funding"],
         )
-        # 100% < 200% (LOW_FUNDING tier1 threshold) → not Tier 1
-        # 100% < 150% (LOW_FUNDING tier2 threshold) → not Tier 2
         self.assertEqual(tier, 3)
 
     def test_moderate_regime_tier2_accepts_100pct(self):

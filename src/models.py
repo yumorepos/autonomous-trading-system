@@ -118,6 +118,10 @@ class SimulatedPosition(BaseModel):
     accumulated_funding_usd: float = 0.0
     accumulated_fees_usd: float = 0.0
     funding_payments: int = 0
+    # Timestamp of last hourly funding accrual (set on open so the first
+    # tick accrues from entry_time). None for legacy/reloaded positions
+    # until the first accrual tick refreshes it.
+    last_funding_update: datetime | None = None
     is_open: bool = True
     exit_time_utc: datetime | None = None
     exit_reason: str | None = None

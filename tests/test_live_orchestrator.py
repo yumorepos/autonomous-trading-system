@@ -68,8 +68,9 @@ def orchestrator(tmp_path):
         )
 
     orch = LiveOrchestrator(connector, pipeline, paper_trader)
-    # Stub price fetch so unit tests don't hit Hyperliquid API
+    # Stub price and funding fetches so unit tests don't hit Hyperliquid API
     orch._get_mid_prices = lambda: {}
+    orch._get_funding_rates = lambda: {}
     return orch
 
 
@@ -271,6 +272,60 @@ class TestPaperExitChecks:
 
         assert len(orchestrator.paper_trader.open_positions) == 0
         assert orchestrator.paper_trader.closed_positions[-1].exit_reason == "TIMEOUT"
+
+    @pytest.mark.asyncio
+    async def test_funding_fetch_failure_is_graceful(self, orchestrator):
+        """Funding API failure must NOT crash the exit check loop."""
+        event = _make_event(asset="ETH")
+        event.timestamp_utc = datetime.now(timezone.utc)
+        signal = _make_signal(event, actionable=True)
+        orchestrator.pipeline.process.return_value = signal
+        orchestrator._get_mid_prices = lambda: {"ETH": 100.0}
+
+        # Force funding fetch to raise as if the HL API blew up
+        def boom():
+            raise RuntimeError("hyperliquid down")
+        orchestrator._get_funding_rates = boom
+        await orchestrator.handle_event(event)
+        # Position opens cleanly despite funding being unavailable
+        assert len(orchestrator.paper_trader.open_positions) == 1
+
+        # A subsequent tick with failing funding fetch — still graceful.
+        event2 = _make_event(asset="BTC", new_regime=RegimeTier.MODERATE,
+                             prev_regime=RegimeTier.MODERATE)
+        signal2 = _make_signal(event2, actionable=False)
+        orchestrator.pipeline.process.return_value = signal2
+        await orchestrator.handle_event(event2)
+        # Still open — no crash, no accrual.
+        assert len(orchestrator.paper_trader.open_positions) == 1
+        pos = orchestrator.paper_trader.open_positions[0]
+        assert pos.accumulated_funding_usd == 0.0
+
+    @pytest.mark.asyncio
+    async def test_funding_accrual_via_exit_tick(self, orchestrator):
+        """Successful funding fetch → funding accrues on the exit tick."""
+        from datetime import timedelta
+        event = _make_event(asset="ETH")
+        event.timestamp_utc = datetime.now(timezone.utc)
+        signal = _make_signal(event, actionable=True)
+        orchestrator.pipeline.process.return_value = signal
+        orchestrator._get_mid_prices = lambda: {"ETH": 100.0}
+        orchestrator._get_funding_rates = lambda: {}
+        await orchestrator.handle_event(event)
+
+        pos = orchestrator.paper_trader.open_positions[0]
+        # Backdate last_funding_update by 2h to simulate prior tick age
+        pos.last_funding_update = datetime.now(timezone.utc) - timedelta(hours=2)
+
+        # Next tick: funding rate 0.005/hr on a SHORT → +$10 on $1000
+        orchestrator._get_funding_rates = lambda: {"ETH": 0.005}
+        event2 = _make_event(asset="BTC", new_regime=RegimeTier.MODERATE,
+                             prev_regime=RegimeTier.MODERATE)
+        signal2 = _make_signal(event2, actionable=False)
+        orchestrator.pipeline.process.return_value = signal2
+        await orchestrator.handle_event(event2)
+
+        assert pos.accumulated_funding_usd == pytest.approx(10.0, rel=0.01)
 
     @pytest.mark.asyncio
     async def test_price_fetch_failure_is_graceful(self, orchestrator):
