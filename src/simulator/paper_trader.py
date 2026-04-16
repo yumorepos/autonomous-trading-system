@@ -74,18 +74,21 @@ class PaperTrader:
         return False
 
     def _reload_open_positions_from_log(self) -> None:
-        """Reconstruct still-open positions from the JSONL log on startup.
+        """Reconstruct positions from the JSONL log on startup.
 
-        For each OPEN record with no matching CLOSE, rebuild a
-        SimulatedPosition and place it in self.positions. Any rebuilt
-        position missing entry_price (legacy records) is closed as
-        'stale_cleanup' so it cannot linger unmonitored forever.
+        Loads both still-open positions (for continued monitoring) and
+        historically closed positions (for accurate lifetime stats via
+        ``get_stats()``). Without loading closed history, every restart
+        resets win_rate/expectancy to zero and we lose validation data.
+
+        Any rebuilt open position missing entry_price (legacy records)
+        is closed as 'stale_cleanup' so it cannot linger unmonitored.
         """
         if not self.log_path.exists():
             return
 
         open_records: dict[str, dict] = {}
-        closed_ids: set[str] = set()
+        close_records: dict[str, dict] = {}
         try:
             with open(self.log_path, "r") as f:
                 for line in f:
@@ -103,16 +106,62 @@ class PaperTrader:
                     if action == "OPEN":
                         open_records[pid] = rec
                     elif action == "CLOSE":
-                        closed_ids.add(pid)
+                        close_records[pid] = rec
         except OSError as e:
             logger.warning("Failed to reload paper trades log: %s", e)
             return
 
+        # --- Rebuild closed positions for accurate historical stats ---
+        closed_loaded = 0
+        for pid, crec in close_records.items():
+            try:
+                entry_time_str = crec.get("entry_time") or crec.get("timestamp")
+                entry_time = datetime.fromisoformat(entry_time_str)
+                if entry_time.tzinfo is None:
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+                exit_time_str = crec.get("exit_time") or crec.get("timestamp")
+                exit_time = datetime.fromisoformat(exit_time_str)
+                if exit_time.tzinfo is None:
+                    exit_time = exit_time.replace(tzinfo=timezone.utc)
+                regime_str = crec.get("entry_regime") or "HIGH_FUNDING"
+                try:
+                    entry_regime = RegimeTier(regime_str)
+                except ValueError:
+                    entry_regime = RegimeTier.HIGH_FUNDING
+                pos = SimulatedPosition(
+                    position_id=pid,
+                    asset=crec["asset"],
+                    exchange=crec["exchange"],
+                    entry_time_utc=entry_time,
+                    entry_regime=entry_regime,
+                    notional_usd=float(crec.get("notional_usd", 0.0)),
+                    entry_funding_apy=float(crec.get("entry_funding_apy", 0.0)),
+                    entry_price=float(crec.get("entry_price", 0.0)),
+                    direction=crec.get("direction", "long"),
+                    peak_roe=float(crec.get("peak_roe", 0.0)),
+                    current_roe=float(crec.get("current_roe", 0.0)),
+                    price_pnl_usd=float(crec.get("price_pnl_usd", 0.0)),
+                    accumulated_funding_usd=float(crec.get("accumulated_funding_usd", 0.0)),
+                    accumulated_fees_usd=float(crec.get("accumulated_fees_usd", 0.0)),
+                    funding_payments=int(crec.get("funding_payments", 0)),
+                    is_open=False,
+                    exit_reason=crec.get("exit_reason"),
+                    exit_price=float(crec["exit_price"]) if crec.get("exit_price") else None,
+                    exit_time_utc=exit_time,
+                )
+                pos.pnl_usd = float(crec.get("net_pnl_usd", 0.0))
+                self.closed_positions.append(pos)
+                closed_loaded += 1
+            except (KeyError, ValueError, TypeError) as e:
+                logger.warning(
+                    "Skipping malformed CLOSE record %s: %s", pid, e,
+                )
+                continue
+
+        # --- Rebuild still-open positions ---
         still_open = [
-            rec for pid, rec in open_records.items() if pid not in closed_ids
+            rec for pid, rec in open_records.items() if pid not in close_records
         ]
-        if not still_open:
-            return
 
         reloaded = 0
         stale: list[SimulatedPosition] = []
@@ -158,9 +207,17 @@ class PaperTrader:
                 stale.append(pos)
 
         logger.info(
-            "Reloaded %d open paper position(s) from log (%d stale)",
-            reloaded, len(stale),
+            "Reloaded %d open + %d closed paper position(s) from log (%d stale)",
+            reloaded, closed_loaded, len(stale),
         )
+        if closed_loaded > 0:
+            stats = self.get_stats()
+            logger.info(
+                "Historical stats: %d closed, win_rate=%.0f%%, total_pnl=$%.2f, "
+                "best=$%.2f, worst=$%.2f",
+                stats.closed_positions, stats.win_rate * 100,
+                stats.total_pnl_usd, stats.best_trade_pnl, stats.worst_trade_pnl,
+            )
         for pos in stale:
             logger.warning(
                 "Stale position %s (%s) has no entry_price — closing as stale_cleanup",
@@ -332,6 +389,17 @@ class PaperTrader:
             "PAPER CLOSE: %s on %s — PnL=$%.2f, reason=%s",
             position.asset, position.exchange, position.pnl_usd, reason,
         )
+
+        # Log running aggregate stats after every non-admin close
+        if not self._is_admin_close(position):
+            stats = self.get_stats()
+            logger.info(
+                "RUNNING STATS: closed=%d win_rate=%.0f%% total_pnl=$%.2f "
+                "avg_hold=%.1fh best=$%.2f worst=$%.2f",
+                stats.closed_positions, stats.win_rate * 100,
+                stats.total_pnl_usd, stats.avg_holding_hours,
+                stats.best_trade_pnl, stats.worst_trade_pnl,
+            )
 
         return position
 

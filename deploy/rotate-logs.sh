@@ -40,4 +40,8 @@ rotate_file() {
 
 rotate_file "$PROJECT_ROOT/data/paper_stdout.log"
 rotate_file "$PROJECT_ROOT/data/paper_stderr.log"
-rotate_file "$PROJECT_ROOT/data/paper_trades.jsonl"
+# NOTE: paper_trades.jsonl is a trade LEDGER, not a log. It must NOT be
+# rotated — the paper trader reads it on startup to rebuild position state
+# and compute lifetime aggregate stats (win rate, expectancy, total PnL).
+# Rotating it fragments trade history across .1/.2.gz files, resetting
+# stats on every restart.

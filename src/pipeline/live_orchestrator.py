@@ -209,11 +209,52 @@ class LiveOrchestrator:
                     pos.holding_duration_seconds / 3600.0,
                     pos.pnl_usd,
                 )
+                # Send Telegram summary for non-admin closes
+                if not self.paper_trader._is_admin_close(pos):
+                    self._send_trade_close_telegram(pos)
         except Exception as e:
             logger.error(
                 "Exit check loop error (swallowed to keep loop alive): %s",
                 e, exc_info=True,
             )
+
+    def _send_trade_close_telegram(self, pos) -> None:
+        """Send a Telegram message summarizing a closed trade + running stats.
+
+        Lets us monitor strategy validation progress without SSH-ing into
+        the VPS. Runs inside the blanket try/except of _check_paper_exits,
+        so a Telegram failure can never crash the exit loop.
+        """
+        try:
+            stats = self.paper_trader.get_stats()
+            hold_h = pos.holding_duration_seconds / 3600.0
+            pnl_sign = "+" if pos.pnl_usd >= 0 else ""
+            roe_pct = pos.current_roe * 100
+            funding_usd = pos.accumulated_funding_usd
+
+            # Expectancy = total_pnl / closed_count
+            expectancy = (
+                stats.total_pnl_usd / stats.closed_positions
+                if stats.closed_positions > 0 else 0.0
+            )
+
+            msg = (
+                f"{'📈' if pos.pnl_usd >= 0 else '📉'} <b>TRADE CLOSED</b>\n"
+                f"{pos.asset} {pos.direction.upper()} — {pos.exit_reason}\n"
+                f"PnL: <b>{pnl_sign}${pos.pnl_usd:.2f}</b> "
+                f"(ROE {roe_pct:+.2f}% + funding ${funding_usd:.2f})\n"
+                f"Hold: {hold_h:.1f}h\n"
+                f"\n"
+                f"📊 <b>Running Stats</b> ({stats.closed_positions} trades)\n"
+                f"Win rate: {stats.win_rate * 100:.0f}% | "
+                f"Total PnL: ${stats.total_pnl_usd:+.2f}\n"
+                f"Expectancy: ${expectancy:+.2f}/trade | "
+                f"Best: ${stats.best_trade_pnl:+.2f} | "
+                f"Worst: ${stats.worst_trade_pnl:+.2f}"
+            )
+            self.pipeline._send_telegram(msg)
+        except Exception as e:
+            logger.warning("Trade close Telegram failed (non-fatal): %s", e)
 
     async def handle_event(self, event: RegimeTransitionEvent) -> ScoredSignal:
         """Process a single regime transition event through the full chain."""
