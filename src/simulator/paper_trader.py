@@ -566,6 +566,13 @@ class PaperTrader:
 
         Positions closed with an ``admin_*`` exit_reason are excluded from
         every aggregate — see ``_is_admin_close``.
+
+        **total_pnl_usd** includes open positions' accrued funding minus
+        fees, but NOT their unrealized price PnL (``price_pnl_usd`` is
+        only set at close time). This means total_pnl_usd understates
+        losses on underwater open positions and understates gains on
+        profitable ones. Win rate, best/worst, and avg_holding are
+        computed from closed positions only.
         """
         # Open positions always count (they reflect live exposure). Closed
         # positions only count if they weren't admin-closed.
