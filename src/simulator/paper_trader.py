@@ -186,7 +186,7 @@ class PaperTrader:
                     notional_usd=float(rec.get("notional_usd", 0.0)),
                     entry_funding_apy=float(rec.get("entry_funding_apy", 0.0)),
                     entry_price=float(rec.get("entry_price", 0.0)),
-                    direction=rec.get("direction", "short"),
+                    direction=rec.get("direction", "long"),
                     peak_roe=float(rec.get("peak_roe", 0.0)),
                     current_roe=float(rec.get("current_roe", 0.0)),
                     price_pnl_usd=float(rec.get("price_pnl_usd", 0.0)),
