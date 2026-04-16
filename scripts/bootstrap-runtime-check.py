@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config.runtime import TRADING_MODE, mode_includes_hyperliquid, mode_includes_polymarket
+from config.runtime import TRADING_MODE
 
 BASE_DEPENDENCIES = ["requests"]
 OPTIONAL_DEPENDENCIES = {
@@ -28,8 +28,7 @@ def main() -> int:
     print("OPENCLAW BOOTSTRAP CHECK")
     print("=" * 80)
     print(f"Trading mode: {TRADING_MODE}")
-    print(f"Hyperliquid enabled: {mode_includes_hyperliquid()}")
-    print(f"Polymarket enabled: {mode_includes_polymarket()}")
+    print(f"Hyperliquid enabled: True")
     print()
 
     missing = [module_name for module_name in BASE_DEPENDENCIES if not check_dependency(module_name)]

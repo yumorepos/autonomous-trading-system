@@ -12,8 +12,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config.runtime import LOGS_DIR, TRADING_MODE, mode_includes_hyperliquid, mode_includes_polymarket
-from utils.api_connectivity import fetch_hyperliquid_meta, fetch_polymarket_markets
+from config.runtime import LOGS_DIR, TRADING_MODE
+from utils.api_connectivity import fetch_hyperliquid_meta
 from utils.runtime_logging import append_runtime_event
 
 OUTPUT_FILE = LOGS_DIR / "runtime-connectivity-check.json"
@@ -29,31 +29,19 @@ def main() -> int:
 
     checks: list[dict] = []
 
-    if mode_includes_hyperliquid():
-        result, _, _ = fetch_hyperliquid_meta(timeout=10)
-        checks.append(result.to_dict())
-        print(
-            f"[Hyperliquid] ok={result.ok} status_code={result.status_code} "
-            f"latency_ms={result.latency_ms:.1f} record_count={result.record_count}"
-        )
-        if result.error:
-            print(f"  error={result.error}")
-
-    if mode_includes_polymarket():
-        result, _ = fetch_polymarket_markets(timeout=10, limit=25, closed=False)
-        checks.append(result.to_dict())
-        print(
-            f"[Polymarket] ok={result.ok} status_code={result.status_code} "
-            f"latency_ms={result.latency_ms:.1f} record_count={result.record_count}"
-        )
-        if result.error:
-            print(f"  error={result.error}")
+    result, _, _ = fetch_hyperliquid_meta(timeout=10)
+    checks.append(result.to_dict())
+    print(
+        f"[Hyperliquid] ok={result.ok} status_code={result.status_code} "
+        f"latency_ms={result.latency_ms:.1f} record_count={result.record_count}"
+    )
+    if result.error:
+        print(f"  error={result.error}")
 
     payload = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "mode": TRADING_MODE,
         "paper_only": True,
-        "experimental": mode_includes_polymarket(),
         "checks": checks,
         "all_passed": all(check["ok"] for check in checks) if checks else True,
     }

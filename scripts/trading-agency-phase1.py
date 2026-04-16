@@ -24,8 +24,6 @@ from config.runtime import (
     WORKSPACE_ROOT as WORKSPACE,
     LOGS_DIR,
     TRADING_MODE,
-    mode_includes_hyperliquid,
-    mode_includes_polymarket,
 )
 from models.position_state import get_open_positions, synchronize_position_state
 from utils.system_health import SystemHealthManager
@@ -126,7 +124,7 @@ def run_data_integrity_gate() -> StageResult:
     """Run the enforced pre-scan data integrity gate."""
     integrity_module = load_script_module("data-integrity-layer.py", "phase1_data_integrity")
     integrity = integrity_module.DataIntegrityLayer()
-    gate = integrity.run_pre_scan_gate(include_polymarket=mode_includes_polymarket(TRADING_MODE))
+    gate = integrity.run_pre_scan_gate()
     status = StageStatus.SUCCESS if gate['passed'] else StageStatus.FAIL
     return stage_result("data_integrity", status, gate['reason'], gate)
 
@@ -996,14 +994,8 @@ def main():
     print()
     print(f"Canonical entrypoint: scripts/trading-agency-phase1.py")
     print(f"Trading mode: {TRADING_MODE}")
-    print(f"  - Hyperliquid enabled: {mode_includes_hyperliquid(TRADING_MODE)}")
-    print(f"  - Polymarket enabled: {mode_includes_polymarket(TRADING_MODE)}")
-    if TRADING_MODE == 'hyperliquid_only':
-        print("  - Truthful mode status: canonical paper-trading path")
-    elif TRADING_MODE == 'polymarket_only':
-        print("  - Truthful mode status: canonical paper-trading path")
-    else:
-        print("  - Truthful mode status: experimental mixed-mode evaluation; not the canonical proof path")
+    print("  - Hyperliquid enabled: True")
+    print("  - Truthful mode status: canonical paper-trading path")
     print()
 
     stage_results: list[StageResult] = []

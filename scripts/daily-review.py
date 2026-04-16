@@ -8,7 +8,6 @@ trades only. Real execution requires explicit --live flag (NOT IMPLEMENTED).
 
 Usage:
     python scripts/daily-review.py
-    OPENCLAW_TRADING_MODE=mixed python scripts/daily-review.py
 """
 
 from __future__ import annotations
@@ -28,10 +27,8 @@ from config.runtime import (
     WORKSPACE_ROOT as WORKSPACE,
     LOGS_DIR,
     TRADING_MODE,
-    mode_includes_hyperliquid,
-    mode_includes_polymarket,
 )
-from utils.api_connectivity import fetch_hyperliquid_meta, fetch_polymarket_markets
+from utils.api_connectivity import fetch_hyperliquid_meta
 from utils.json_utils import safe_read_json, safe_read_jsonl
 
 # ---------------------------------------------------------------------------
@@ -295,40 +292,6 @@ def scan_hyperliquid_signals(universe: list, contexts: list, existing_assets: se
     return signals[:5]
 
 
-def scan_polymarket_signals(markets: list[dict[str, Any]], existing_ids: set[str]) -> list[dict[str, Any]]:
-    """Scan Polymarket for volume/probability movers."""
-    signals = []
-    for m in markets:
-        cid = m.get("conditionId", "")
-        if cid in existing_ids:
-            continue
-        question = m.get("question", "")
-        volume_24h = m.get("volume24hr", 0) or 0
-        try:
-            outcome_prices = json.loads(m.get("outcomePrices", "[]"))
-            yes_price = float(outcome_prices[0]) if outcome_prices else 0
-        except (json.JSONDecodeError, IndexError, ValueError, TypeError):
-            yes_price = 0
-
-        if volume_24h > 10_000 and 0.15 < yes_price < 0.85:
-            edge = abs(yes_price - 0.5)
-            score = edge * min(volume_24h / 100_000, 3.0)
-            signals.append({
-                "exchange": "Polymarket",
-                "condition_id": cid,
-                "question": question[:100],
-                "signal_type": "volume_mover",
-                "direction": "yes" if yes_price < 0.5 else "no",
-                "entry_price": yes_price if yes_price < 0.5 else 1 - yes_price,
-                "yes_price": yes_price,
-                "volume_24h": volume_24h,
-                "score": score,
-                "scanned_at": iso(utcnow()),
-            })
-    signals.sort(key=lambda s: s["score"], reverse=True)
-    return signals[:5]
-
-
 # ---------------------------------------------------------------------------
 # Paper Trade Execution
 # ---------------------------------------------------------------------------
@@ -369,8 +332,7 @@ def generate_report(
     live_hl: dict[str, Any], paper_positions: list[dict[str, Any]],
     all_evaluated: list[dict[str, Any]], exits: list[dict[str, Any]],
     new_entries: list[dict[str, Any]], hl_signals: list[dict[str, Any]],
-    pm_signals: list[dict[str, Any]], hl_ok: bool, pm_ok: bool,
-    hl_asset_count: int, pm_market_count: int,
+    hl_ok: bool, hl_asset_count: int,
 ) -> str:
     now = utcnow()
     lines = [
@@ -380,7 +342,7 @@ def generate_report(
         f"",
         f"**Generated:** {iso(now)}  ",
         f"**Trading Mode:** {TRADING_MODE}  ",
-        f"**Exchange Connectivity:** Hyperliquid {'✅' if hl_ok else '❌'} ({hl_asset_count} assets) | Polymarket {'✅' if pm_ok else '❌'} ({pm_market_count} markets)",
+        f"**Exchange Connectivity:** Hyperliquid {'✅' if hl_ok else '❌'} ({hl_asset_count} assets)",
         f"",
     ]
 
@@ -459,12 +421,6 @@ def generate_report(
         for s in hl_signals[:3]:
             lines.append(f"- **{s['asset']}**: {s['annualized_rate']:+.0%} ann. | Vol: ${s['volume_24h']:,.0f} | Score: {s['score']:.2f}")
         lines.append("")
-    if pm_signals:
-        lines.append("## Polymarket Signals — Volume Movers")
-        for s in pm_signals[:3]:
-            lines.append(f"- **{s['question'][:60]}**: YES@{s['yes_price']:.2f} | Vol24h: ${s['volume_24h']:,.0f} | Score: {s['score']:.2f}")
-        lines.append("")
-
     # Execution Status
     lines.extend([
         "## Execution Status",
@@ -472,7 +428,6 @@ def generate_report(
         "| Exchange | Data Feed | Position Reading | Live Execution | Status |",
         "|----------|-----------|-----------------|----------------|--------|",
         f"| Hyperliquid | {'✅ Public API' if hl_ok else '❌'} | {'✅ SDK + Key' if hl_status == 'CONNECTED' else '❌ No credentials'} | ❌ NOT IMPLEMENTED | **{'PARTIAL' if hl_status == 'CONNECTED' else 'PAPER ONLY'}** |",
-        f"| Polymarket | {'✅ Gamma API' if pm_ok else '❌'} | ❌ No CLOB key | ❌ NOT IMPLEMENTED | **PAPER ONLY** |",
         "",
         "## Scheduling",
         "```",
@@ -500,19 +455,15 @@ def run_daily_review() -> dict[str, Any]:
     print(f"{'='*60}\n")
 
     # 1. Read live Hyperliquid positions
-    live_hl: dict[str, Any] = {"status": "SKIPPED", "positions": []}
-    if mode_includes_hyperliquid():
-        live_hl = read_hyperliquid_positions()
-        hl_status = live_hl["status"]
-        live_pos = live_hl.get("positions", [])
-        print(f"[1/6] Hyperliquid account: {hl_status}")
-        if hl_status == "CONNECTED":
-            print(f"       Account value: ${live_hl.get('account_value', 0):.6f}")
-            print(f"       Live positions: {len(live_pos)}")
-            for p in live_pos:
-                print(f"         {p['asset']} {p['direction']} {p['size']} @ ${p['entry_price']:,.2f} | PnL: ${p['unrealized_pnl']:+.4f} ({p['roe']:+.1%})")
-    else:
-        print(f"[1/6] Hyperliquid: skipped (mode={TRADING_MODE})")
+    live_hl = read_hyperliquid_positions()
+    hl_status = live_hl["status"]
+    live_pos = live_hl.get("positions", [])
+    print(f"[1/6] Hyperliquid account: {hl_status}")
+    if hl_status == "CONNECTED":
+        print(f"       Account value: ${live_hl.get('account_value', 0):.6f}")
+        print(f"       Live positions: {len(live_pos)}")
+        for p in live_pos:
+            print(f"         {p['asset']} {p['direction']} {p['size']} @ ${p['entry_price']:,.2f} | PnL: ${p['unrealized_pnl']:+.4f} ({p['roe']:+.1%})")
 
     # 2. Load paper positions
     paper_positions = load_paper_positions()
@@ -525,23 +476,12 @@ def run_daily_review() -> dict[str, Any]:
     hl_contexts: list = []
     hl_ok = False
 
-    if mode_includes_hyperliquid():
-        hl_result, hl_universe, hl_contexts = fetch_hyperliquid_meta(timeout=10)
-        hl_ok = hl_result.ok
-        hl_asset_count = hl_result.record_count
-        if hl_ok:
-            hl_prices = fetch_hyperliquid_prices()
-        print(f"[3/6] Hyperliquid data: {'✅' if hl_ok else '❌'} ({hl_asset_count} assets, {len(hl_prices)} prices)")
-
-    pm_markets: list[dict[str, Any]] = []
-    pm_ok = False
-    pm_market_count = 0
-    if mode_includes_polymarket():
-        pm_result, pm_markets = fetch_polymarket_markets(timeout=10, limit=50, closed=False)
-        pm_ok = pm_result.ok
-        pm_market_count = pm_result.record_count
-        pm_markets = [m for m in pm_markets if m.get("active") and not m.get("closed")]
-        print(f"[3/6] Polymarket data: {'✅' if pm_ok else '❌'} ({pm_market_count} markets)")
+    hl_result, hl_universe, hl_contexts = fetch_hyperliquid_meta(timeout=10)
+    hl_ok = hl_result.ok
+    hl_asset_count = hl_result.record_count
+    if hl_ok:
+        hl_prices = fetch_hyperliquid_prices()
+    print(f"[3/6] Hyperliquid data: {'✅' if hl_ok else '❌'} ({hl_asset_count} assets, {len(hl_prices)} prices)")
 
     # 4. Evaluate ALL positions (live + paper)
     all_positions = live_hl.get("positions", []) + paper_positions
@@ -560,15 +500,13 @@ def run_daily_review() -> dict[str, Any]:
 
     # 5. Scan signals
     existing_hl = {p.get("asset", "") for p in all_positions}
-    existing_pm = {p.get("condition_id", "") for p in all_positions}
     hl_signals = scan_hyperliquid_signals(hl_universe, hl_contexts, existing_hl) if hl_ok else []
-    pm_signals = scan_polymarket_signals(pm_markets, existing_pm) if pm_ok else []
-    print(f"[5/6] Signals: {len(hl_signals)} HL, {len(pm_signals)} PM")
+    print(f"[5/6] Signals: {len(hl_signals)} HL")
 
-    # Paper entries (best signal per exchange)
+    # Paper entries (best signal)
     new_entries = []
     current_count = len(paper_holds)
-    for signal in (hl_signals[:1] + pm_signals[:1]):
+    for signal in hl_signals[:1]:
         entry = paper_open_position(signal, current_count)
         if entry:
             new_entries.append(entry)
@@ -577,7 +515,7 @@ def run_daily_review() -> dict[str, Any]:
 
     # 6. Write report
     report = generate_report(live_hl, paper_positions, evaluated, exits_executed, new_entries,
-                              hl_signals, pm_signals, hl_ok, pm_ok, hl_asset_count, pm_market_count)
+                              hl_signals, hl_ok, hl_asset_count)
     DAILY_REPORT_FILE.write_text(report, encoding="utf-8")
 
     log_entry = {
@@ -585,7 +523,7 @@ def run_daily_review() -> dict[str, Any]:
         "hl_status": live_hl.get("status"), "hl_account_value": live_hl.get("account_value"),
         "hl_live_positions": len(live_hl.get("positions", [])),
         "paper_positions": len(paper_positions), "exits": len(exits_executed),
-        "new_entries": len(new_entries), "hl_signals": len(hl_signals), "pm_signals": len(pm_signals),
+        "new_entries": len(new_entries), "hl_signals": len(hl_signals),
         "live_alerts": [{"asset": a["asset"], "decision": a["decision"]} for a in live_alerts],
         "exits_detail": exits_executed, "entries_detail": new_entries,
     }

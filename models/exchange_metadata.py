@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-SUPPORTED_PAPER_EXCHANGES = ("Hyperliquid", "Polymarket")
+SUPPORTED_PAPER_EXCHANGES = ("Hyperliquid",)
 DEFAULT_PAPER_EXCHANGE = "Hyperliquid"
 PRIMARY_MIXED_MODE_EXCHANGE = "Hyperliquid"
 MIXED_MODE_MAX_NEW_ENTRIES_PER_CYCLE = 1
@@ -13,14 +13,6 @@ EXCHANGE_RUNTIME_METADATA = {
         "entry_priority": 0,
         "take_profit_pct": 10.0,
         "stop_loss_pct": -10.0,
-        "timeout_hours": 24.0,
-    },
-    "Polymarket": {
-        "paper_status": "canonical",
-        "experimental": True,
-        "entry_priority": 1,
-        "take_profit_pct": 8.0,
-        "stop_loss_pct": -8.0,
         "timeout_hours": 24.0,
     },
 }

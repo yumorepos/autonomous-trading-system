@@ -29,21 +29,9 @@ HYPERLIQUID_SIGNAL_CONTRACT = SignalContract(
     timeout_hours=1.5,
 )
 
-POLYMARKET_SIGNAL_CONTRACT = SignalContract(
-    exchange='Polymarket',
-    strategy='polymarket_spread',
-    signal_type='polymarket_binary_market',
-    required_signal_fields=('market_id', 'market_question', 'side', 'entry_price'),
-    position_identifier_fields=('market_id', 'symbol', 'asset'),
-    default_position_size_usd=5.0,
-    take_profit_pct=2.0,
-    stop_loss_pct=-2.0,
-    timeout_hours=1.5,
-)
-
 SIGNAL_CONTRACTS: dict[str, SignalContract] = {
     contract.exchange: contract
-    for contract in (HYPERLIQUID_SIGNAL_CONTRACT, POLYMARKET_SIGNAL_CONTRACT)
+    for contract in (HYPERLIQUID_SIGNAL_CONTRACT,)
 }
 
 CANONICAL_CLOSED_TRADE_FIELDS = (
@@ -102,10 +90,6 @@ EXCHANGE_TRADE_REQUIRED_FIELDS: dict[str, dict[str, tuple[str, ...]]] = {
     'Hyperliquid': {
         'OPEN': (),
         'CLOSED': (),
-    },
-    'Polymarket': {
-        'OPEN': ('market_id',),
-        'CLOSED': ('market_id',),
     },
 }
 

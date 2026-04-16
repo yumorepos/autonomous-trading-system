@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
 Phase 1 paper trading engine.
-Supports canonical Hyperliquid and Polymarket paper trades through the same
-shared execution architecture. Mixed mode remains a limited deterministic
-one-entry-per-cycle evaluation path.
+Supports canonical Hyperliquid paper trades.
 """
 
 from __future__ import annotations
@@ -20,10 +18,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config.runtime import LOGS_DIR, TRADING_MODE, mode_includes_hyperliquid, mode_includes_polymarket
+from config.runtime import LOGS_DIR, TRADING_MODE
 from models.exchange_metadata import (
-    mixed_mode_max_new_entries_per_cycle,
-    mixed_mode_selection_note,
     paper_exchange_priority,
     paper_exchange_status,
 )
@@ -91,12 +87,8 @@ class PaperTrader:
             return None
 
         trade = adapter.build_trade(self.signal, self.position_id)
-        if exchange == 'Polymarket':
-            print(f"  [OK] Polymarket paper trade: {trade['side']} {trade['market_id']} ({trade['position_size']:.4f} shares) @ ${trade['entry_price']:.4f}")
-            metadata = {'trade_id': self.position_id, 'market_id': trade['market_id'], 'side': trade['side'], 'entry_price': trade['entry_price']}
-        else:
-            print(f"  [OK] Hyperliquid paper trade: {trade['side']} {trade['position_size']:.4f} {trade['symbol']} @ ${trade['entry_price']:.4f}")
-            metadata = {'trade_id': self.position_id, 'symbol': trade['symbol'], 'side': trade['side'], 'entry_price': trade['entry_price']}
+        print(f"  [OK] Hyperliquid paper trade: {trade['side']} {trade['position_size']:.4f} {trade['symbol']} @ ${trade['entry_price']:.4f}")
+        metadata = {'trade_id': self.position_id, 'symbol': trade['symbol'], 'side': trade['side'], 'entry_price': trade['entry_price']}
         append_runtime_event(
             stage='paper_trader',
             exchange=exchange,
@@ -306,9 +298,7 @@ def select_trade_candidate(
         if signal_age.total_seconds() > MAX_SIGNAL_AGE_SECONDS:
             continue
         exchange = signal.get('exchange', signal.get('source'))
-        if exchange == 'Hyperliquid' and not mode_includes_hyperliquid(TRADING_MODE):
-            continue
-        if exchange == 'Polymarket' and not mode_includes_polymarket(TRADING_MODE):
+        if exchange != 'Hyperliquid':
             continue
         valid, reason = validate_canonical_signal(signal)
         if not valid:
@@ -338,11 +328,7 @@ def select_trade_candidate(
     best_signal = ranked_signals[0]
     exchange = best_signal.get('exchange', best_signal.get('source'))
     status = paper_exchange_status(exchange).replace('_', ' ')
-    canonical_note = (
-        f"{mixed_mode_selection_note(exchange)}; max_new_entries_per_cycle={mixed_mode_max_new_entries_per_cycle()}"
-        if TRADING_MODE == 'mixed'
-        else status
-    )
+    canonical_note = status
     return best_signal, (
         f"Selected {_position_identifier(best_signal) or 'unknown'} on {exchange} @ EV {best_signal.get('ev_score', 0):.2f} "
         f"({canonical_note})"
