@@ -1,132 +1,122 @@
 # Autonomous Trading System
 
-Status: **CONDITIONAL-GO** — live on Hyperliquid mainnet, regime-dependent  
-Last audit: 2026-04-10
+Funding-rate arbitrage engine running a paper-trading validation window on a VPS.
 
-## What This Is
+**Status (verified 2026-04-17):** paper mode, `dry_run=true`. 6 clean closed trades, WR 66.7%, +$51.87 closed PnL, 1 open position. Target is n ≥ 20 clean closes before any live-capital decision.
 
-An autonomous crypto trading engine deployed on Hyperliquid. Runs in a Docker
-container on a VPS. The engine monitors positions, enforces stop-losses,
-manages circuit breakers, and executes trades based on funding rate arbitrage
-signals.
+## What it does
 
-**Current state:**
-- Live on Hyperliquid mainnet via Docker (trading_engine.py)
-- CONDITIONAL-GO: backtested edge exists but is regime-dependent (active ~1/3 of time)
-- Multi-layer capital protection: engine + watchdog + risk guardian + emergency fallback
-- 19 pre-commit protection tests must pass before any code change
-- Backtester built and validated (180-day window, 23 trades, positive expectancy)
+Detects funding-rate arbitrage opportunities on Hyperliquid perpetuals, scores candidates through a composite signal filter (funding rate + cross-exchange premium + liquidity + duration prediction), and opens/closes simulated positions to collect the funding yield. All entry gates and exit rules (trailing stop, timeout, invalidation) are pre-registered in `config/` and must not be hot-patched during a validation window.
 
-**Limitations:**
-- Small capital (~$100 starting)
-- Limited live trade history (<20 audited trades)
-- Strategy sits out during unfavorable market regimes
-- Polymarket integration explored but not in production
+## Deployment
+
+| | |
+|---|---|
+| Host | Hetzner VPS |
+| Service | systemd unit `ats-paper-trader` |
+| Install path | `/opt/trading/` |
+| Entry point | `scripts/run_paper_trading.py` |
+| Mode | Paper / `dry_run=true` (no real orders) |
+| Stats API | `http://localhost:8081/paper/status`, `/paper/stats` |
+| Trade ledger | `/opt/trading/data/paper_trades.jsonl` (never rotated) |
+| Engine log | `/opt/trading/workspace/logs/trading_engine.jsonl` |
+
+Operational procedures: [docs/RUNBOOK.md](docs/RUNBOOK.md) and [docs/operations/](docs/operations/).
 
 ## Architecture
 
+```text
+scripts/run_paper_trading.py         entry point — wires components, serves stats API
+│
+├── src/bridge/ats_connector.py      consumes regime transitions from ATS engine
+├── src/collectors/                  exchange adapters (Binance, Hyperliquid, Bybit)
+│     exchange_adapters/, regime_history.py, spread_scanner.py
+├── src/scoring/                     composite signal scoring
+│     composite_scorer.py, duration_predictor.py, liquidity_scorer.py
+├── src/pipeline/
+│     signal_filter.py               scores and gates candidates
+│     live_orchestrator.py           event → signal → paper-trade loop
+├── src/simulator/paper_trader.py    simulated position lifecycle, PnL, funding accrual
+├── src/execution/
+│     executor.py                    Hyperliquid entry path (gated by dry_run)
+│     kill_switch.py                 hard cutoff
+├── src/api/stats_server.py          /paper/status, /paper/stats
+└── config/
+      risk_params.py                 pre-registered risk + exit rules
+      config.yaml, regime_thresholds.py
 ```
-Docker Container (VPS)
-  trading_engine.py          Main control loop (Docker CMD)
-    config/risk_params.py    Unified risk parameters
-    config/runtime.py        Path/mode configuration
-    idempotent_exit.py       Exit coordination with partial-fill handling
-    exit_ownership.py        Lock to prevent duplicate closes
-    pre_trade_validator.py   Pre-trade safety gates
 
-  watchdog.py                Health monitor (30s cycle)
-    risk-guardian.py          Autonomous position protection
+## Backtest (canonical figures)
 
-  emergency_fallback.py      Last-resort capital protection (independent)
-```
+180-day window, 30-asset universe.
 
-Signal generation (run separately or via ats-cycle.py):
-- `tiered_scanner.py` — Tier 1/2/3 signal classification by strength
-- `signal_engine.py` — Multi-factor composite scoring (funding + momentum + volume)
+**23 trades · WR 82.6% · PF 1.68 · net +$2.44 on $95 · max DD 1.59% · Sharpe 5.64.**
+Exit mix: TRAILING_STOP 18, STOP_LOSS 2, TAKE_PROFIT 2, TIMEOUT 1.
 
-Paper trading pipeline (secondary, for validation):
-- `trading-agency-phase1.py` — Orchestrator for paper trading flow
-- `phase1-signal-scanner.py` / `phase1-paper-trader.py` — Paper execution
+- Source of truth: [docs/audits/EDGE_VALIDATION_REPORT.md](docs/audits/EDGE_VALIDATION_REPORT.md) (generated 2026-04-10, reproduced exactly during D36 on 2026-04-17).
+- Trade log pinned at `artifacts/backtest_trades_d31.jsonl` — sha256 `2ee4f3725b5ec9cccae1bec499a969ecdc3b702f4de17f334c6548692afe31f4`, 23 lines, 7005 bytes.
 
-## Quick Start
+Known caveats:
+- **Sample concentration:** 20 of 23 trades are on a single asset (VVV).
+- **SHORT partition empty:** the 180-day dataset contains zero observations with `rate_8h ≥ +100% APY`, so the strategy's SHORT side is untested against real historical data.
+- "PF 2.02" appearing in older docs is a mis-cite of a forward-looking governance target in `docs/THREE_STAGE_GOVERNANCE.md`, not a backtest result.
 
-### Docker (production)
+## Live paper trading window
+
+Snapshot as of 2026-04-17 (for current figures, hit the stats API directly):
+
+| Asset | Dir | Exit | Net PnL |
+|---|---|---|---|
+| BLUR | long | TRAILING_STOP | +$1.37 |
+| BLUR | long | TRAILING_STOP | +$17.44 |
+| ALT | long | TRAILING_STOP | +$50.12 |
+| YZY | long | TIMEOUT | −$16.87 |
+| ZETA | long | TRAILING_STOP | +$44.68 |
+| BLUR | long | TIMEOUT | −$44.86 |
+
+**Closed PnL +$51.87 · WR 66.7% · n = 6 · 1 open (SAGA).** At this sample size, expectancy is indistinguishable from noise. The window continues until n ≥ 20 and PF meets pre-registered thresholds.
+
+## Running locally
 
 ```bash
 cp .env.example .env
-# Fill in HL_PRIVATE_KEY and HL_WALLET_ADDRESS
-docker-compose up -d
-```
+# Fill HL_PRIVATE_KEY, HL_WALLET_ADDRESS (read-only is sufficient for paper)
 
-### Local development
-
-```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Status check
-python3 scripts/trading_engine.py --status
-
-# Run backtester
-python3 -m scripts.backtest.engine
+python3 scripts/run_paper_trading.py
 ```
 
-### Tests
+Stats will be live at `http://localhost:8081/paper/status`.
+
+## Tests
 
 ```bash
-# Pre-commit tests (run automatically on commit)
-python3 tests/test_capital_protection_rules.py
-python3 tests/test_multi_layer_protection.py
-python3 tests/test_race_condition.py
-python3 tests/test_idempotent_close.py
-
-# Full CI suite
 ./scripts/ci-safe-verification.sh
 ```
 
-## Repository Layout
+Runs bootstrap runtime check, compile validation, regression tests, and offline lifecycle tests. No network dependencies, no live exchange calls.
 
-```
-config/           Risk parameters and runtime configuration
-models/           Trade/position schemas and paper account state
-scripts/          Active trading scripts and backtester
-  backtest/       Backtesting engine, strategies, cost model
-  data/           Historical data downloaders
-  support/        Performance dashboard
-tests/            Regression and protection tests
-utils/            Alerting, API connectivity, JSON helpers
-_deprecated/      39 scripts removed during 2026-04-10 audit (see README inside)
-docs/             Architecture docs, runbooks, audit history
-artifacts/        Backtest reports, case studies
-workspace/        Runtime state, logs, operator controls (gitignored)
-```
+## Legacy paths
 
-## Key Documents
+These exist in the repo but are **not** on the live path. Kept for reference, not for new work:
 
-| Document | Status | Purpose |
-|----------|--------|---------|
-| docs/audits/EDGE_VALIDATION_REPORT.md | Accurate | Backtested edge analysis, GO/NO-GO verdict |
-| docs/architecture/EXECUTION_PROOF_PROTOCOL.md | Accurate | Post-mortem on execution truth failures |
-| docs/architecture/CAPITAL_PROTECTION_RULES.md | Aspirational | Design intent for protection rules |
-| docs/SYSTEM_ARCHITECTURE.md | Accurate | Paper trading pipeline architecture |
-| docs/RUNBOOK.md | Aspirational | Operations procedures (needs update) |
-| docs/OPERATOR_QUICKSTART.md | Accurate | Paper trading quickstart |
+- `scripts/trading_engine.py`, `watchdog.py`, `risk-guardian.py`, `emergency_fallback.py` — earlier Hyperliquid mainnet attempt. Superseded by `scripts/run_paper_trading.py` + `src/`.
+- `scripts/phase1-paper-trader.py`, `scripts/phase1-signal-scanner.py` — paper trader v1. Superseded by `src/simulator/paper_trader.py`.
+- `Dockerfile`, `docker-compose.yml` — retained for local containerized dev. The VPS does not use Docker.
+- `docs/POLYMARKET_*.md` — Polymarket support was removed (D32) and is not on any live path.
 
-## Paper Trading Pipeline Truth
+## Key docs
 
-The paper trading pipeline (`scripts/trading-agency-phase1.py`) remains available
-for offline validation. Its truthful scope:
-
-- **Hyperliquid:** canonical paper-trading path
-- **Polymarket:** canonical paper path, experimental overall, not live-integrated
-- **Mixed mode:** limited, asymmetric (one entry per cycle, Hyperliquid priority)
-- **CI:** offline proof only, not live exchange validation
-- **Live trading:** not implemented (in the paper pipeline)
-- **Real-money execution:** not supported (in the paper pipeline)
-- **Production deployment claim:** unsupported (for the paper pipeline)
-- **Audience:** research, audit, portfolio review
+| File | Purpose |
+|---|---|
+| [docs/audits/EDGE_VALIDATION_REPORT.md](docs/audits/EDGE_VALIDATION_REPORT.md) | Canonical backtest headline |
+| [docs/SYSTEM_ARCHITECTURE.md](docs/SYSTEM_ARCHITECTURE.md) | Pipeline architecture |
+| [docs/OPERATOR_QUICKSTART.md](docs/OPERATOR_QUICKSTART.md) | Paper-trading quickstart |
+| [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operational procedures |
+| [docs/THREE_STAGE_GOVERNANCE.md](docs/THREE_STAGE_GOVERNANCE.md) | Go/no-go framework (contains aspirational PF target — not a backtest result) |
 
 ## Disclaimer
 
-This is a personal trading system, not a product. It is not financial advice.
-Performance claims are based on backtesting and limited live data.
+Personal research project. Not financial advice. Backtest claims are based on a 180-day window with acknowledged sample-concentration caveats. The live paper-trading window is small and statistically inconclusive. No real capital is deployed.
