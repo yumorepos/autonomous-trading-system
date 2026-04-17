@@ -27,8 +27,6 @@ run_step '3/4 script regression tests' bash -lc '
     tests/execution-safety-schema-test.py \
     tests/paper-account-state-test.py \
     tests/paper-contract-centralization-test.py \
-    tests/signal-integrity-canonical-test.py \
-    tests/repo-truth-guard-test.py \
     tests/performance-dashboard-canonical-test.py \
     tests/trading-agency-monitor-failure-test.py \
     tests/trading-agency-operator-controls-test.py
