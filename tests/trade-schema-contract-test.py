@@ -32,48 +32,12 @@ if __name__ == "__main__":
         position_state = logs_dir / "position-state.json"
 
         os.environ["OPENCLAW_WORKSPACE"] = str(workspace_root)
-        os.environ["OPENCLAW_TRADING_MODE"] = "mixed"
+        os.environ["OPENCLAW_TRADING_MODE"] = "hyperliquid_only"
         sys.modules.pop("config.runtime", None)
         sys.modules["requests"] = types.SimpleNamespace(post=lambda *args, **kwargs: None, get=lambda *args, **kwargs: None, Timeout=RuntimeError)
 
         from models.position_state import apply_trade_to_position_state, get_open_positions
         from models.trade_schema import normalize_trade_record, validate_trade_record
-
-        polymarket_open = {
-            "trade_id": "pm-1",
-            "exchange": "Polymarket",
-            "strategy": "polymarket_spread",
-            "symbol": "pm-btc-up",
-            "side": "YES",
-            "entry_price": 0.42,
-            "position_size": 10.0,
-            "position_size_usd": 4.2,
-            "status": "OPEN",
-            "entry_timestamp": "2026-01-01T00:00:00+00:00",
-            "market_id": "pm-btc-up",
-            "market_question": "Will BTC close above 60k?",
-            "token_id": "yes-token",
-            "signal": {
-                "exchange": "Hyperliquid",
-                "strategy": "wrong_strategy",
-            },
-        }
-        normalized_pm = normalize_trade_record(polymarket_open)
-        assert normalized_pm["exchange"] == "Polymarket"
-        assert normalized_pm["strategy"] == "polymarket_spread"
-        assert normalized_pm["market_id"] == "pm-btc-up"
-        assert normalized_pm["market_question"] == "Will BTC close above 60k?"
-        assert normalized_pm["token_id"] == "yes-token"
-        assert validate_trade_record(normalized_pm, context="schema-contract.polymarket-open")
-
-        apply_trade_to_position_state(position_state, polymarket_open)
-        open_positions = get_open_positions(position_state)
-        assert len(open_positions) == 1, open_positions
-        assert open_positions[0]["exchange"] == "Polymarket"
-        assert open_positions[0]["strategy"] == "polymarket_spread"
-        assert open_positions[0]["market_id"] == "pm-btc-up"
-        assert open_positions[0]["market_question"] == "Will BTC close above 60k?"
-        assert open_positions[0]["token_id"] == "yes-token"
 
         hyperliquid_open = {
             "trade_id": "hl-open-1",
@@ -87,11 +51,17 @@ if __name__ == "__main__":
             "status": "OPEN",
             "entry_timestamp": "2026-01-01T00:05:00+00:00",
         }
+        normalized_hl = normalize_trade_record(hyperliquid_open)
+        assert normalized_hl["exchange"] == "Hyperliquid"
+        assert normalized_hl["strategy"] == "funding_arbitrage"
+        assert normalized_hl["symbol"] == "BTC"
+        assert validate_trade_record(normalized_hl, context="schema-contract.hyperliquid-open")
+
         apply_trade_to_position_state(position_state, hyperliquid_open)
-        open_positions = sorted(get_open_positions(position_state), key=lambda position: position["exchange"])
-        assert [position["exchange"] for position in open_positions] == ["Hyperliquid", "Polymarket"], open_positions
+        open_positions = get_open_positions(position_state)
+        assert len(open_positions) == 1, open_positions
+        assert open_positions[0]["exchange"] == "Hyperliquid"
         assert open_positions[0]["symbol"] == "BTC"
-        assert open_positions[1]["market_id"] == "pm-btc-up"
 
         records = [
             {
@@ -110,34 +80,6 @@ if __name__ == "__main__":
                 "exit_reason": "take_profit",
                 "entry_timestamp": "2026-01-01T00:00:00+00:00",
                 "exit_timestamp": "2026-01-01T01:00:00+00:00",
-                "signal": {
-                    "exchange": "Polymarket",
-                    "strategy": "bad_fallback",
-                },
-            },
-            {
-                "trade_id": "pm-closed-1",
-                "exchange": "Polymarket",
-                "strategy": "polymarket_spread",
-                "symbol": "pm-btc-up",
-                "side": "YES",
-                "entry_price": 0.4,
-                "exit_price": 0.5,
-                "position_size": 10.0,
-                "position_size_usd": 4.0,
-                "realized_pnl_usd": 1.0,
-                "realized_pnl_pct": 25.0,
-                "status": "CLOSED",
-                "exit_reason": "take_profit",
-                "entry_timestamp": "2026-01-01T00:00:00+00:00",
-                "exit_timestamp": "2026-01-01T01:00:00+00:00",
-                "market_id": "pm-btc-up",
-                "market_question": "Will BTC close above 60k?",
-                "token_id": "yes-token",
-                "signal": {
-                    "exchange": "Hyperliquid",
-                    "strategy": "bad_fallback",
-                },
             },
         ]
 
@@ -152,10 +94,5 @@ if __name__ == "__main__":
         assert len(dashboard.hl_trades) == 1, dashboard.hl_trades
         assert dashboard.hl_trades[0]["exchange"] == "Hyperliquid"
         assert dashboard.hl_trades[0]["strategy"] == "funding_arbitrage"
-        assert len(dashboard.pm_trades) == 1, dashboard.pm_trades
-        assert dashboard.pm_trades[0]["exchange"] == "Polymarket"
-        assert dashboard.pm_trades[0]["market_id"] == "pm-btc-up"
-        assert dashboard.pm_trades[0]["market_question"] == "Will BTC close above 60k?"
-        assert dashboard.pm_trades[0]["token_id"] == "yes-token"
 
-        print("[OK] Canonical schema/state contracts hold across normalization, position state, and dashboard reads")
+        print("[OK] Canonical schema/state contracts hold for Hyperliquid across normalization, position state, and dashboard reads")

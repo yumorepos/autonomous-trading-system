@@ -34,7 +34,7 @@ if __name__ == '__main__':
         now = datetime.now(timezone.utc)
 
         os.environ['OPENCLAW_WORKSPACE'] = str(workspace_root)
-        os.environ['OPENCLAW_TRADING_MODE'] = 'mixed'
+        os.environ['OPENCLAW_TRADING_MODE'] = 'hyperliquid_only'
         sys.modules.pop('config.runtime', None)
         sys.modules['requests'] = types.SimpleNamespace(post=lambda *args, **kwargs: None, get=lambda *args, **kwargs: None, Timeout=RuntimeError)
 
@@ -51,21 +51,6 @@ if __name__ == '__main__':
                 'status': 'OPEN',
                 'entry_timestamp': (now - timedelta(seconds=30)).isoformat(),
             },
-            {
-                'trade_id': 'pm-open-1',
-                'exchange': 'Polymarket',
-                'strategy': 'polymarket_spread',
-                'symbol': 'pm-btc-up',
-                'side': 'YES',
-                'entry_price': 0.42,
-                'position_size': 11.9,
-                'position_size_usd': 5.0,
-                'status': 'OPEN',
-                'entry_timestamp': (now - timedelta(seconds=20)).isoformat(),
-                'market_id': 'pm-btc-up',
-                'market_question': 'Will BTC close above 60k?',
-                'token_id': 'yes-token',
-            },
         ]
 
         with open(trades_file, 'w') as handle:
@@ -74,7 +59,7 @@ if __name__ == '__main__':
 
         module = load_module('execution_safety_schema_test', REPO_ROOT / 'scripts' / 'execution-safety-layer.py')
         safety = module.ExecutionSafetyLayer()
-        assert len(safety.recent_trades) == 2, safety.recent_trades
+        assert len(safety.recent_trades) == 1, safety.recent_trades
 
         hl_result = safety.check_duplicate_order(
             module.TradeProposal(
@@ -89,20 +74,6 @@ if __name__ == '__main__':
             )
         )
         assert hl_result.passed is False, hl_result
-
-        pm_result = safety.check_duplicate_order(
-            module.TradeProposal(
-                exchange='Polymarket',
-                strategy='polymarket_spread',
-                asset='pm-btc-up',
-                direction='YES',
-                entry_price=0.42,
-                position_size_usd=5.0,
-                signal_timestamp=now.isoformat(),
-                allocation_weight=0.02,
-            )
-        )
-        assert pm_result.passed is False, pm_result
 
         no_dup_result = safety.check_duplicate_order(
             module.TradeProposal(

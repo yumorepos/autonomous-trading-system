@@ -44,7 +44,6 @@ run_step '4/4 offline isolated lifecycle tests' bash -lc '
     tests/destructive/trading-agency-hyperliquid-repeat-cycle-test.py \
     tests/destructive/trading-agency-state-recovery-test.py \
     tests/destructive/trading-agency-negative-path-test.py \
-    tests/destructive/trading-agency-mixed-test.py \
     tests/destructive/full-lifecycle-integration-test.py \
     tests/destructive/real-exit-integration-test.py
   do

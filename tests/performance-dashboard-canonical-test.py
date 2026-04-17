@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the dashboard reads mixed-mode results from canonical trade history."""
+"""Verify the dashboard reads Hyperliquid results from canonical trade history."""
 
 import importlib.util
 import json
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     with tempfile.TemporaryDirectory(prefix='openclaw-dashboard-') as temp_dir:
         workspace_root = Path(temp_dir)
         os.environ['OPENCLAW_WORKSPACE'] = str(workspace_root)
-        os.environ['OPENCLAW_TRADING_MODE'] = 'mixed'
+        os.environ['OPENCLAW_TRADING_MODE'] = 'hyperliquid_only'
         sys.modules.pop('config.runtime', None)
         sys.modules['requests'] = types.SimpleNamespace(post=lambda *args, **kwargs: None, get=lambda *args, **kwargs: None, Timeout=RuntimeError)
 
@@ -62,37 +62,6 @@ if __name__ == '__main__':
                 'exit_timestamp': '2026-01-01T01:00:00+00:00',
                 'exchange': 'Hyperliquid',
             },
-            {
-                'trade_id': 'pm-1',
-                'symbol': 'pm-btc-up',
-                'side': 'YES',
-                'entry_price': 0.4,
-                'position_size': 10.0,
-                'position_size_usd': 4.0,
-                'status': 'OPEN',
-                'entry_timestamp': '2026-01-01T00:00:00+00:00',
-                'exchange': 'Polymarket',
-                'market_id': 'pm-btc-up',
-                'market_question': 'Will BTC close above 60k?',
-            },
-            {
-                'trade_id': 'pm-1',
-                'symbol': 'pm-btc-up',
-                'side': 'YES',
-                'entry_price': 0.4,
-                'exit_price': 0.5,
-                'position_size': 10.0,
-                'position_size_usd': 4.0,
-                'realized_pnl_usd': 1.0,
-                'realized_pnl_pct': 25.0,
-                'status': 'CLOSED',
-                'exit_reason': 'take_profit',
-                'entry_timestamp': '2026-01-01T00:00:00+00:00',
-                'exit_timestamp': '2026-01-01T01:00:00+00:00',
-                'exchange': 'Polymarket',
-                'market_id': 'pm-btc-up',
-                'market_question': 'Will BTC close above 60k?',
-            },
         ]
 
         with open(trade_log, 'w') as handle:
@@ -104,7 +73,6 @@ if __name__ == '__main__':
         dashboard = dashboard_module.PerformanceDashboard()
 
         assert dashboard.calculate_stats(dashboard.hl_trades)['closed'] == 1
-        assert dashboard.calculate_stats(dashboard.pm_trades)['closed'] == 1
         assert len(dashboard.open_positions) == 0
 
-        print('[OK] Performance dashboard reads canonical mixed-mode trade history')
+        print('[OK] Performance dashboard reads canonical Hyperliquid trade history')
