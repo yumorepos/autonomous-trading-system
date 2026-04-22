@@ -2,19 +2,26 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import pytest
 
 from analysis.backtest_gate.score_backtest import (
     ComponentScores,
+    CROSS_SPREAD_NORM_CEILING_PCT,
     D41_AMPLIFIES_RATIO,
     D41_HARMS_RATIO,
     D41_MIN_N_GATED,
+    DEFAULT_KRAKEN_CSV,
+    KRAKEN_LOOKUP_WINDOW_H,
     SCORE_GATE,
     classify_gate_effect,
     classify_regime,
     composite_score,
+    compute_cross_spread_norm,
+    kraken_apy_at,
+    load_kraken_funding_index,
     lookup_rate_at,
     max_apy_pct_from_rate_8h,
     normalize_clip,
@@ -293,3 +300,79 @@ def test_stats_for_mixed_computes_pf():
     assert st["profit_factor"] == 4.0
     assert st["wins"] == 2
     assert st["losses"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# Phase A — Kraken cross-exchange spread wiring
+# --------------------------------------------------------------------------- #
+# These four tests are the acceptance bar for Phase A:
+#   1. VVV outside Kraken coverage (truncated 2025-11-21) returns None
+#   2. BTC inside full coverage returns a finite APY
+#   3. Fallback: None kraken_apy → cross_spread_norm == 0.0 (unchanged)
+#   4. Synthetic |300% − 100%| / 200 → cross_spread_norm == 1.0
+#
+# Tests (1) and (2) require the Kraken CSV on disk; if it is absent we skip
+# rather than fail, so the unit-test suite stays self-contained on a fresh
+# checkout without historical data.
+# --------------------------------------------------------------------------- #
+
+
+def _datetime_ms(iso_date: str) -> int:
+    """Parse 'YYYY-MM-DDTHH:MM:SS+00:00' into epoch milliseconds."""
+    from datetime import datetime
+    return int(datetime.fromisoformat(iso_date).timestamp() * 1000)
+
+
+@pytest.fixture(scope="module")
+def kraken_index():
+    """Load the Kraken funding index once per test module, or skip if absent."""
+    path = DEFAULT_KRAKEN_CSV
+    if not path.exists():
+        pytest.skip(f"Kraken CSV missing at {path}")
+    return load_kraken_funding_index(path)
+
+
+def test_kraken_apy_at_returns_none_for_vvv_on_2025_12_01(kraken_index):
+    """VVV Kraken coverage ends 2025-11-21 → a 2025-12-01 lookup falls
+    outside the ±4h window for every VVV row and must return None.
+    """
+    ts = _datetime_ms("2025-12-01T00:00:00+00:00")
+    result = kraken_apy_at(kraken_index, "VVV", ts, window_h=KRAKEN_LOOKUP_WINDOW_H)
+    assert result is None
+
+
+def test_kraken_apy_at_returns_finite_for_btc_on_2026_01_15(kraken_index):
+    """BTC has full Kraken coverage 2025-10-11 → 2026-04-11 → a 2026-01-15
+    lookup must return a finite, plausible APY (BTC historically <= 300%).
+    """
+    ts = _datetime_ms("2026-01-15T00:00:00+00:00")
+    result = kraken_apy_at(kraken_index, "BTC", ts, window_h=KRAKEN_LOOKUP_WINDOW_H)
+    assert result is not None
+    assert math.isfinite(result)
+    # BTC plausibility bound (Phase 1 observed p99=4.47%, max=12.11%).
+    assert 0.0 <= result < 300.0
+
+
+def test_cross_spread_norm_is_zero_when_kraken_none():
+    """Fallback rule: if Kraken APY is unavailable at the entry timestamp
+    (asset absent or outside window), cross_spread_norm must be 0.0 —
+    matching the pre-Phase-A behavior so uncovered trades are untouched.
+    """
+    assert compute_cross_spread_norm(hl_apy_pct=150.0, kraken_apy_pct=None) == 0.0
+    # HL value does not matter when Kraken is None.
+    assert compute_cross_spread_norm(hl_apy_pct=0.0, kraken_apy_pct=None) == 0.0
+    assert compute_cross_spread_norm(hl_apy_pct=999.0, kraken_apy_pct=None) == 0.0
+
+
+def test_synthetic_hl_300_kraken_100_yields_norm_1_0():
+    """Synthetic example from the Phase A spec: hl=300%, kraken=100% →
+    spread_apy_pct=200 → spread_apy_pct / 200 = 1.0 (at the ceiling).
+    """
+    norm = compute_cross_spread_norm(hl_apy_pct=300.0, kraken_apy_pct=100.0)
+    assert norm == 1.0
+    # Symmetric in sign of spread (abs() in compute helper)
+    assert compute_cross_spread_norm(hl_apy_pct=100.0, kraken_apy_pct=300.0) == 1.0
+    # 50% of ceiling → norm = 0.5
+    assert abs(compute_cross_spread_norm(200.0, 100.0) - 0.5) < 1e-9
+    # At the ceiling value the norm is clipped to 1.0
+    assert compute_cross_spread_norm(500.0, 0.0) == 1.0

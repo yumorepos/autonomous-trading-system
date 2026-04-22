@@ -25,37 +25,37 @@
       "expectancy": 0.1114
     },
     "gated": {
-      "n": 1,
-      "wins": 1,
+      "n": 2,
+      "wins": 2,
       "losses": 0,
       "win_rate": 1.0,
-      "gross_wins": 0.318,
+      "gross_wins": 0.4722,
       "gross_losses": 0,
       "profit_factor": null,
-      "net_pnl": 0.318,
-      "expectancy": 0.318
+      "net_pnl": 0.4722,
+      "expectancy": 0.2361
     },
     "sub_gate": {
-      "n": 22,
-      "wins": 18,
+      "n": 21,
+      "wins": 17,
       "losses": 4,
-      "win_rate": 0.8182,
-      "gross_wins": 5.9962,
+      "win_rate": 0.8095,
+      "gross_wins": 5.842,
       "gross_losses": 3.751,
-      "profit_factor": 1.5986,
-      "net_pnl": 2.2453,
-      "expectancy": 0.1021
+      "profit_factor": 1.5575,
+      "net_pnl": 2.0911,
+      "expectancy": 0.0996
     },
     "classification": {
       "verdict": "UNKNOWN",
       "pf_ratio": null,
-      "reason": "n_gated=1 < 5 required for classification"
+      "reason": "n_gated=2 < 5 required for classification"
     },
     "score_distribution": [
       {
         "lo": 0.0,
         "hi": 0.5,
-        "count": 1
+        "count": 0
       },
       {
         "lo": 0.5,
@@ -75,7 +75,7 @@
       {
         "lo": 0.7,
         "hi": 0.75,
-        "count": 0
+        "count": 1
       },
       {
         "lo": 0.75,
@@ -88,6 +88,70 @@
         "count": 0
       }
     ],
+    "kraken_coverage": {
+      "n_with_kraken_window_hit": 3,
+      "n_scorable": 23,
+      "window_h": 4.0,
+      "by_asset": {
+        "VVV": {
+          "covered": 0,
+          "total": 20
+        },
+        "MON": {
+          "covered": 1,
+          "total": 1
+        },
+        "TRUMP": {
+          "covered": 1,
+          "total": 1
+        },
+        "TAO": {
+          "covered": 1,
+          "total": 1
+        }
+      }
+    },
+    "phase_a_delta": {
+      "baseline": {
+        "commit": "90eff68",
+        "raw": {
+          "n": 23,
+          "profit_factor": 1.6834,
+          "win_rate": 0.8261,
+          "net_pnl": 2.5633
+        },
+        "gated": {
+          "n": 1,
+          "profit_factor": null,
+          "win_rate": 1.0,
+          "net_pnl": 0.318
+        },
+        "sub_gate": {
+          "n": 22,
+          "profit_factor": 1.5986,
+          "win_rate": 0.8182,
+          "net_pnl": 2.2453
+        },
+        "pass_rate_pct": 4.35,
+        "verdict": "UNKNOWN"
+      },
+      "n_gated_before": 1,
+      "n_gated_after": 2,
+      "pass_rate_before_pct": 4.35,
+      "pass_rate_after_pct": 8.7,
+      "crossings": [
+        {
+          "asset": "MON",
+          "entry_time": 1770746400000,
+          "net_pnl": 0.15420862076917308,
+          "outcome": "W",
+          "score_old": 0.5812,
+          "score_new": 0.7312,
+          "direction": "crossed_into_gated"
+        }
+      ],
+      "prior_report_used": true
+    },
     "warnings": []
   },
   "scored_trades": [
@@ -116,7 +180,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.6833,
         "volume_24h_proxy": 1421009.16,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -145,7 +212,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.6785,
         "volume_24h_proxy": 1286861.06,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -162,8 +232,8 @@
       "gross_pnl": 0.17035193389417305,
       "net_pnl": 0.15420862076917308,
       "size_usd": 10.0,
-      "score_normalized": 0.5812,
-      "composite_score": 58.1195,
+      "score_normalized": 0.7312,
+      "composite_score": 73.1195,
       "regime_at_entry": "HIGH_FUNDING",
       "max_apy_pct": 124.92,
       "score_components": {
@@ -174,7 +244,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.9795,
         "volume_24h_proxy": 660517299.0,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 1.0,
+        "kraken_coverage": true,
+        "kraken_apy_pct": 547.5,
+        "spread_apy_pct": 422.5841
       },
       "rejection": null
     },
@@ -203,7 +276,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7289,
         "volume_24h_proxy": 3662147.1,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -232,7 +308,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7316,
         "volume_24h_proxy": 3873088.06,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -261,7 +340,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7299,
         "volume_24h_proxy": 3739706.22,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -290,7 +372,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7345,
         "volume_24h_proxy": 4106323.86,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -319,7 +404,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7408,
         "volume_24h_proxy": 4688067.56,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -348,7 +436,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7437,
         "volume_24h_proxy": 4972082.75,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -377,7 +468,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7557,
         "volume_24h_proxy": 6377288.29,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -406,7 +500,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7573,
         "volume_24h_proxy": 6597558.99,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -435,7 +532,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7569,
         "volume_24h_proxy": 6544786.39,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -464,7 +564,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7571,
         "volume_24h_proxy": 6569270.74,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -493,7 +596,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7606,
         "volume_24h_proxy": 7060794.81,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -522,7 +628,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7649,
         "volume_24h_proxy": 7713163.2,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -551,7 +660,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7661,
         "volume_24h_proxy": 7907547.69,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -580,7 +692,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7648,
         "volume_24h_proxy": 7696077.9,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -609,7 +724,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7587,
         "volume_24h_proxy": 6787241.55,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -638,7 +756,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7587,
         "volume_24h_proxy": 6794309.54,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -667,7 +788,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7571,
         "volume_24h_proxy": 6565916.17,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -696,7 +820,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.7084,
         "volume_24h_proxy": 2390671.17,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.0,
+        "kraken_coverage": false,
+        "kraken_apy_pct": null,
+        "spread_apy_pct": null
       },
       "rejection": null
     },
@@ -713,8 +840,8 @@
       "gross_pnl": -0.691586168276635,
       "net_pnl": -0.708124604026635,
       "size_usd": 10.0,
-      "score_normalized": 0.5351,
-      "composite_score": 53.512,
+      "score_normalized": 0.5611,
+      "composite_score": 56.1085,
       "regime_at_entry": "HIGH_FUNDING",
       "max_apy_pct": 110.64,
       "score_components": {
@@ -725,7 +852,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.799,
         "volume_24h_proxy": 15658695.8,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.1731,
+        "kraken_coverage": true,
+        "kraken_apy_pct": 145.2669,
+        "spread_apy_pct": 34.6278
       },
       "rejection": null
     },
@@ -742,8 +872,8 @@
       "gross_pnl": 0.19827118159737242,
       "net_pnl": 0.18148540097237242,
       "size_usd": 10.0,
-      "score_normalized": 0.4956,
-      "composite_score": 49.558,
+      "score_normalized": 0.5317,
+      "composite_score": 53.1745,
       "regime_at_entry": "HIGH_FUNDING",
       "max_apy_pct": 118.25,
       "score_components": {
@@ -754,7 +884,10 @@
         "duration_used_fallback": true,
         "liq_score": 0.5747,
         "volume_24h_proxy": 149722.63,
-        "cross_spread_norm": 0.0
+        "cross_spread_norm": 0.2411,
+        "kraken_coverage": true,
+        "kraken_apy_pct": 70.0231,
+        "spread_apy_pct": 48.2271
       },
       "rejection": null
     }
