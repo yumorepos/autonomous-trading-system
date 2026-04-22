@@ -616,13 +616,19 @@ def load_funding(
 
 
 def estimate_volumes(market_data: dict[str, dict[int, dict]]) -> dict[str, float]:
-    """Estimate 24h volume per asset from candle data (sum last 24 1h candles)."""
+    """Estimate 24h USD-notional volume per asset (sum of coin × close over last 24 1h candles).
+
+    D45 fix: volume_24h is USD notional (coin × close) to match live filter
+    semantic at scripts/tiered_scanner.py:76 (HL ``dayNtlVlm``). See
+    analysis/volume_filter_audit/REPORT.md for the prior coin-count bug.
+    Threshold (TIER2_MIN_VOLUME = 500_000) is unchanged; units are now USD.
+    """
     volumes: dict[str, float] = {}
     for asset, candles in market_data.items():
         sorted_ts = sorted(candles.keys())
         # Use last 24 candles as proxy
         recent = sorted_ts[-24:] if len(sorted_ts) >= 24 else sorted_ts
-        vol = sum(candles[ts]["volume"] for ts in recent)
+        vol = sum(candles[ts]["volume"] * candles[ts]["close"] for ts in recent)
         volumes[asset] = vol
     return volumes
 
