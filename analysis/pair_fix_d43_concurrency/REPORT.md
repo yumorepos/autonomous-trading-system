@@ -149,3 +149,16 @@ systemctl start ats-paper-trader
 A half-landed state (any subset of commits 1–3 deployed without the others) is the exact failure mode this session was structured to prevent.
 
 **Before-deploy operator check:** the paper-trades ledger is currently empty (0 opens as of session start). If new opens accrued between session close and deploy, the reload-exemption test guarantees they survive the MAX_CONCURRENT=1 tightening — but new opens after deploy are gated to 1.
+
+---
+
+## 8. Pre-fix / post-fix sample cutoff
+
+**Cutoff timestamp (UTC):** `2026-04-22T22:38:07Z`
+**Cutoff commit SHA:** `0b0d162` (branch-head of `fix/d43-concurrency-path-a`, the last commit landed in this pair-fix session)
+
+Any paper-trade ledger row with `open_ts` (or equivalent entry timestamp) **strictly earlier** than `2026-04-22T22:38:07Z` was produced under the **pre-fix policy** (nominal 100% APY filter, MAX_CONCURRENT silently 5, × 3 × 365 annualization). Those rows are not directly comparable to post-deploy rows — the effective entry bar and concurrency discipline both changed.
+
+Any row with `open_ts` **at or after** the moment the operator's `systemctl start ats-paper-trader` completes on the VPS against this branch-head SHA is **post-fix**: true 800% APY filter, MAX_CONCURRENT=1 enforced, × 24 × 365 annualization. (The commit timestamp above is the earliest such moment; actual post-fix entries begin when the operator deploys.)
+
+For forward cohort analysis (evaluate_gate.py, Wilson bounds, PF), separate the samples at this cutoff and do not pool. The 8× Path A retune preserves the *selection criterion*, but the concurrency change alone is sufficient to make pooled stats misleading — pre-cutoff rows have up-to-5 overlapping positions per window, post-cutoff rows have strictly 1.
