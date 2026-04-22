@@ -385,3 +385,86 @@ class TestCheckExits:
         closed = trader.check_exits({"ETH": 9999.0})
         assert closed == []
         assert len(trader.open_positions) == 1
+
+
+class TestMaxConcurrentSourceOfTruth:
+    """Concurrency limit must come from config/risk_params.py:MAX_CONCURRENT.
+
+    Regression guard for the prior drift where config.yaml's
+    simulator.max_open_positions=5 silently overrode MAX_CONCURRENT=1,
+    allowing multiple paper opens that contaminated Gate-1 stats.
+    """
+
+    def test_max_concurrent_rejects_second_open(self, tmp_path):
+        from config.risk_params import MAX_CONCURRENT
+        assert MAX_CONCURRENT == 1, (
+            "Test premise: risk_params.MAX_CONCURRENT is 1. Update both "
+            "if that changes."
+        )
+        with patch("src.simulator.paper_trader.get_config", return_value=_mock_config()):
+            trader = PaperTrader(log_path=tmp_path / "trades.jsonl")
+        pos1 = trader.open_position(_make_signal(asset="ETH"), entry_price=100.0)
+        assert pos1 is not None
+        pos2 = trader.open_position(_make_signal(asset="BTC"), entry_price=100.0)
+        assert pos2 is None
+        assert len(trader.open_positions) == 1
+
+    def test_max_concurrent_reads_from_risk_params_not_yaml(self, tmp_path):
+        from config.risk_params import MAX_CONCURRENT
+        with patch("src.simulator.paper_trader.get_config", return_value=_mock_config()):
+            trader = PaperTrader(log_path=tmp_path / "trades.jsonl")
+        assert trader.max_open_positions == MAX_CONCURRENT
+
+    def test_existing_open_positions_persist_across_reload(self, tmp_path):
+        """Reload must not drop opens even if they exceed the current limit.
+
+        Simulates the VPS-drift scenario where a prior-run PaperTrader
+        (yaml-driven max=5) left 2+ opens in the ledger, and a new process
+        comes up with the corrected MAX_CONCURRENT=1. Those prior opens
+        must still reload for continued monitoring; only new open_position()
+        calls are gated on the tightened limit.
+        """
+        log_path = tmp_path / "trades.jsonl"
+        with patch("src.simulator.paper_trader.get_config", return_value=_mock_config()):
+            loose = PaperTrader(max_open_positions=3, log_path=log_path)
+            loose.open_position(_make_signal(asset="ETH"), entry_price=100.0)
+            loose.open_position(_make_signal(asset="BTC"), entry_price=100.0)
+            assert len(loose.open_positions) == 2
+
+            strict = PaperTrader(log_path=log_path)
+        from config.risk_params import MAX_CONCURRENT
+        assert strict.max_open_positions == MAX_CONCURRENT
+        assert len(strict.open_positions) == 2, (
+            "Reload must preserve legacy opens past the tightened limit; "
+            "otherwise we'd silently close real live positions on deploy."
+        )
+
+    def test_reload_from_jsonl_preserves_existing_opens_past_limit(self, tmp_path):
+        """Real-world scenario: VPS had 3 concurrent opens (SUPER/MET/CHIP)
+        when the concurrency enforcement fix was drafted. Even if future
+        operator restarts hit an analogous state, reload must not gate on
+        MAX_CONCURRENT and must not silently drop 2 of the 3. New opens
+        continue to be gated — only the reload path is exempt.
+        """
+        log_path = tmp_path / "trades.jsonl"
+        with patch("src.simulator.paper_trader.get_config", return_value=_mock_config()):
+            loose = PaperTrader(max_open_positions=5, log_path=log_path)
+            loose.open_position(_make_signal(asset="SUPER"), entry_price=1.0)
+            loose.open_position(_make_signal(asset="MET"), entry_price=10.0)
+            loose.open_position(_make_signal(asset="CHIP"), entry_price=0.5)
+            assert len(loose.open_positions) == 3
+
+            reloaded = PaperTrader(log_path=log_path)
+        from config.risk_params import MAX_CONCURRENT
+
+        # All three prior opens present after reload, past the new limit.
+        assert len(reloaded.open_positions) == 3
+        assert reloaded.max_open_positions == MAX_CONCURRENT == 1
+        assert {p.asset for p in reloaded.open_positions} == {"SUPER", "MET", "CHIP"}
+
+        # New open attempts ARE gated: adding a 4th must be rejected
+        # (already past limit), confirming reload-exemption is bounded
+        # to the reload path only.
+        fourth = reloaded.open_position(_make_signal(asset="ALT"), entry_price=0.1)
+        assert fourth is None
+        assert len(reloaded.open_positions) == 3
