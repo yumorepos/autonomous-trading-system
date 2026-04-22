@@ -126,9 +126,12 @@ class TestClassifyRegime(unittest.TestCase):
         self.assertEqual(classify_regime(metrics), "EXTREME")
 
     def test_high_funding_regime(self):
-        """At least one asset at 150%+ APY → HIGH_FUNDING."""
+        """At least one asset above HIGH_FUNDING_MIN_MAX_APY (800%) → HIGH_FUNDING.
+
+        Retuned 150% → 900% alongside the D43 × 24 × 365 annualization fix.
+        """
         metrics = {
-            "max_funding_apy": 1.60,  # 160% APY
+            "max_funding_apy": 9.00,  # 900% APY (above 800% threshold)
             "avg_top10_funding_apy": 0.50,
             "pct_above_50": 0.10,
             "pct_above_100": 0.05,  # Below 10% threshold
@@ -181,9 +184,12 @@ class TestClassifyRegime(unittest.TestCase):
         self.assertEqual(classify_regime(metrics), "EXTREME")
 
     def test_boundary_high_funding_exact_threshold(self):
-        """Exactly 150% max → HIGH_FUNDING."""
+        """Exactly at HIGH_FUNDING_MIN_MAX_APY (800%) → HIGH_FUNDING.
+
+        Retuned 150% → 800% alongside the D43 × 24 × 365 annualization fix.
+        """
         metrics = {
-            "max_funding_apy": 1.50,  # Exactly 150%
+            "max_funding_apy": 8.00,  # Exactly 800% (the new threshold)
             "avg_top10_funding_apy": 0.50,
             "pct_above_50": 0.05,
             "pct_above_100": 0.05,
@@ -456,11 +462,14 @@ class TestClassifySignalWithRegime(unittest.TestCase):
     """Test tiered_scanner.classify_signal with regime threshold overrides."""
 
     def test_default_thresholds(self):
-        """Without overrides, uses static defaults from risk_params."""
-        # 100% APY, good premium and volume → Tier 1
-        self.assertEqual(classify_signal(1.00, -0.02, 2_000_000), 1)
-        # Below 100% → Tier 3
-        self.assertEqual(classify_signal(0.90, -0.02, 2_000_000), 3)
+        """Without overrides, uses static defaults from risk_params.
+
+        TIER1_MIN_FUNDING = 8.00 post-retune (was 1.00 pre-D43).
+        """
+        # 800% APY, good premium and volume → Tier 1
+        self.assertEqual(classify_signal(8.00, -0.02, 2_000_000), 1)
+        # Below 800% → Tier 3
+        self.assertEqual(classify_signal(7.00, -0.02, 2_000_000), 3)
 
     def test_extreme_regime_lowers_bar(self):
         """EXTREME regime: 75% APY should qualify as Tier 1."""

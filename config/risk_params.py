@@ -38,11 +38,11 @@ TIER_MULTIPLIERS = {1: 1.5, 2: 1.0}
 # Scanner Thresholds
 # ---------------------------------------------------------------------------
 
-TIER1_MIN_FUNDING = 1.00         # 100% annualized
+TIER1_MIN_FUNDING = 8.00         # 800% annualized — preserves pre-D43 effective bar after × 24 × 365 fix
 TIER1_MIN_PREMIUM = -0.01        # -1%
 TIER1_MIN_VOLUME = 1_000_000     # $1M daily volume
 
-TIER2_MIN_FUNDING = 1.00         # 100% annualized (raised from 65% — only trade extreme funding rates)
+TIER2_MIN_FUNDING = 8.00         # 800% annualized — retuned 1.00 → 8.00 to preserve effective entry bar post-D43
 TIER2_MIN_PREMIUM = -0.005       # -0.5%
 TIER2_MIN_VOLUME = 500_000       # $500K daily volume
 

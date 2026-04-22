@@ -466,11 +466,12 @@ class TestSignalParityWithLiveScanner(unittest.TestCase):
 
         strategy = FundingArbStrategy()
 
-        # Build a market state with a clear Tier 1 signal
-        # Funding rate that annualizes to > 100%
-        # 100% APY = 100% / (3*365) per 8h = ~0.000913 per 8h
-        rate_8h = -0.001  # negative = longs earn
-        funding_annual = abs(rate_8h) * 3 * 365  # 1.095 = 109.5% APY
+        # Build a market state with a clear Tier 1 signal.
+        # D43: funding is per-hour, annualized with × 24 × 365.
+        # TIER1_MIN_FUNDING = 8.00 (800% APY) post-retune.
+        # Need rate where |rate| * 24 * 365 > 8.00 → |rate| > ~0.000913/hr.
+        rate_8h = -0.001  # negative = longs earn (name preserved for diff hygiene)
+        funding_annual = abs(rate_8h) * 24 * 365  # 8.76 = 876% APY
 
         self.assertGreater(funding_annual, TIER1_MIN_FUNDING)
 
@@ -491,15 +492,15 @@ class TestSignalParityWithLiveScanner(unittest.TestCase):
         self.assertEqual(signal["signal_type"], "funding_arbitrage")
 
     def test_sub_threshold_no_signal(self):
-        """No signal for funding below the 100% APY threshold."""
+        """No signal for funding below the 800% APY threshold."""
         from scripts.backtest.strategies.funding_arb import FundingArbStrategy
         from config.risk_params import TIER2_MIN_FUNDING
 
         strategy = FundingArbStrategy()
 
-        # Rate that gives ~75% APY — below the 100% threshold
-        rate_8h = 0.00068  # 0.00068 * 3 * 365 = 0.7446 = ~74.5% APY
-        funding_annual = abs(rate_8h) * 3 * 365
+        # D43: funding is per-hour. Rate that gives ~600% APY — below the 800% threshold.
+        rate_8h = 0.00068  # 0.00068 * 24 * 365 = 5.9568 = ~596% APY
+        funding_annual = abs(rate_8h) * 24 * 365
 
         self.assertLess(funding_annual, TIER2_MIN_FUNDING)
 
@@ -519,8 +520,8 @@ class TestSignalParityWithLiveScanner(unittest.TestCase):
 
         strategy = FundingArbStrategy()
 
-        # Very low funding rate: ~10% APY
-        rate_8h = 0.0001  # 0.0001 * 3 * 365 = 0.1095 = 10.95% APY
+        # D43: funding is per-hour. Very low rate → ~87% APY (well below 800% Tier 2).
+        rate_8h = 0.0001  # 0.0001 * 24 * 365 = 0.876 = 87.6% APY
 
         state = MarketState(
             timestamp=1_700_000_000_000,

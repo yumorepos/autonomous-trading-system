@@ -17,8 +17,12 @@ from __future__ import annotations
 # What percentage of assets must have >100% APY funding to trigger EXTREME
 EXTREME_PCT_ABOVE_100 = 0.10        # 10% of assets
 
-# Minimum max funding APY (as decimal, 1.00 = 100%) for HIGH_FUNDING
-HIGH_FUNDING_MIN_MAX_APY = 1.00     # At least one asset at 100%+ APY (aligned with backtest entry threshold)
+# Minimum max funding APY (as decimal, 8.00 = 800%) for HIGH_FUNDING.
+# Retuned 1.00 → 8.00 alongside the D43 fix (× 3 × 365 → × 24 × 365) to
+# preserve the effective entry bar: an asset at the old "100% nominal"
+# threshold is now measured at ~800% true APY. The 8× jump is the fix,
+# not a change in selection criteria.
+HIGH_FUNDING_MIN_MAX_APY = 8.00
 
 # Minimum max funding APY for MODERATE
 MODERATE_MIN_MAX_APY = 0.75         # At least one asset at 75%+ APY
