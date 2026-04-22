@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config.risk_params import (
+    MAX_CONCURRENT,
     STOP_LOSS_ROE,
     TAKE_PROFIT_ROE,
     TIMEOUT_HOURS,
@@ -37,14 +38,19 @@ class PaperTrader:
     def __init__(
         self,
         notional_per_trade: float = 1000.0,
-        max_open_positions: int = 5,
+        max_open_positions: int | None = None,
         entry_fee_bps: float = 4.0,
         exit_fee_bps: float = 4.0,
         slippage_bps: float = 2.0,
         log_path: str | Path | None = None,
     ):
         self.notional_per_trade = notional_per_trade
-        self.max_open_positions = max_open_positions
+        # Source of truth: config/risk_params.py:MAX_CONCURRENT. A prior
+        # yaml key (simulator.max_open_positions: 5) silently overrode this
+        # constant in production; removing the yaml read prevents that drift.
+        self.max_open_positions = (
+            max_open_positions if max_open_positions is not None else MAX_CONCURRENT
+        )
         self.entry_fee_bps = entry_fee_bps
         self.exit_fee_bps = exit_fee_bps
         self.slippage_bps = slippage_bps

@@ -75,7 +75,7 @@ connector:
 
 simulator:
   notional_per_trade: 1000.0
-  max_open_positions: 5
+  # max_open_positions removed — source of truth is config/risk_params.py:MAX_CONCURRENT
   entry_fee_bps: 4.0
   exit_fee_bps: 4.0
   slippage_bps: 2.0

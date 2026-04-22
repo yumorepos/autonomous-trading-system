@@ -66,11 +66,11 @@ def build_components(cfg: dict) -> tuple[ATSConnector, SignalFilterPipeline, Pap
         default_exchange=conn_cfg.get("default_exchange", "hyperliquid"),
     )
 
-    # Paper Trader
+    # Paper Trader — max_open_positions omitted so PaperTrader reads
+    # MAX_CONCURRENT directly from config/risk_params.py (single source).
     sim_cfg = cfg.get("simulator", {})
     paper_trader = PaperTrader(
         notional_per_trade=sim_cfg.get("notional_per_trade", 1000.0),
-        max_open_positions=sim_cfg.get("max_open_positions", 5),
         entry_fee_bps=sim_cfg.get("entry_fee_bps", 4.0),
         exit_fee_bps=sim_cfg.get("exit_fee_bps", 4.0),
         slippage_bps=sim_cfg.get("slippage_bps", 2.0),
