@@ -1,0 +1,606 @@
+[
+  {
+    "label": "path_a_800plus_cohort",
+    "min_funding_apy_param": 8.0,
+    "n_trades": 36,
+    "wins": 27,
+    "losses": 9,
+    "win_rate": 0.75,
+    "net_pnl": 3.16,
+    "gross_pnl": 3.03,
+    "profit_factor": 1.4665,
+    "expectancy_per_trade": 0.0877,
+    "max_drawdown_pct": 0.0369,
+    "sharpe": 4.3821,
+    "avg_hold_hours": 7.58,
+    "final_capital": 99.91,
+    "worst_trade": {
+      "asset": "MET",
+      "direction": "long",
+      "net_pnl": -1.52,
+      "entry_time": 1763456400000,
+      "exit_reason": "STOP_LOSS"
+    },
+    "best_trade": {
+      "asset": "BLUR",
+      "direction": "long",
+      "net_pnl": 1.29,
+      "entry_time": 1775689200000,
+      "exit_reason": "TAKE_PROFIT"
+    },
+    "per_asset": {
+      "BIO": {
+        "n": 9,
+        "wins": 7,
+        "pnl": 1.98,
+        "gross_w": 2.48,
+        "gross_l": 0.49,
+        "wr": 0.7778,
+        "pf": 5.0303
+      },
+      "MET": {
+        "n": 2,
+        "wins": 1,
+        "pnl": -1.38,
+        "gross_w": 0.13,
+        "gross_l": 1.52,
+        "wr": 0.5,
+        "pf": 0.0872
+      },
+      "BLUR": {
+        "n": 25,
+        "wins": 19,
+        "pnl": 2.56,
+        "gross_w": 7.32,
+        "gross_l": 4.76,
+        "wr": 0.76,
+        "pf": 1.5373
+      }
+    },
+    "monthly": {
+      "2025-10": {
+        "n": 2,
+        "wins": 0,
+        "pnl": -0.49,
+        "wr": 0.0
+      },
+      "2025-11": {
+        "n": 1,
+        "wins": 0,
+        "pnl": -1.52,
+        "wr": 0.0
+      },
+      "2025-12": {
+        "n": 1,
+        "wins": 1,
+        "pnl": 0.13,
+        "wr": 1.0
+      },
+      "2026-01": {
+        "n": 3,
+        "wins": 1,
+        "pnl": -2.14,
+        "wr": 0.3333
+      },
+      "2026-02": {
+        "n": 3,
+        "wins": 3,
+        "pnl": 0.62,
+        "wr": 1.0
+      },
+      "2026-04": {
+        "n": 26,
+        "wins": 22,
+        "pnl": 6.56,
+        "wr": 0.8462
+      }
+    }
+  },
+  {
+    "label": "path_b_100plus_cohort",
+    "min_funding_apy_param": 1.0,
+    "n_trades": 195,
+    "wins": 135,
+    "losses": 60,
+    "win_rate": 0.6923,
+    "net_pnl": 3.89,
+    "gross_pnl": 6.08,
+    "profit_factor": 1.137,
+    "expectancy_per_trade": 0.0199,
+    "max_drawdown_pct": 0.1169,
+    "sharpe": 1.3649,
+    "avg_hold_hours": 9.33,
+    "final_capital": 101.58,
+    "worst_trade": {
+      "asset": "MET",
+      "direction": "long",
+      "net_pnl": -1.52,
+      "entry_time": 1763452800000,
+      "exit_reason": "STOP_LOSS"
+    },
+    "best_trade": {
+      "asset": "BLUR",
+      "direction": "long",
+      "net_pnl": 1.29,
+      "entry_time": 1776571200000,
+      "exit_reason": "TAKE_PROFIT"
+    },
+    "per_asset": {
+      "BIO": {
+        "n": 94,
+        "wins": 63,
+        "pnl": -0.67,
+        "gross_w": 13.9,
+        "gross_l": 14.57,
+        "wr": 0.6702,
+        "pf": 0.9542
+      },
+      "DOT": {
+        "n": 14,
+        "wins": 5,
+        "pnl": -1.36,
+        "gross_w": 0.76,
+        "gross_l": 2.12,
+        "wr": 0.3571,
+        "pf": 0.3596
+      },
+      "MET": {
+        "n": 11,
+        "wins": 5,
+        "pnl": -1.45,
+        "gross_w": 1.13,
+        "gross_l": 2.58,
+        "wr": 0.4545,
+        "pf": 0.4373
+      },
+      "BLUR": {
+        "n": 70,
+        "wins": 57,
+        "pnl": 6.17,
+        "gross_w": 15.03,
+        "gross_l": 8.86,
+        "wr": 0.8143,
+        "pf": 1.6961
+      },
+      "CHIP": {
+        "n": 6,
+        "wins": 5,
+        "pnl": 1.19,
+        "gross_w": 1.44,
+        "gross_l": 0.25,
+        "wr": 0.8333,
+        "pf": 5.8317
+      }
+    },
+    "monthly": {
+      "2025-10": {
+        "n": 14,
+        "wins": 8,
+        "pnl": -0.86,
+        "wr": 0.5714
+      },
+      "2025-11": {
+        "n": 32,
+        "wins": 19,
+        "pnl": -5.04,
+        "wr": 0.5938
+      },
+      "2025-12": {
+        "n": 12,
+        "wins": 7,
+        "pnl": -0.99,
+        "wr": 0.5833
+      },
+      "2026-01": {
+        "n": 19,
+        "wins": 14,
+        "pnl": -1.7,
+        "wr": 0.7368
+      },
+      "2026-02": {
+        "n": 18,
+        "wins": 10,
+        "pnl": -1.32,
+        "wr": 0.5556
+      },
+      "2026-03": {
+        "n": 15,
+        "wins": 7,
+        "pnl": -2.02,
+        "wr": 0.4667
+      },
+      "2026-04": {
+        "n": 85,
+        "wins": 70,
+        "pnl": 15.82,
+        "wr": 0.8235
+      }
+    }
+  },
+  {
+    "label": "path_a_800plus_cohort_novol",
+    "min_funding_apy_param": 8.0,
+    "n_trades": 183,
+    "wins": 127,
+    "losses": 56,
+    "win_rate": 0.694,
+    "net_pnl": -7.01,
+    "gross_pnl": -6.32,
+    "profit_factor": 0.8234,
+    "expectancy_per_trade": -0.0383,
+    "max_drawdown_pct": 0.0909,
+    "sharpe": -2.1953,
+    "avg_hold_hours": 10.89,
+    "final_capital": 101.02,
+    "worst_trade": {
+      "asset": "MET",
+      "direction": "long",
+      "net_pnl": -1.52,
+      "entry_time": 1763456400000,
+      "exit_reason": "STOP_LOSS"
+    },
+    "best_trade": {
+      "asset": "SUPER",
+      "direction": "long",
+      "net_pnl": 1.33,
+      "entry_time": 1764237600000,
+      "exit_reason": "TAKE_PROFIT"
+    },
+    "per_asset": {
+      "BLAST": {
+        "n": 12,
+        "wins": 8,
+        "pnl": -0.65,
+        "gross_w": 2.58,
+        "gross_l": 3.24,
+        "wr": 0.6667,
+        "pf": 0.7977
+      },
+      "BIO": {
+        "n": 9,
+        "wins": 7,
+        "pnl": 1.98,
+        "gross_w": 2.48,
+        "gross_l": 0.49,
+        "wr": 0.7778,
+        "pf": 5.0303
+      },
+      "ALT": {
+        "n": 6,
+        "wins": 3,
+        "pnl": -2.78,
+        "gross_w": 0.33,
+        "gross_l": 3.1,
+        "wr": 0.5,
+        "pf": 0.1049
+      },
+      "MOVE": {
+        "n": 28,
+        "wins": 18,
+        "pnl": -2.29,
+        "gross_w": 3.84,
+        "gross_l": 6.13,
+        "wr": 0.6429,
+        "pf": 0.6264
+      },
+      "MET": {
+        "n": 2,
+        "wins": 1,
+        "pnl": -1.38,
+        "gross_w": 0.13,
+        "gross_l": 1.52,
+        "wr": 0.5,
+        "pf": 0.0872
+      },
+      "SUPER": {
+        "n": 40,
+        "wins": 25,
+        "pnl": -2.97,
+        "gross_w": 7.72,
+        "gross_l": 10.69,
+        "wr": 0.625,
+        "pf": 0.7218
+      },
+      "BLUR": {
+        "n": 24,
+        "wins": 18,
+        "pnl": 2.43,
+        "gross_w": 7.19,
+        "gross_l": 4.76,
+        "wr": 0.75,
+        "pf": 1.5103
+      },
+      "YZY": {
+        "n": 28,
+        "wins": 23,
+        "pnl": 1.93,
+        "gross_w": 2.75,
+        "gross_l": 0.81,
+        "wr": 0.8214,
+        "pf": 3.3799
+      },
+      "ZETA": {
+        "n": 14,
+        "wins": 8,
+        "pnl": -4.1,
+        "gross_w": 1.75,
+        "gross_l": 5.85,
+        "wr": 0.5714,
+        "pf": 0.2999
+      },
+      "SAGA": {
+        "n": 3,
+        "wins": 3,
+        "pnl": 0.26,
+        "gross_w": 0.26,
+        "gross_l": 0.0,
+        "wr": 1.0,
+        "pf": null
+      },
+      "UMA": {
+        "n": 6,
+        "wins": 3,
+        "pnl": -1.33,
+        "gross_w": 0.3,
+        "gross_l": 1.63,
+        "wr": 0.5,
+        "pf": 0.1829
+      },
+      "STABLE": {
+        "n": 11,
+        "wins": 10,
+        "pnl": 1.89,
+        "gross_w": 3.35,
+        "gross_l": 1.47,
+        "wr": 0.9091,
+        "pf": 2.2878
+      }
+    },
+    "monthly": {
+      "2025-10": {
+        "n": 3,
+        "wins": 1,
+        "pnl": -0.27,
+        "wr": 0.3333
+      },
+      "2025-11": {
+        "n": 19,
+        "wins": 11,
+        "pnl": -4.81,
+        "wr": 0.5789
+      },
+      "2025-12": {
+        "n": 24,
+        "wins": 13,
+        "pnl": -2.77,
+        "wr": 0.5417
+      },
+      "2026-01": {
+        "n": 18,
+        "wins": 10,
+        "pnl": -6.42,
+        "wr": 0.5556
+      },
+      "2026-02": {
+        "n": 31,
+        "wins": 24,
+        "pnl": 0.41,
+        "wr": 0.7742
+      },
+      "2026-03": {
+        "n": 15,
+        "wins": 10,
+        "pnl": -2.52,
+        "wr": 0.6667
+      },
+      "2026-04": {
+        "n": 73,
+        "wins": 58,
+        "pnl": 9.36,
+        "wr": 0.7945
+      }
+    }
+  },
+  {
+    "label": "path_b_100plus_cohort_novol",
+    "min_funding_apy_param": 1.0,
+    "n_trades": 711,
+    "wins": 444,
+    "losses": 267,
+    "win_rate": 0.6245,
+    "net_pnl": -19.33,
+    "gross_pnl": -10.83,
+    "profit_factor": 0.8359,
+    "expectancy_per_trade": -0.0272,
+    "max_drawdown_pct": 0.2375,
+    "sharpe": -1.9192,
+    "avg_hold_hours": 12.69,
+    "final_capital": 95.21,
+    "worst_trade": {
+      "asset": "MET",
+      "direction": "long",
+      "net_pnl": -1.52,
+      "entry_time": 1763456400000,
+      "exit_reason": "STOP_LOSS"
+    },
+    "best_trade": {
+      "asset": "SUPER",
+      "direction": "long",
+      "net_pnl": 1.31,
+      "entry_time": 1775476800000,
+      "exit_reason": "TAKE_PROFIT"
+    },
+    "per_asset": {
+      "BIO": {
+        "n": 76,
+        "wins": 49,
+        "pnl": -4.38,
+        "gross_w": 8.39,
+        "gross_l": 12.78,
+        "wr": 0.6447,
+        "pf": 0.6569
+      },
+      "BLAST": {
+        "n": 138,
+        "wins": 79,
+        "pnl": -3.85,
+        "gross_w": 17.39,
+        "gross_l": 21.24,
+        "wr": 0.5725,
+        "pf": 0.8187
+      },
+      "YZY": {
+        "n": 80,
+        "wins": 44,
+        "pnl": 1.61,
+        "gross_w": 6.58,
+        "gross_l": 4.97,
+        "wr": 0.55,
+        "pf": 1.3244
+      },
+      "ALT": {
+        "n": 17,
+        "wins": 8,
+        "pnl": -5.53,
+        "gross_w": 1.03,
+        "gross_l": 6.56,
+        "wr": 0.4706,
+        "pf": 0.1569
+      },
+      "DOT": {
+        "n": 12,
+        "wins": 3,
+        "pnl": -1.71,
+        "gross_w": 0.44,
+        "gross_l": 2.16,
+        "wr": 0.25,
+        "pf": 0.2058
+      },
+      "UMA": {
+        "n": 16,
+        "wins": 11,
+        "pnl": -0.05,
+        "gross_w": 2.08,
+        "gross_l": 2.13,
+        "wr": 0.6875,
+        "pf": 0.9752
+      },
+      "SUPER": {
+        "n": 92,
+        "wins": 57,
+        "pnl": -2.5,
+        "gross_w": 15.2,
+        "gross_l": 17.7,
+        "wr": 0.6196,
+        "pf": 0.8586
+      },
+      "MOVE": {
+        "n": 80,
+        "wins": 49,
+        "pnl": -4.96,
+        "gross_w": 11.01,
+        "gross_l": 15.97,
+        "wr": 0.6125,
+        "pf": 0.6897
+      },
+      "MET": {
+        "n": 8,
+        "wins": 3,
+        "pnl": -1.05,
+        "gross_w": 0.86,
+        "gross_l": 1.92,
+        "wr": 0.375,
+        "pf": 0.4506
+      },
+      "SAGA": {
+        "n": 6,
+        "wins": 4,
+        "pnl": 1.19,
+        "gross_w": 1.21,
+        "gross_l": 0.02,
+        "wr": 0.6667,
+        "pf": 58.1099
+      },
+      "ZETA": {
+        "n": 34,
+        "wins": 20,
+        "pnl": -6.33,
+        "gross_w": 3.98,
+        "gross_l": 10.32,
+        "wr": 0.5882,
+        "pf": 0.3859
+      },
+      "STABLE": {
+        "n": 92,
+        "wins": 69,
+        "pnl": 1.77,
+        "gross_w": 16.01,
+        "gross_l": 14.24,
+        "wr": 0.75,
+        "pf": 1.1244
+      },
+      "BLUR": {
+        "n": 54,
+        "wins": 43,
+        "pnl": 5.29,
+        "gross_w": 12.85,
+        "gross_l": 7.56,
+        "wr": 0.7963,
+        "pf": 1.7
+      },
+      "CHIP": {
+        "n": 6,
+        "wins": 5,
+        "pnl": 1.19,
+        "gross_w": 1.44,
+        "gross_l": 0.25,
+        "wr": 0.8333,
+        "pf": 5.8317
+      }
+    },
+    "monthly": {
+      "2025-10": {
+        "n": 17,
+        "wins": 10,
+        "pnl": -1.24,
+        "wr": 0.5882
+      },
+      "2025-11": {
+        "n": 111,
+        "wins": 68,
+        "pnl": -8.84,
+        "wr": 0.6126
+      },
+      "2025-12": {
+        "n": 107,
+        "wins": 61,
+        "pnl": -3.11,
+        "wr": 0.5701
+      },
+      "2026-01": {
+        "n": 104,
+        "wins": 68,
+        "pnl": -10.22,
+        "wr": 0.6538
+      },
+      "2026-02": {
+        "n": 115,
+        "wins": 72,
+        "pnl": -6.93,
+        "wr": 0.6261
+      },
+      "2026-03": {
+        "n": 120,
+        "wins": 66,
+        "pnl": -4.9,
+        "wr": 0.55
+      },
+      "2026-04": {
+        "n": 137,
+        "wins": 99,
+        "pnl": 15.91,
+        "wr": 0.7226
+      }
+    }
+  }
+]
