@@ -801,7 +801,8 @@ class TradingEngine:
             funding = float(ctx.get('funding', 0) or 0)
             volume = float(ctx.get('dayNtlVlm', 0) or 0)
             mid = float(ctx.get('midPx', 0) or 0)
-            funding_annual = abs(funding) * 3 * 365
+            # D43: HL `funding` is per-hour, not per-8h → × 24 × 365 = × 8760
+            funding_annual = abs(funding) * 24 * 365
 
             if funding >= 0:
                 continue

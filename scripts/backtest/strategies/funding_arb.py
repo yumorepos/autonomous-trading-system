@@ -2,9 +2,13 @@
 Funding arbitrage strategy for backtesting.
 
 Replicates the live trading engine's entry logic:
-- Entry when abs(funding_rate_8h * 3 * 365) > 0.75 AND volume_24h > 500,000
+- Entry when abs(rate) * 24 * 365 > TIER2_MIN_FUNDING AND volume_24h > TIER2_MIN_VOLUME
 - Short when funding highly positive (earn funding)
 - Long when funding highly negative (earn funding)
+
+D43: The input ``state.funding_rates[asset]`` is per-hour (Hyperliquid
+``ctx['funding']``), not per-8h. The legacy name ``rate_8h`` in the code
+is a misnomer preserved for diff hygiene.
 """
 
 from __future__ import annotations
@@ -56,8 +60,10 @@ class FundingArbStrategy:
             if asset not in state.prices:
                 continue
 
-            # Annualized rate
-            funding_annual = abs(rate_8h) * 3 * 365
+            # Annualized rate — D43: live HL `funding` is per-hour, not per-8h.
+            # Backtest variable is named rate_8h for legacy reasons but carries
+            # the same per-hour semantic as live ctx['funding']; use × 24 × 365.
+            funding_annual = abs(rate_8h) * 24 * 365
 
             # Volume check
             volume = state.volumes_24h.get(asset, 0)

@@ -75,7 +75,8 @@ def scan_tiered(account_balance: float = 95.0, regime_thresholds: dict | None = 
         funding = float(ctx.get('funding', 0) or 0)
         volume = float(ctx.get('dayNtlVlm', 0) or 0)
         mid = float(ctx.get('midPx', 0) or 0)
-        funding_annual = abs(funding) * 3 * 365
+        # D43: HL `funding` is per-hour, not per-8h → × 24 × 365 = × 8760
+        funding_annual = abs(funding) * 24 * 365
 
         # Skip if funding is positive (we'd pay, not earn)
         if funding >= 0:

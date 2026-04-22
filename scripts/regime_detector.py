@@ -162,7 +162,8 @@ def detect_regime_from_api_response(resp: list) -> dict:
     for u, ctx in zip(resp[0]["universe"], resp[1]):
         funding = float(ctx.get("funding", 0) or 0)
         if funding < 0:  # Only negative funding (long opportunities)
-            apy = abs(funding) * 3 * 365
+            # D43: HL `funding` is per-hour, not per-8h → × 24 × 365 = × 8760
+            apy = abs(funding) * 24 * 365
             asset_funding.append({"asset": u["name"], "funding_apy": apy})
 
     metrics = compute_regime_metrics(asset_funding)
