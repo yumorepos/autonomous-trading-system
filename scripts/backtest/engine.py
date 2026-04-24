@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import math
 import sys
 from dataclasses import dataclass, field
@@ -132,6 +133,9 @@ class BacktestEngine:
         self.closed_trades: list[Trade] = []
         self.equity_curve: list[tuple[int, float]] = []  # (timestamp, capital)
         self.peak_capital = initial_capital
+        # D50: capture composite-score inputs per entry (parallel to closed_trades).
+        # Populated in _check_entries when the strategy attaches scoring fields.
+        self.entry_signals: list[dict] = []
 
     def run(self, timestamps: list[int], market_data: dict[str, dict[int, dict]],
             funding_data: dict[str, dict[int, float]],
@@ -338,6 +342,23 @@ class BacktestEngine:
             size_usd=size_usd,
             entry_time=state.timestamp,
         )
+
+        # D50: capture signal record when scorer fields are present.
+        if "composite_score" in signal:
+            self.entry_signals.append({
+                "asset": asset,
+                "entry_time": state.timestamp,
+                "composite_score": signal["composite_score"],
+                "composite_score_normalized": signal.get("composite_score_normalized"),
+                "max_apy_annualized": signal["max_apy_annualized"],
+                "new_regime": signal["new_regime"],
+                "duration_survival_prob": signal["duration_survival_prob"],
+                "liquidity_score": signal["liquidity_score"],
+                "cross_exchange_spread": signal["cross_exchange_spread"],
+                "synthesized_fields": signal["synthesized_fields"],
+                "scorer_is_actionable": signal.get("scorer_is_actionable"),
+                "scorer_rejection_reason": signal.get("scorer_rejection_reason"),
+            })
 
     def _compute_result(self) -> BacktestResult:
         """Compute aggregate metrics from closed trades."""
@@ -649,6 +670,37 @@ def export_equity_csv(result: BacktestResult, out_path: Path) -> None:
     print(f"Equity curve: {out_path} ({len(result.equity_curve)} points)")
 
 
+def export_trades_jsonl(trades: list[Trade], out_path: Path) -> None:
+    """Write closed trades to JSONL (D31-schema-compatible)."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w") as f:
+        for t in trades:
+            f.write(json.dumps({
+                "asset": t.asset,
+                "direction": t.direction,
+                "entry_price": t.entry_price,
+                "entry_time": t.entry_time,
+                "exit_price": t.exit_price,
+                "exit_reason": t.exit_reason,
+                "exit_time": t.exit_time,
+                "fees": t.fees,
+                "funding": t.funding,
+                "gross_pnl": t.gross_pnl,
+                "net_pnl": t.net_pnl,
+                "size_usd": t.size_usd,
+            }) + "\n")
+    print(f"Trade log: {out_path} ({len(trades)} trades)")
+
+
+def export_signals_jsonl(signals: list[dict], out_path: Path) -> None:
+    """Write entry-time composite scorer records to JSONL (D50)."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w") as f:
+        for s in signals:
+            f.write(json.dumps(s) + "\n")
+    print(f"Signal log: {out_path} ({len(signals)} signals)")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run backtest")
     parser.add_argument("--strategy", default="funding_arb", help="Strategy name")
@@ -658,6 +710,10 @@ def main() -> None:
     parser.add_argument("--initial-capital", type=float, default=95.0, help="Initial capital (default: $95)")
     # Keep --capital as alias for backwards compat
     parser.add_argument("--capital", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--enable-scoring", action="store_true",
+                        help="D50: invoke CompositeSignalScorer at each candidate entry; emit signal companion log")
+    parser.add_argument("--emit-tag", type=str, default=None,
+                        help="D50: if set, write artifacts/backtest_trades_{tag}.jsonl (and signals_{tag}.jsonl when scoring enabled)")
     args = parser.parse_args()
 
     capital = args.capital if args.capital is not None else args.initial_capital
@@ -688,7 +744,7 @@ def main() -> None:
     # Load strategy
     if args.strategy == "funding_arb":
         from scripts.backtest.strategies.funding_arb import FundingArbStrategy
-        strategy_fn = FundingArbStrategy(capital=capital)
+        strategy_fn = FundingArbStrategy(capital=capital, enable_scoring=args.enable_scoring)
     elif args.strategy == "mean_reversion":
         from scripts.backtest.strategies.mean_reversion import MeanReversionStrategy
         strategy_fn = MeanReversionStrategy(market_data=market_data)
@@ -707,6 +763,18 @@ def main() -> None:
     # Export equity curve CSV
     artifacts_dir = REPO_ROOT / "artifacts"
     export_equity_csv(result, artifacts_dir / "equity_curve.csv")
+
+    # D50: optionally emit trade log + signal companion
+    if args.emit_tag:
+        export_trades_jsonl(
+            result.closed_trades,
+            artifacts_dir / f"backtest_trades_{args.emit_tag}.jsonl",
+        )
+        if args.enable_scoring and engine.entry_signals:
+            export_signals_jsonl(
+                engine.entry_signals,
+                artifacts_dir / f"backtest_signals_{args.emit_tag}.jsonl",
+            )
 
     print(f"\n{'='*50}")
     print(f"BACKTEST RESULTS — {args.strategy}")
