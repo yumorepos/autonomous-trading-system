@@ -13,6 +13,10 @@ __pycache__/
 
 # === Runtime artifacts ===
 *.jsonl
+# Whitelist canonical pinned backtest artifacts (governance pins by sha256
+# in decision_log.md; must be in-repo for clone-time verifiability).
+!artifacts/backtest_trades_d*.jsonl
+!artifacts/backtest_signals_d*.jsonl
 *.log
 workspace/logs/
 logs/
