@@ -1,0 +1,6 @@
+n_paper_closes=9
+n_joined=9
+n_unmatched=0
+join_coverage=1.0000
+n_gated_pass=0
+unmatched_assets=[]

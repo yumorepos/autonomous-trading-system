@@ -1,0 +1,4 @@
+raw_close=41
+admin_dropped=7
+pre_cutoff_dropped=25
+post_cutoff_clean=9
