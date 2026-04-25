@@ -376,6 +376,33 @@ def log_event(event: dict) -> None:
     with open(ENGINE_LOG, "a") as f:
         f.write(json.dumps(event, default=str) + "\n")
 
+def _format_regime_alert(
+    previous_regime: str,
+    current_regime: str,
+    max_funding_apy: float,
+    top_asset_name: str | None,
+    duration_str: str,
+    fallback_top_info: str,
+) -> tuple[str, str]:
+    """D52 followup item 4: HIGH_FUNDING entries/exits get directional callouts.
+
+    Other transitions keep the legacy ``REGIME CHANGE: A → B | ...`` format.
+    Returns (message, level) for ``send_alert``.
+    """
+    details = f"Max funding: {max_funding_apy * 100:.0f}% APY"
+    if top_asset_name:
+        details += f" ({top_asset_name})"
+    if current_regime == "HIGH_FUNDING":
+        if duration_str:
+            details += f" | {previous_regime} lasted {duration_str}"
+        return f"· HIGH_FUNDING entered\n{details}", "WARN"
+    if previous_regime == "HIGH_FUNDING":
+        if duration_str:
+            details += f" | HIGH_FUNDING lasted {duration_str}"
+        return f"· HIGH_FUNDING exited\n{details}", "INFO"
+    level = "WARN" if current_regime in ("LOW_FUNDING", "MODERATE") else "INFO"
+    return f"REGIME CHANGE: {previous_regime} → {current_regime}{fallback_top_info}", level
+
 def log_to_ledger(trade_id: str, action: str, **kwargs) -> None:
     """Log to canonical trade ledger."""
     try:
@@ -761,9 +788,11 @@ class TradingEngine:
                 top_info += f" ({top_asset['asset']})"
 
             # Include previous regime duration in alert
+            duration_str = ""
             if prev_duration_secs > 0:
                 from scripts.regime_detector import _format_duration
-                top_info += f" | Previous regime lasted {_format_duration(prev_duration_secs)}"
+                duration_str = _format_duration(prev_duration_secs)
+                top_info += f" | Previous regime lasted {duration_str}"
 
             log_event({
                 "event": "regime_updated",
@@ -773,10 +802,15 @@ class TradingEngine:
                 "pct_above_100": regime_result["pct_above_100"],
                 "thresholds": thresholds,
             })
-            send_alert(
-                f"REGIME CHANGE: {previous_regime} → {current_regime}{top_info}",
-                "WARN" if current_regime in ("LOW_FUNDING", "MODERATE") else "INFO",
+
+            msg, level = _format_regime_alert(
+                previous_regime, current_regime,
+                regime_result["max_funding_apy"],
+                top_asset["asset"] if top_asset else None,
+                duration_str,
+                top_info,
             )
+            send_alert(msg, level)
 
         # --- Scanner with regime thresholds ---
         try:

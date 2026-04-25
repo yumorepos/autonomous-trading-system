@@ -13,11 +13,60 @@ from datetime import datetime, timezone
 
 import requests
 
+from config.risk_params import SAMPLE_CUTOFF_TS
 from src.bridge.ats_connector import ATSConnector
 from src.execution.executor import Executor
 from src.models import RegimeTransitionEvent, RegimeTier, ScoredSignal
 from src.pipeline.signal_filter import SignalFilterPipeline
 from src.simulator.paper_trader import PaperTrader
+
+_CUTOFF_DT = datetime.fromisoformat(SAMPLE_CUTOFF_TS)
+_CUTOFF_DATE = _CUTOFF_DT.date().isoformat()
+
+
+def _cohort_metrics(closed_positions, is_admin_fn) -> dict:
+    """Compute post-cutoff cohort metrics from a closed_positions list.
+
+    Mirrors analysis/post_cutoff_sample/extract.py filtering: action == CLOSE,
+    entry_time_utc strictly > SAMPLE_CUTOFF_TS, exit_reason NOT prefixed admin_*.
+    Returned dict carries n plus aggregates (omitted for n=0).
+    """
+    cohort = [
+        p for p in closed_positions
+        if p.entry_time_utc > _CUTOFF_DT and not is_admin_fn(p)
+    ]
+    n = len(cohort)
+    if n == 0:
+        return {"n": 0}
+    pnls = [p.pnl_usd for p in cohort]
+    wins_sum = sum(p for p in pnls if p > 0)
+    losses_sum = sum(p for p in pnls if p < 0)
+    pf = wins_sum / abs(losses_sum) if losses_sum < 0 else float("inf")
+    best = max(cohort, key=lambda p: p.pnl_usd)
+    worst = min(cohort, key=lambda p: p.pnl_usd)
+    return {
+        "n": n,
+        "wr": sum(1 for v in pnls if v > 0) / n,
+        "pnl": sum(pnls),
+        "pf": pf,
+        "best_asset": best.asset,
+        "best_pnl": best.pnl_usd,
+        "worst_asset": worst.asset,
+        "worst_pnl": worst.pnl_usd,
+    }
+
+
+def _cohort_index(closed_positions, is_admin_fn, pos) -> int:
+    """1-indexed position of `pos` within the post-cutoff non-admin cohort."""
+    n = 0
+    for p in closed_positions:
+        if is_admin_fn(p):
+            continue
+        if p.entry_time_utc > _CUTOFF_DT:
+            n += 1
+        if p.position_id == pos.position_id:
+            return n
+    return n
 
 logger = logging.getLogger(__name__)
 
@@ -238,19 +287,53 @@ class LiveOrchestrator:
                 if stats.closed_positions > 0 else 0.0
             )
 
+            # Cohort tag for this trade (D52 followup, item 2)
+            if pos.entry_time_utc > _CUTOFF_DT:
+                cohort_idx = _cohort_index(
+                    self.paper_trader.closed_positions,
+                    self.paper_trader._is_admin_close,
+                    pos,
+                )
+                cohort_tag = f" · cohort #{cohort_idx}"
+            else:
+                cohort_tag = " · pre-cutoff tail"
+
+            # Lifetime + post-cutoff cohort footers (D52 followup, item 1)
+            cohort = _cohort_metrics(
+                self.paper_trader.closed_positions,
+                self.paper_trader._is_admin_close,
+            )
+            if cohort["n"] == 0:
+                cohort_line = (
+                    f"📊 <b>Cohort</b> (n=0 since D46 cutoff "
+                    f"{_CUTOFF_DATE}): no closes yet"
+                )
+            else:
+                pf_str = f"{cohort['pf']:.2f}" if cohort["pf"] != float("inf") else "∞"
+                cohort_line = (
+                    f"📊 <b>Cohort</b> (n={cohort['n']} since D46 cutoff "
+                    f"{_CUTOFF_DATE}): "
+                    f"WR {cohort['wr'] * 100:.0f}% | "
+                    f"PnL ${cohort['pnl']:+.2f} | "
+                    f"PF {pf_str} | "
+                    f"Best {cohort['best_asset']} ${cohort['best_pnl']:+.2f} | "
+                    f"Worst {cohort['worst_asset']} ${cohort['worst_pnl']:+.2f}"
+                )
+
             msg = (
-                f"{'📈' if pos.pnl_usd >= 0 else '📉'} <b>TRADE CLOSED</b>\n"
+                f"{'📈' if pos.pnl_usd >= 0 else '📉'} <b>TRADE CLOSED</b>{cohort_tag}\n"
                 f"{pos.asset} {pos.direction.upper()} — {pos.exit_reason}\n"
                 f"PnL: <b>{pnl_sign}${pos.pnl_usd:.2f}</b> "
                 f"(ROE {roe_pct:+.2f}% + funding ${funding_usd:.2f})\n"
                 f"Hold: {hold_h:.1f}h\n"
                 f"\n"
-                f"📊 <b>Running Stats</b> ({stats.closed_positions} trades)\n"
+                f"📊 <b>Lifetime</b> ({stats.closed_positions} trades)\n"
                 f"Win rate: {stats.win_rate * 100:.0f}% | "
                 f"Total PnL: ${stats.total_pnl_usd:+.2f}\n"
                 f"Expectancy: ${expectancy:+.2f}/trade | "
                 f"Best: ${stats.best_trade_pnl:+.2f} | "
-                f"Worst: ${stats.worst_trade_pnl:+.2f}"
+                f"Worst: ${stats.worst_trade_pnl:+.2f}\n"
+                f"{cohort_line}"
             )
             self.pipeline._send_telegram(msg)
         except Exception as e:

@@ -80,6 +80,18 @@ EXECUTION_DAILY_LOSS_LIMIT = 10.0    # Halt execution for the day after this los
 EXECUTION_MIN_BALANCE = 20.0         # Minimum account balance to allow execution (USD)
 
 # ---------------------------------------------------------------------------
+# Cohort Evaluation
+# ---------------------------------------------------------------------------
+
+# Sample cutoff for D46 post-fix paper cohort. Trades with entry_time
+# strictly after this timestamp are members of the validation cohort
+# used for D41 primary and Q3 evaluations. Pinned by D46 (decision_log.md);
+# canonically established at 2026-04-22T23:06:03+00:00. Used by the
+# alerter (cohort tagging), gate evaluators, and any cohort-aware
+# observability consumer. Read this constant; do not hardcode.
+SAMPLE_CUTOFF_TS = "2026-04-22T23:06:03+00:00"
+
+# ---------------------------------------------------------------------------
 # Sizing Function
 # ---------------------------------------------------------------------------
 

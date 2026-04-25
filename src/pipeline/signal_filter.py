@@ -15,6 +15,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from config.risk_params import EXECUTION_MIN_SCORE
 from src.config import get_config
 from src.models import RegimeTransitionEvent, ScoredSignal
 from src.scoring.composite_scorer import CompositeSignalScorer
@@ -126,14 +127,20 @@ class SignalFilterPipeline:
             else "N/A"
         )
 
+        score_norm = signal.composite_score / 100.0
+        verdict = "ACCEPTED" if score_norm >= EXECUTION_MIN_SCORE else "REJECTED"
+
         return (
             f"🟢 <b>ACTIONABLE SIGNAL</b> [{ts} UTC]\n"
             f"Asset: <b>{signal.event.asset}</b> on {signal.event.exchange}\n"
             f"Regime: {signal.event.previous_regime.value} → {signal.event.new_regime.value}\n"
-            f"Score: <b>{signal.composite_score:.0f}</b>/100\n"
+            f"Score: <b>{score_norm:.2f}</b> normalized "
+            f"({signal.composite_score:.0f}/100 raw) — "
+            f"gate {EXECUTION_MIN_SCORE:.2f}: {verdict}\n"
             f"Net APY: {signal.net_expected_apy:.1f}% | "
             f"Duration P(≥15m): {signal.duration_survival_prob * 100:.0f}%\n"
-            f"Liquidity: {grade} | Cross-spread: {spread}"
+            f"Liquidity: {grade} | Cross-spread: {spread}\n"
+            f"Paper: opens regardless of gate (live_orchestrator.py:277, by design)"
         )
 
     async def process(self, event: RegimeTransitionEvent) -> ScoredSignal:
